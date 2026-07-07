@@ -94,6 +94,11 @@
 
 ## 📅 已完成的历史任务 (Completed Tasks)
 
+*   [x] **Create README.md for the repository** (2026-07-08)
+    *   [x] Read `todolist.md`, `spec.md`, and `current_status.md`.
+    *   [x] Write a clear and comprehensive `README.md` detailing project structure, setup, and usage.
+    *   [x] Add and commit the `README.md` locally.
+
 *   [x] **Upload project to GitHub** (2026-07-08)
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
     *   [x] Create and refine `.gitignore` to prevent uploading large datasets, `.venv`, and local configs.
