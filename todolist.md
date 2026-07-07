@@ -6,14 +6,6 @@
 
 ## 📅 进行中的任务 (In Progress)
 
-*   [ ] **Upload project to GitHub** (2026-07-08)
-    *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
-    *   [ ] Create and refine `.gitignore` to prevent uploading large datasets, `.venv`, and local configs.
-    *   [ ] Initialize Git repository (`git init`) locally.
-    *   [ ] Create initial commit with source code, documentation, and config files.
-    *   [ ] Ask user for GitHub repository URL or guide them to create one.
-    *   [ ] Add remote origin and push the main branch to GitHub.
-
 *   [ ] **Round4 E-GMD test-split short-segment validation** (2026-07-07)
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
     *   [x] Record Round4 E-GMD validation rules in `spec.md`.
@@ -101,6 +93,14 @@
 ---
 
 ## 📅 已完成的历史任务 (Completed Tasks)
+
+*   [x] **Upload project to GitHub** (2026-07-08)
+    *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
+    *   [x] Create and refine `.gitignore` to prevent uploading large datasets, `.venv`, and local configs.
+    *   [x] Initialize Git repository (`git init`) locally.
+    *   [x] Create initial commit with source code, documentation, and config files.
+    *   [x] Ask user for GitHub repository URL or guide them to create one.
+    *   [x] Add remote origin and push the main branch to GitHub (User completed the push on local machine).
 
 *   [x] **Round3 blind validation and repair** (2026-07-06)
     *   [x] Run `blind_user_tests_round3` with the accepted checkpoint.
