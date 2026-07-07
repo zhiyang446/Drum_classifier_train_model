@@ -1,0 +1,6 @@
+name,expected_time_signature,expected_tempo,tempo_tol,expected_hihat,expected_snare,expected_kick
+basic_straight_8,4/4,70,3,32,8,12
+basic_straight_16,4/4,60,3,128,16,24
+basic_shuffle,4/4,50,5,32,8,12
+syncopated_4_4,4/4,100,3,64,24,32
+ghost_snare,4/4,65,5,32,16,8

@@ -1,0 +1,6 @@
+name,expected_tempo,tempo_tol,expected_time_signature,expected_kick,expected_snare,expected_hihat
+slow_16th_50,50,1.0,4/4,32,16,128
+rock_8beat_150,150,1.0,4/4,24,16,64
+open_closed_hihat_90,90,1.0,4/4,24,16,64
+half_time_110,110,1.0,4/4,4,4,32
+kick_syncopation_100,100,1.0,4/4,32,24,64

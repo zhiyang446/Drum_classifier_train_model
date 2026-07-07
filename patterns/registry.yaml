@@ -1,0 +1,11 @@
+patterns:
+  - name: daily-triage
+    level: L1
+    cadence: manual-or-daily-max-2
+    status: active
+    tool: codex
+    mode: report-only
+    state_file: STATE.md
+    budget_file: loop-budget.md
+    constraints_file: loop-constraints.md
+    run_log: loop-run-log.md

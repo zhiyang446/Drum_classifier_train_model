@@ -1,0 +1,6 @@
+name,expected_tempo,tempo_tol,expected_time_signature,expected_kick,expected_snare,expected_hihat
+ghost_snare_65,65,1.0,4/4,8,16,32
+open_hihat_60,60,1.0,4/4,16,16,64
+shuffle_90,90,1.0,4/4,32,8,32
+syncopated_16th_hihat_100,100,1.0,4/4,32,16,128
+rock_8beat_100,100,1.0,4/4,24,16,64

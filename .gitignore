@@ -1,0 +1,36 @@
+# 數據集與音訊檔案
+e-gmd-v1.0.0/
+STAR_Drums_full/
+processed_data/
+validation_runs/
+blind_user_tests/
+blind_user_tests_round2/
+blind_user_tests_round2_short/
+blind_user_tests_round3/
+audio/
+annotations/
+annotation_xml/
+accompaniment/
+
+# 虛擬環境
+.venv/
+venv/
+ENV/
+
+# 備份與非核心模型檔
+best_drum_model_backup.pth
+drum_classifier.pth
+*candidate.pth
+
+# 快取與編譯檔
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# 本地工具配置
+.agents/
+.codegraph/
+.codex/
+scratch/
