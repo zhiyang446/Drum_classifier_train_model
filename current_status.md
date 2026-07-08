@@ -56,6 +56,20 @@ Evidence so far:
 - Rejected code probe: `validation_runs\egmd_round4_12_8_wrapper_dense_hh`, strong event gate tied accepted baseline at `17/30`; the 12/8-wrapper dense-HH gate change was reverted.
 - Accepted code improvement: `validation_runs\egmd_round4_12_8_hh075_recovery`, strong event gate improved from `17/30` to `19/30` while `verify_current_solution.py` remained green. The change allows 12/8 straight-16th wrapper HH recovery only when a 0.75-beat dense HH grid passes the shared evidence gate.
 - Rejected threshold probe: `validation_runs\egmd_round4_sd_threshold_probe_030`, strong event gate dropped from `19/30` to `18/30`; do not use broad SD threshold lowering.
+- Rejected code probe: `validation_runs\egmd_round4_snare_phase_recovery_020`, strong event gate tied current best at `19/30`; the Snare repeated-phase recovery threshold was reverted from `0.20` back to `0.30`.
+- Rejected candidate: `validation_runs\egmd_round4_pitch_weighted_windowed_kdsd_head_candidate.pth`; evaluation `validation_runs\egmd_round4_pitch_weighted_windowed_kdsd_head_candidate_eval` tied current best at strong event gate `19/30`, so it must not be promoted.
+- Corrected weak-label strong-event diagnostic recheck: accepted checkpoint and `validation_runs\egmd_round4_pitch_weighted_windowed_kdsd_head_candidate.pth` both score `23/30`, so the candidate still must not be promoted.
+- Accepted brain-layer fix: `validation_runs\egmd_round4_compound_timp_guard`, strong event gate improved to `24/30`. The fix preserves compound-meter excerpt tails when the final partial measure still has native KD/SD evidence; it does not use clip names, expected counts, or path routing.
+- Regression verifier after TIMP guard: `verify_current_solution.py` passed; blind raw acoustic `5/5`, blind notation `5/5`, hard validation `4/4`.
+- Remaining Round4 strong-event failures after TIMP guard are raw+notation KD/SD recall failures: `7_pop-groove7_138_beat_4-4_1` KD and SD, plus `1_funk-groove1_138_beat_4-4_1` SD. These are not solved by notation-tail preservation.
+- Rejected model candidate: `validation_runs\egmd_round4_windowed_kdsd_stronger_head_candidate.pth`; evaluation `validation_runs\egmd_round4_windowed_kdsd_stronger_head_candidate_eval` tied `24/30`, so it must not be promoted.
+- Added reusable density-ranked train metadata support to `build_egmd_pitch_weighted_meta.py`; generated `validation_runs\egmd_round4_kdsd_density_windowed_train_meta.json` from E-GMD train split only.
+- Rejected model candidate: `validation_runs\egmd_round4_kdsd_density_head_candidate.pth`; evaluation `validation_runs\egmd_round4_kdsd_density_head_candidate_eval` tied `24/30`.
+- Rejected model candidate: `validation_runs\egmd_round4_kdsd_density_head_cont_candidate.pth`; evaluation `validation_runs\egmd_round4_kdsd_density_head_cont_candidate_eval` tied `24/30`.
+- KD/SD head-only conclusion: density-ranked training can raise some TP counts, but it also adds small FP/HH regressions and does not pass the remaining Round4 failures. Do not repeat the same head-only KD/SD recipe unless the training target or evidence changes.
+- Rejected model candidate: `validation_runs\egmd_round4_kdsd_density_full_candidate.pth`; evaluation `validation_runs\egmd_round4_kdsd_density_full_candidate_eval` dropped to `14/30` and disturbed HH/tempo behavior, so full-model KD/SD fine-tuning from this density subset must not be promoted.
+- Rejected model candidate: `validation_runs\egmd_round4_sd_density_head_candidate.pth`; evaluation `validation_runs\egmd_round4_sd_density_head_candidate_eval` tied `24/30`, so SD-only density head fine-tuning also must not be promoted.
+- Rejected/reverted code probe: `validation_runs\egmd_round4_subthreshold_candidates_after_timp` tied `24/30` and changed unrelated counts, so subthreshold KD/SD local maxima must not be kept as runtime candidates in this form.
 
 Current classification:
 
@@ -64,7 +78,7 @@ Current classification:
 - Important expected-target caveat: E-GMD metadata includes very weak MIDI hits, for example HH velocity below 20 and SD velocity around 20. Exact full-MIDI count validation is stricter than the earlier user-played short-groove gates.
 - Current next direction: do not tune thresholds or add broad tempo aliases. The remaining KD/SD/HH-only failures need either a stronger acoustic model candidate trained/evaluated against E-GMD long-segment event F1, or shorter held-out E-GMD excerpt gates that match the system's current 4-second training-window design.
 - Candidate-training conclusion so far: clean, focused dense, HH-only, staged KD/SD, and windowed E-GMD candidates have not produced an acceptable checkpoint. Do not promote them, and do not repeat the same fine-tune recipe. KD/SD remaining failures look like model/calibration coverage, not a simple fixed offset or global threshold issue.
-- New diagnostic conclusion: keep the 12/8 0.75-beat HH recovery, but do not relax NMS broadly, do not repeat one-epoch pitch-weighted head-only KD/SD tuning, and do not lower broad KD/SD/HH thresholds.
+- New diagnostic conclusion: keep the 12/8 0.75-beat HH recovery, but do not relax NMS broadly, do not repeat pitch-weighted KD/SD head-only tuning, do not lower broad KD/SD/HH thresholds, and do not lower Snare phase-recovery threshold without new evidence.
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
 
 ## 2026-07-06 Round3 repair status

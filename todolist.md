@@ -72,6 +72,22 @@
     *   [x] Reject and revert 12/8-wrapper dense-HH gate probe because it only tied `17/30`.
     *   [x] Add 12/8 0.75-beat HH recovery and verify Round4 strong event gate improves to `19/30`.
     *   [x] Reject SD threshold `0.30` probe because Round4 strong event evidence dropped to `18/30`.
+    *   [x] Probe and reject Snare repeated-phase recovery threshold `0.20` because it only tied `19/30`.
+    *   [x] Build pitch-weighted windowed E-GMD train metadata to avoid one-anchor long-clip undercoverage.
+    *   [x] Reject windowed KD/SD head candidate because it only tied `19/30`.
+    *   [x] Re-evaluate accepted checkpoint and windowed KD/SD candidate under corrected weak-label strong-event diagnostics; both are `23/30`, so the candidate is not promoted.
+    *   [x] Identify `10_rock` notation SD failure as compound-meter TIMP pruning native Snare events from a short excerpt, not as an acoustic model miss.
+    *   [x] Implement compound-meter TIMP guard based on native KD/SD evidence, without file names or expected-count hardcoding.
+    *   [x] Run Round4 and `verify_current_solution.py` after the TIMP guard; Round4 strong event evidence improved to `24/30` and current verifier stayed green.
+    *   [x] Train one stronger reusable KD/SD-only head candidate from existing windowed pitch-aware E-GMD train metadata; rejected because it tied `24/30`.
+    *   [x] Add reusable density-ranked E-GMD train metadata builder options and generate a KD/SD-dense train subset under `validation_runs`.
+    *   [x] Train one KD/SD density-ranked candidate; rejected because it tied `24/30` despite improving some KD/SD TP counts.
+    *   [x] Train one low-LR continuation from the density-ranked candidate; rejected because it tied `24/30`.
+    *   [ ] Blocker: KD/SD head-only fine-tuning improves some TP counts but does not pass Round4; next route must inspect feature/label mismatch or full-model calibration, not repeat the same head-only recipe.
+    *   [x] Train one low-LR full-model KD/SD candidate from density-ranked metadata; rejected because Round4 strong event evidence dropped to `14/30`.
+    *   [x] Train one SD-only density-ranked head candidate; rejected because it tied `24/30`.
+    *   [ ] Inspect remaining Round4 failures by velocity/weak-note distribution before changing model or gate again.
+    *   [x] Probe subthreshold KD/SD local-maxima candidates as non-triggered recovery inputs only; rejected and reverted because it tied `24/30` and changed unrelated counts.
     *   [ ] Next: inspect remaining KD/SD precision-vs-recall failures separately.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)

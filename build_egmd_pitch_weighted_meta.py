@@ -87,14 +87,50 @@ def keep_item(events, required_pitches):
     return bool(pitches.intersection(required_pitches))
 
 
-def build_meta(source_meta, limit, pitch_weights, required_pitches, velocity_min, max_kits_per_groove):
-    """中文註解：從 E-GMD train split 建立 pitch-aware candidate metadata。"""
+def window_items(key, item, window_seconds):
+    """中文註解：將長音檔展開成固定 anchor 視窗，增加訓練覆蓋率。"""
+    if window_seconds <= 0:
+        return {key: item}
+    duration = float(item.get('duration', 0.0) or 0.0)
+    if duration <= window_seconds:
+        copied = dict(item)
+        copied['_anchor_time'] = duration / 2.0 if duration > 0 else 0.0
+        return {key: copied}
     output = {}
-    report = []
+    step = window_seconds
+    center = window_seconds / 2.0
+    idx = 0
+    while center <= duration:
+        copied = dict(item)
+        copied['_anchor_time'] = center
+        output[f'{key}_win{idx:03d}'] = copied
+        center += step
+        idx += 1
+    return output
+
+
+def density_score(inst_counts, duration, sort_by):
+    """中文註解：依通用事件密度計算排序分數，不讀取驗證檔名或答案。"""
+    duration = max(float(duration or 0.0), 1e-6)
+    kd_rate = inst_counts.get('KD', 0) / duration
+    sd_rate = inst_counts.get('SD', 0) / duration
+    hh_rate = inst_counts.get('HH', 0) / duration
+    if sort_by == 'kdsd_density':
+        return kd_rate + sd_rate
+    if sort_by == 'sd_density':
+        return sd_rate
+    if sort_by == 'kd_density':
+        return kd_rate
+    if sort_by == 'events_density':
+        return kd_rate + sd_rate + hh_rate
+    return 0.0
+
+
+def build_meta(source_meta, limit, pitch_weights, required_pitches, velocity_min, max_kits_per_groove, window_seconds, min_kd_per_sec, min_sd_per_sec, sort_by):
+    """中文註解：從 E-GMD train split 建立 pitch-aware candidate metadata。"""
+    candidates = []
     groove_counts = Counter()
     for key, item in sorted(source_meta.items()):
-        if limit and len(output) >= limit:
-            break
         if item.get('split') != 'train':
             continue
         audio_path = item.get('audio_path', '')
@@ -106,21 +142,49 @@ def build_meta(source_meta, limit, pitch_weights, required_pitches, velocity_min
         events = read_pitch_events(audio_path, pitch_weights, velocity_min)
         if not keep_item(events, required_pitches):
             continue
+        inst_counts, pitch_counts = item_counts(events)
+        duration = float(item.get('duration', 0.0) or 0.0)
+        duration_for_rate = max(duration, 1e-6)
+        kd_rate = inst_counts.get('KD', 0) / duration_for_rate
+        sd_rate = inst_counts.get('SD', 0) / duration_for_rate
+        if kd_rate < min_kd_per_sec or sd_rate < min_sd_per_sec:
+            continue
         copied = dict(item)
         copied['events'] = events
         copied['source'] = 'egmd_pitch_weighted'
-        output[key] = copied
         groove_counts[groove_key] += 1
-        inst_counts, pitch_counts = item_counts(events)
-        report.append({
+        score = density_score(inst_counts, duration, sort_by)
+        candidates.append({
             'key': key,
-            'events': len(events),
-            'KD': inst_counts.get('KD', 0),
-            'SD': inst_counts.get('SD', 0),
-            'HH': inst_counts.get('HH', 0),
-            'pitches': ' '.join(f'{pitch}:{count}' for pitch, count in sorted(pitch_counts.items())),
-            'audio_path': audio_path,
+            'item': copied,
+            'score': score,
+            'report': {
+                'key': key,
+                'events': len(events),
+                'KD': inst_counts.get('KD', 0),
+                'SD': inst_counts.get('SD', 0),
+                'HH': inst_counts.get('HH', 0),
+                'KD_per_sec': f'{kd_rate:.4f}',
+                'SD_per_sec': f'{sd_rate:.4f}',
+                'density_score': f'{score:.4f}',
+                'pitches': ' '.join(f'{pitch}:{count}' for pitch, count in sorted(pitch_counts.items())),
+                'audio_path': audio_path,
+            },
         })
+
+    if sort_by != 'key':
+        candidates.sort(key=lambda row: (-row['score'], row['key']))
+
+    output = {}
+    report = []
+    for candidate in candidates:
+        for out_key, out_item in window_items(candidate['key'], candidate['item'], window_seconds).items():
+            if limit and len(output) >= limit:
+                break
+            output[out_key] = out_item
+        report.append(candidate['report'])
+        if limit and len(output) >= limit:
+            break
     return output, report
 
 
@@ -129,7 +193,7 @@ def write_report(path, rows):
     import csv
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    fields = ['key', 'events', 'KD', 'SD', 'HH', 'pitches', 'audio_path']
+    fields = ['key', 'events', 'KD', 'SD', 'HH', 'KD_per_sec', 'SD_per_sec', 'density_score', 'pitches', 'audio_path']
     with open(path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
@@ -147,6 +211,10 @@ def parse_args():
     parser.add_argument('--require-pitches', default='')
     parser.add_argument('--velocity-min', type=float, default=30.0)
     parser.add_argument('--max-kits-per-groove', type=int, default=1)
+    parser.add_argument('--window-seconds', type=float, default=0.0)
+    parser.add_argument('--min-kd-per-sec', type=float, default=0.0)
+    parser.add_argument('--min-sd-per-sec', type=float, default=0.0)
+    parser.add_argument('--sort-by', choices=['key', 'kdsd_density', 'kd_density', 'sd_density', 'events_density'], default='key')
     parser.add_argument('--self-check', action='store_true')
     return parser.parse_args()
 
@@ -158,6 +226,8 @@ def run_self_check():
     assert keep_item([{'pitch': 38}], {38})
     assert not keep_item([{'pitch': 40}], {38})
     assert groove_key_for_audio('x/10_jazz_110_beat_4-4_15.wav') == '10_jazz_110_beat_4-4'
+    assert len(window_items('x', {'duration': 8.0}, 4.0)) == 2
+    assert density_score(Counter({'KD': 8, 'SD': 4}), 4.0, 'kdsd_density') == 3.0
     print('Self-check passed.')
 
 
@@ -178,6 +248,10 @@ def main():
         required_pitches,
         args.velocity_min,
         args.max_kits_per_groove,
+        args.window_seconds,
+        args.min_kd_per_sec,
+        args.min_sd_per_sec,
+        args.sort_by,
     )
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w', encoding='utf-8') as f:

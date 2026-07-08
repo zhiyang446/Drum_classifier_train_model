@@ -628,7 +628,8 @@ Round4 event-level diagnostic gate:
 2. The diagnostic must also compare metadata events to raw/notation event CSVs with a fixed time tolerance.
 3. Default event matching tolerance is `0.05s`.
 4. Strong-hit diagnostic thresholds are velocity `KD>=30`, `SD>=30`, `HH>=30`; full-MIDI counts remain reported separately.
-5. A Round4 fix is acceptable only when it improves event-level evidence without breaking `verify_current_solution.py`; changing expected targets only to make counts pass is not acceptable.
+5. In the strong-hit diagnostic, predictions that match weak metadata events below the strong threshold should be ignored rather than counted as false positives.
+6. A Round4 fix is acceptable only when it improves event-level evidence without breaking `verify_current_solution.py`; changing expected targets only to make counts pass is not acceptable.
 
 Round4 KD/SD/HH-only selection rule:
 
@@ -684,6 +685,7 @@ Round4 windowed-training rule:
 1. For long E-GMD train clips, one metadata item should not imply one fixed 4-second training slice only.
 2. A candidate may expand clean train metadata into deterministic 4-second window anchors under `validation_runs`, preserving original event times and adding `_anchor_time`.
 3. This is a data-coverage fix, not a per-test answer: windows must be generated from train split metadata only.
+4. Pitch-aware metadata may also use deterministic window anchors, but pitch weights and windows must remain reusable train-split rules.
 
 Round4 KD/SD weak-candidate rule:
 
@@ -704,6 +706,8 @@ Round4 pitch-aware training rule:
 2. `loss_weight` is allowed only as a data-driven positive-onset weight near that event; files without the field must train exactly as before.
 3. Pitch weights must be declared as reusable pitch rules, for example `38=1.5,37=2.0`, and built from train split metadata only.
 4. Candidate checkpoints must remain under `validation_runs` until Round4 event evidence improves and `verify_current_solution.py` remains green.
+5. If broad windowed metadata does not improve KD/SD recall, a candidate may build a density-ranked train subset using only reusable per-second KD/SD event density from E-GMD train metadata.
+6. Density ranking/filtering must not use selected Round4 test filenames, expected counts, or validation output.
 
 Round4 subthreshold phase-candidate rule:
 
@@ -711,6 +715,7 @@ Round4 subthreshold phase-candidate rule:
 2. KD/SD subthreshold candidates may be carried into raw hygiene only as non-triggered local maxima with shared probability evidence.
 3. Such candidates must not affect tempo detection, and may become notes only through repeated-phase consistency rules.
 4. This rule must not use file names, selected test identities, or expected counts.
+5. Snare phase recovery threshold may be lowered only inside repeated-phase recovery, never as a global raw peak threshold.
 
 Round4 12/8-wrapper dense-HH recovery rule:
 
@@ -718,3 +723,10 @@ Round4 12/8-wrapper dense-HH recovery rule:
 2. The accepted wrapper spacing is `0.75` MIDI-quarter beats, matching straight eighth/pedal-hat motion inside the 12/8 wrapper.
 3. This is allowed only for raw acoustic HH cleanup; it must not rewrite tempo or time signature by itself.
 4. True sparse/triplet 12/8 material must remain protected because it will not satisfy the dense HH evidence gate.
+
+Round4 compound-meter trailing-prune rule:
+
+1. TIMP may remove a final incomplete measure only when it is likely to be trailing noise or decay, not when the final partial measure still contains native KD/SD evidence from the acoustic model.
+2. For compound meters such as `12/8`, short continuous excerpts can end mid-measure. In that case, preserving native KD/SD events is preferred over forcing a complete bar boundary.
+3. The rule must be based on meter, measure density, and native event evidence only; it must not use E-GMD clip names, expected counts, selected-test identities, or path routing.
+4. Any TIMP change must improve Round4 event evidence and keep `verify_current_solution.py` green before it is accepted.

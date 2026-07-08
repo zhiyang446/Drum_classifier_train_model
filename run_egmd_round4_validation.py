@@ -225,6 +225,26 @@ def match_events(expected_times, predicted_times, tolerance):
     return tp, fp, fn, precision, recall, f1
 
 
+def filter_predictions_matching_weak(predicted_times, weak_times, tolerance):
+    """
+    中文註解：strong-hit 診斷中，預測若命中弱標註，不應被算成強音假陽性。
+    """
+    output = []
+    used_weak = [False] * len(weak_times)
+    for predicted in predicted_times:
+        matched_weak = False
+        for idx, weak in enumerate(weak_times):
+            if used_weak[idx]:
+                continue
+            if abs(predicted - weak) <= tolerance:
+                used_weak[idx] = True
+                matched_weak = True
+                break
+        if not matched_weak:
+            output.append(predicted)
+    return output
+
+
 def write_event_report(meta, selected, summary_rows, output_csv, tolerance):
     """
     中文註解：將 E-GMD metadata 與輸出事件做時間層級比對。
@@ -257,8 +277,19 @@ def write_event_report(meta, selected, summary_rows, output_csv, tolerance):
                         and excerpt_start <= float(ev['time']) < excerpt_end
                     )
                 ]
+                weak_expected = [
+                    float(ev['time']) - excerpt_start for ev in item['events']
+                    if (
+                        target_name == 'strong'
+                        and ev.get('inst') == inst
+                        and float(ev.get('velocity', 0.0)) < min_velocity
+                        and excerpt_start <= float(ev['time']) < excerpt_end
+                    )
+                ]
                 for layer in ('raw', 'notation'):
                     predicted = predictions[layer][inst]
+                    if weak_expected:
+                        predicted = filter_predictions_matching_weak(predicted, weak_expected, tolerance)
                     tp, fp, fn, precision, recall, f1 = match_events(expected, predicted, tolerance)
                     report_rows.append({
                         'name': row['name'],

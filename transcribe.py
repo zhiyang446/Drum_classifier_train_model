@@ -2126,7 +2126,23 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 preceding_counts = [measure_counts.get(m, 0) for m in range(max_meas)]
                 avg_preceding = sum(preceding_counts) / len(preceding_counts)
                 
-                if measure_counts.get(max_meas, 0) < 0.25 * avg_preceding:
+                final_native_backbone = 0
+                if ts_den == 8 and ts_num in (6, 9, 12):
+                    for d in onset_decisions:
+                        meas_idx = int(d['quantized_onset'] // (beat_duration * beats_per_measure))
+                        if meas_idx == max_meas and (
+                            d.get('kick_originally_triggered', False)
+                            or d.get('snare_originally_triggered', False)
+                        ):
+                            final_native_backbone += 1
+
+                keep_compound_excerpt_tail = (
+                    ts_den == 8
+                    and ts_num in (6, 9, 12)
+                    and final_native_backbone >= 2
+                )
+
+                if measure_counts.get(max_meas, 0) < 0.25 * avg_preceding and not keep_compound_excerpt_tail:
                     print(f"[Heuristics] Incomplete trailing measure detected (Measure {max_meas} has only {measure_counts[max_meas]} notes, vs average {avg_preceding:.1f}). Pruning it...")
                     for d in onset_decisions:
                         meas_idx = int(d['quantized_onset'] // (beat_duration * beats_per_measure))
@@ -2134,6 +2150,9 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                             d['kick_triggered'] = False
                             d['snare_triggered'] = False
                             d['hh_triggered'] = False
+                elif keep_compound_excerpt_tail:
+                    # 中文註解：E-GMD 等連續片段可能在 12/8 小節中途結束；若尾端仍有原生 KD/SD，保留實際演奏事件。
+                    print(f"[Heuristics] Preserving compound-meter excerpt tail with {final_native_backbone} native KD/SD events.")
 
     if detected_ts == '4/4' and 65.0 <= estimated_tempo <= 75.0 and hh_grid_spacing >= 0.49:
         suppressed_kicks = 0
