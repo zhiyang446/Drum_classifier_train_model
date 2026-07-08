@@ -70,6 +70,12 @@ Evidence so far:
 - Rejected model candidate: `validation_runs\egmd_round4_kdsd_density_full_candidate.pth`; evaluation `validation_runs\egmd_round4_kdsd_density_full_candidate_eval` dropped to `14/30` and disturbed HH/tempo behavior, so full-model KD/SD fine-tuning from this density subset must not be promoted.
 - Rejected model candidate: `validation_runs\egmd_round4_sd_density_head_candidate.pth`; evaluation `validation_runs\egmd_round4_sd_density_head_candidate_eval` tied `24/30`, so SD-only density head fine-tuning also must not be promoted.
 - Rejected/reverted code probe: `validation_runs\egmd_round4_subthreshold_candidates_after_timp` tied `24/30` and changed unrelated counts, so subthreshold KD/SD local maxima must not be kept as runtime candidates in this form.
+- Remaining KD/SD miss audit: the failing strong channels are `7_pop` KD, `7_pop` SD, and `1_funk` SD. Precision is high, but recall is low; missed events are mostly below the dynamic threshold, especially low/mid-velocity Snare.
+- Added reusable train-split velocity-band and close-repeat loss weighting support to `build_egmd_pitch_weighted_meta.py`; generated `validation_runs\egmd_round4_velocity_repeat_train_meta.json` without using selected Round4 test file names or expected answers.
+- Rejected model candidate: `validation_runs\egmd_round4_velocity_repeat_kdsd_head_candidate.pth`; final evaluation dropped to `22/30` strong event evidence. Epoch 1 tied `24/30` and therefore was not promoted.
+- Rejected model candidate: `validation_runs\egmd_round4_velocity_repeat_kdsd_head_lowlr_candidate.pth`; evaluation tied `24/30`, so it did not improve Round4.
+- Rejected model candidate: `validation_runs\egmd_round4_velocity_repeat_kdsd_full_tinylr_candidate.pth`; evaluation dropped to `9/30` and disturbed HH/tempo behavior.
+- Rejected validation-gate probe: physically merging very close same-instrument metadata events is not a clean fix in this form because it over-collapses some clips and would not align with current raw counts.
 
 Current classification:
 
@@ -80,6 +86,7 @@ Current classification:
 - Candidate-training conclusion so far: clean, focused dense, HH-only, staged KD/SD, and windowed E-GMD candidates have not produced an acceptable checkpoint. Do not promote them, and do not repeat the same fine-tune recipe. KD/SD remaining failures look like model/calibration coverage, not a simple fixed offset or global threshold issue.
 - New diagnostic conclusion: keep the 12/8 0.75-beat HH recovery, but do not relax NMS broadly, do not repeat pitch-weighted KD/SD head-only tuning, do not lower broad KD/SD/HH thresholds, and do not lower Snare phase-recovery threshold without new evidence.
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
+- Do not repeat KD/SD velocity/repeat fine-tuning in head-only or tiny-LR full-model form; it improves some recall but fails to pass and can damage unrelated channels.
 
 ## 2026-07-06 Round3 repair status
 

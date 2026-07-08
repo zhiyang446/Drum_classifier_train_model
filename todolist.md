@@ -88,7 +88,13 @@
     *   [x] Train one SD-only density-ranked head candidate; rejected because it tied `24/30`.
     *   [ ] Inspect remaining Round4 failures by velocity/weak-note distribution before changing model or gate again.
     *   [x] Probe subthreshold KD/SD local-maxima candidates as non-triggered recovery inputs only; rejected and reverted because it tied `24/30` and changed unrelated counts.
-    *   [ ] Next: inspect remaining KD/SD precision-vs-recall failures separately.
+    *   [x] Inspect remaining KD/SD precision-vs-recall failures separately; misses are mostly below dynamic threshold, especially low/mid-velocity Snare and Kick.
+    *   [x] Add reusable train-split velocity-band / close-repeat loss-weight metadata support before one new KD/SD candidate.
+    *   [x] Build `validation_runs\egmd_round4_velocity_repeat_train_meta.json` from E-GMD train MIDI only.
+    *   [x] Reject velocity/repeat KD/SD head candidates because they only tied `24/30` and did not pass Round4.
+    *   [x] Reject velocity/repeat KD/SD full tiny-LR candidate because it dropped Round4 strong evidence to `9/30`.
+    *   [x] Reject physical close-event expected merge probe because it would over-collapse some selected clips and is not a clean gate fix.
+    *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)
     *   [x] Compare current raw AI event CSVs against user expected targets and classify failures as threshold/NMS vs model/data.

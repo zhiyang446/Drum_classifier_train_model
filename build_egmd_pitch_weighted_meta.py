@@ -36,6 +36,19 @@ def parse_pitch_weights(text):
     return weights
 
 
+def parse_velocity_boosts(text):
+    """中文註解：解析 inst:min-max=weight 規則，例如 SD:30-50=2.0。"""
+    rules = []
+    if not text.strip():
+        return rules
+    for part in text.split(','):
+        left, value = part.split('=', 1)
+        inst, span = left.split(':', 1)
+        low, high = span.split('-', 1)
+        rules.append((inst.strip().upper(), float(low), float(high), float(value)))
+    return rules
+
+
 def midi_path_for_audio(audio_path):
     """中文註解：依 E-GMD 音訊路徑推導 sibling MIDI 路徑。"""
     return os.path.splitext(audio_path)[0] + '.midi'
@@ -47,7 +60,24 @@ def groove_key_for_audio(audio_path):
     return re.sub(r'_\d+\.[^.]+$', '', name)
 
 
-def read_pitch_events(audio_path, pitch_weights, velocity_min):
+def apply_event_boosts(events, velocity_boosts, repeat_window, repeat_boost):
+    """中文註解：套用通用力度區間與近距離重複音 loss 加權。"""
+    by_inst = {}
+    for ev in events:
+        for inst, low, high, weight in velocity_boosts:
+            if ev['inst'] == inst and low <= ev['velocity'] <= high:
+                ev['loss_weight'] = max(ev['loss_weight'], weight)
+        by_inst.setdefault(ev['inst'], []).append(ev)
+    if repeat_window > 0 and repeat_boost > 1.0:
+        for rows in by_inst.values():
+            rows.sort(key=lambda row: row['time'])
+            for left, right in zip(rows, rows[1:]):
+                if right['time'] - left['time'] <= repeat_window:
+                    left['loss_weight'] = max(left['loss_weight'], repeat_boost)
+                    right['loss_weight'] = max(right['loss_weight'], repeat_boost)
+
+
+def read_pitch_events(audio_path, pitch_weights, velocity_min, velocity_boosts, repeat_window, repeat_boost):
     """中文註解：讀取 MIDI 並保留 pitch，同時套用通用 pitch 權重。"""
     midi_path = midi_path_for_audio(audio_path)
     if not os.path.exists(midi_path):
@@ -67,6 +97,7 @@ def read_pitch_events(audio_path, pitch_weights, velocity_min):
                 'loss_weight': float(pitch_weights.get(note.pitch, 1.0)),
             })
     events.sort(key=lambda row: (row['time'], row['pitch']))
+    apply_event_boosts(events, velocity_boosts, repeat_window, repeat_boost)
     return events
 
 
@@ -126,7 +157,7 @@ def density_score(inst_counts, duration, sort_by):
     return 0.0
 
 
-def build_meta(source_meta, limit, pitch_weights, required_pitches, velocity_min, max_kits_per_groove, window_seconds, min_kd_per_sec, min_sd_per_sec, sort_by):
+def build_meta(source_meta, limit, pitch_weights, required_pitches, velocity_min, max_kits_per_groove, window_seconds, min_kd_per_sec, min_sd_per_sec, sort_by, velocity_boosts, repeat_window, repeat_boost):
     """中文註解：從 E-GMD train split 建立 pitch-aware candidate metadata。"""
     candidates = []
     groove_counts = Counter()
@@ -139,7 +170,7 @@ def build_meta(source_meta, limit, pitch_weights, required_pitches, velocity_min
         groove_key = groove_key_for_audio(audio_path)
         if max_kits_per_groove > 0 and groove_counts[groove_key] >= max_kits_per_groove:
             continue
-        events = read_pitch_events(audio_path, pitch_weights, velocity_min)
+        events = read_pitch_events(audio_path, pitch_weights, velocity_min, velocity_boosts, repeat_window, repeat_boost)
         if not keep_item(events, required_pitches):
             continue
         inst_counts, pitch_counts = item_counts(events)
@@ -204,8 +235,8 @@ def parse_args():
     """中文註解：解析 CLI 參數。"""
     parser = argparse.ArgumentParser(description='Build pitch-weighted E-GMD train metadata.')
     parser.add_argument('--meta', default='processed_data/egmd_meta.json')
-    parser.add_argument('--output', required=True)
-    parser.add_argument('--report', required=True)
+    parser.add_argument('--output')
+    parser.add_argument('--report')
     parser.add_argument('--limit', type=int, default=300)
     parser.add_argument('--pitch-weights', default='')
     parser.add_argument('--require-pitches', default='')
@@ -215,6 +246,9 @@ def parse_args():
     parser.add_argument('--min-kd-per-sec', type=float, default=0.0)
     parser.add_argument('--min-sd-per-sec', type=float, default=0.0)
     parser.add_argument('--sort-by', choices=['key', 'kdsd_density', 'kd_density', 'sd_density', 'events_density'], default='key')
+    parser.add_argument('--velocity-boosts', default='')
+    parser.add_argument('--repeat-window', type=float, default=0.0)
+    parser.add_argument('--repeat-boost', type=float, default=1.0)
     parser.add_argument('--self-check', action='store_true')
     return parser.parse_args()
 
@@ -223,6 +257,11 @@ def run_self_check():
     """中文註解：確認 pitch 權重解析與篩選規則。"""
     weights = parse_pitch_weights('37=2.0,38=1.5')
     assert weights[37] == 2.0
+    boosts = parse_velocity_boosts('SD:30-50=2.0,KD:40-70=1.5')
+    assert boosts[0] == ('SD', 30.0, 50.0, 2.0)
+    events = [{'time': 0.00, 'inst': 'SD', 'velocity': 35.0, 'loss_weight': 1.0}, {'time': 0.02, 'inst': 'SD', 'velocity': 80.0, 'loss_weight': 1.0}]
+    apply_event_boosts(events, boosts, 0.03, 2.5)
+    assert events[0]['loss_weight'] == 2.5 and events[1]['loss_weight'] == 2.5
     assert keep_item([{'pitch': 38}], {38})
     assert not keep_item([{'pitch': 40}], {38})
     assert groove_key_for_audio('x/10_jazz_110_beat_4-4_15.wav') == '10_jazz_110_beat_4-4'
@@ -237,7 +276,10 @@ def main():
     if args.self_check:
         run_self_check()
         return
+    if not args.output or not args.report:
+        raise SystemExit('--output and --report are required unless --self-check is used')
     pitch_weights = parse_pitch_weights(args.pitch_weights)
+    velocity_boosts = parse_velocity_boosts(args.velocity_boosts)
     required_pitches = {int(value.strip()) for value in args.require_pitches.split(',') if value.strip()}
     with open(args.meta, 'r', encoding='utf-8') as f:
         source_meta = json.load(f)
@@ -252,6 +294,9 @@ def main():
         args.min_kd_per_sec,
         args.min_sd_per_sec,
         args.sort_by,
+        velocity_boosts,
+        args.repeat_window,
+        args.repeat_boost,
     )
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w', encoding='utf-8') as f:
