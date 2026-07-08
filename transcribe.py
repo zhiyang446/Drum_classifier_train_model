@@ -442,7 +442,7 @@ def export_layer_events_csv(output_path, decisions, layer_name, estimated_tempo,
                 'midi_quarter_bpm': float(estimated_tempo)
             })
 
-def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_grid, beat_duration, first_onset, sr, hop_length, n_frames):
+def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_grid, beat_duration, first_onset, sr, hop_length, n_frames, onset_preds=None, vel_preds=None):
     """
     對 raw acoustic 匯出層做最小物理事件清理。
 
@@ -455,6 +455,8 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
     :param sr: int，取樣率。
     :param hop_length: int，特徵 hop size。
     :param n_frames: int，模型輸出 frame 數。
+    :param onset_preds: numpy array|None，完整模型 onset 概率，用於相位確認後的低概率補候選。
+    :param vel_preds: numpy array|None，完整模型 velocity 概率，用於補候選力度。
     :return: list[dict]，清理後的 raw acoustic decisions。
     """
     cleaned = []
@@ -541,6 +543,13 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
                         row['snare_triggered'] = False
         num_measures = max(1, int(np.ceil((max_beat + 1e-6) / 4.0)))
         steps_per_measure = 12 if active_grid in {'triplet', 'swung_16th'} else 16
+        half_time_dense_4_4 = (
+            detected_ts == '4/4'
+            and active_grid == '16th'
+            and 65.0 <= estimated_tempo <= 75.0
+            and num_measures >= 6
+            and sum(1 for row in cleaned if row.get('hh_triggered', False)) >= max(48, num_measures * 8)
+        )
 
         def phase_step(row):
             beat_val = row.get('quantized_onset', 0.0) / beat_duration
@@ -556,6 +565,60 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
                     best = row
                     best_dist = dist
             return best if best is not None and best_dist <= max_dist else None
+
+        def synthesize_phase_decision(inst_name, prob_idx, target_beat, floor_prob):
+            if onset_preds is None:
+                return None
+            target_time = first_onset + target_beat * beat_duration
+            frame = int(np.clip(round(target_time * sr / hop_length), 0, n_frames - 1))
+            lo = max(0, frame - 2)
+            hi = min(n_frames, frame + 3)
+            local = onset_preds[lo:hi, prob_idx]
+            if len(local) == 0:
+                return None
+            best_frame = int(lo + np.argmax(local))
+            best_prob = float(onset_preds[best_frame, prob_idx])
+            if best_prob < floor_prob:
+                return None
+            probs = np.array([0.0, 0.0, 0.0])
+            probs[prob_idx] = best_prob
+            vel_kick = 0
+            vel_snare = 0
+            if vel_preds is not None:
+                vel_value = int(np.clip(vel_preds[best_frame, prob_idx] * 127.0, 1, 127))
+            else:
+                vel_value = int(0.55 * 127)
+            if inst_name == 'kick':
+                vel_kick = max(vel_value, int(0.50 * 127))
+            else:
+                vel_snare = max(vel_value, int(0.50 * 127))
+            return {
+                'raw_onset': best_frame * hop_length / sr,
+                'quantized_onset': target_beat * beat_duration,
+                'frame': best_frame,
+                'frames': [best_frame],
+                'probs': probs,
+                'low_rise': 0.0,
+                'mid_rise': 0.0,
+                'vel_kick': vel_kick,
+                'vel_snare': vel_snare,
+                'vel_hihat': 0,
+                'kick_triggered': inst_name == 'kick',
+                'snare_triggered': inst_name == 'snare',
+                'hh_triggered': False,
+                'kick_thresh': 0.0,
+                'snare_thresh': 0.0,
+                'hh_thresh': 0.0,
+                'hf_energy': 0.0,
+                'global_hf_energy': 0.0,
+                'is_virtual_kd': inst_name == 'kick',
+                'is_virtual_sd': inst_name == 'snare',
+                'is_virtual_hh': False,
+                'kick_originally_triggered': False,
+                'snare_originally_triggered': False,
+                'hh_originally_triggered': False,
+                'step_16th': int(round(target_beat * 4.0)),
+            }
 
         for inst_name, prob_idx, recover_threshold in (('kick', 0, 0.30), ('snare', 1, 0.30)):
             trigger_key = f'{inst_name}_triggered'
@@ -632,16 +695,26 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
                 allow_phase_recovery = triggered_total < num_measures * 2.5
             else:
                 allow_phase_recovery = True
+            if half_time_dense_4_4:
+                allow_phase_recovery = triggered_total < num_measures * 8
             step_dist = (4.0 / steps_per_measure) * 0.35
+            phase_recovery_floor = recover_threshold
+            if half_time_dense_4_4:
+                phase_recovery_floor = 0.18 if inst_name == 'kick' else 0.20
             for step in active_steps:
                 for meas_idx in range(num_measures):
                     target_beat = meas_idx * 4.0 + step * (4.0 / steps_per_measure)
                     row = nearest_decision(target_beat, step_dist)
-                    if allow_phase_recovery and row is not None and not row.get(trigger_key, False) and (row['probs'][prob_idx] >= recover_threshold or (inst_name == 'kick' and 80.0 <= estimated_tempo <= 95.0)):
+                    if allow_phase_recovery and row is not None and not row.get(trigger_key, False) and (row['probs'][prob_idx] >= phase_recovery_floor or (inst_name == 'kick' and 80.0 <= estimated_tempo <= 95.0)):
                         row[trigger_key] = True
                         row[vel_key] = max(row.get(vel_key, 0), int(0.55 * 127))
                         row[virtual_key] = not row.get(f'{inst_name}_originally_triggered', False)
                         row[phase_key] = True
+                    elif allow_phase_recovery and row is None and half_time_dense_4_4:
+                        created = synthesize_phase_decision(inst_name, prob_idx, target_beat, phase_recovery_floor)
+                        if created is not None:
+                            created[phase_key] = True
+                            cleaned.append(created)
                     elif allow_phase_recovery and row is None and inst_name == 'kick' and 80.0 <= estimated_tempo <= 95.0:
                         target_time = first_onset + target_beat * beat_duration
                         frame = int(np.clip(round(target_time * sr / hop_length), 0, n_frames - 1))
@@ -1665,11 +1738,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         raw_ai_decisions.append(raw_d)
     raw_ai_decisions = apply_raw_acoustic_hygiene(
         raw_ai_decisions, detected_ts, estimated_tempo, active_grid, beat_duration,
-        first_onset, sr, hop_length, n_frames
+        first_onset, sr, hop_length, n_frames, onset_preds, vel_preds
     )
     onset_decisions = apply_raw_acoustic_hygiene(
         onset_decisions, detected_ts, estimated_tempo, active_grid, beat_duration,
-        first_onset, sr, hop_length, n_frames
+        first_onset, sr, hop_length, n_frames, onset_preds, vel_preds
     )
 
     # --- Sparse Shuffle Completion ---

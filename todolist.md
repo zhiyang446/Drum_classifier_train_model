@@ -94,6 +94,10 @@
     *   [x] Reject velocity/repeat KD/SD head candidates because they only tied `24/30` and did not pass Round4.
     *   [x] Reject velocity/repeat KD/SD full tiny-LR candidate because it dropped Round4 strong evidence to `9/30`.
     *   [x] Reject physical close-event expected merge probe because it would over-collapse some selected clips and is not a clean gate fix.
+    *   [x] Inspect model architecture/calibration path: repeated-phase recovery cannot see KD/SD local evidence that failed initial peak threshold.
+    *   [x] Probe half-time dense 4/4 repeated-phase synthetic KD/SD recovery without feeding tempo detection.
+    *   [x] Accept the guarded phase synthesis probe because Round4 strong evidence improves to `26/30` and `verify_current_solution.py` remains green.
+    *   [x] Reject aggressive no-floor Snare synthesis because it reaches `28/30` but breaks `ghost_snare` in the current verifier.
     *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)

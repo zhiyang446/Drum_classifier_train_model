@@ -76,6 +76,8 @@ Evidence so far:
 - Rejected model candidate: `validation_runs\egmd_round4_velocity_repeat_kdsd_head_lowlr_candidate.pth`; evaluation tied `24/30`, so it did not improve Round4.
 - Rejected model candidate: `validation_runs\egmd_round4_velocity_repeat_kdsd_full_tinylr_candidate.pth`; evaluation dropped to `9/30` and disturbed HH/tempo behavior.
 - Rejected validation-gate probe: physically merging very close same-instrument metadata events is not a clean fix in this form because it over-collapses some clips and would not align with current raw counts.
+- Accepted runtime improvement: `validation_runs\egmd_round4_halftime_phase_synth_probe6` improves Round4 strong event evidence from `24/30` to `26/30` while `verify_current_solution.py` remains green. The change lets long half-time dense 4/4 grooves synthesize missing repeated-phase KD/SD rows from model probabilities only after the phase is confirmed across measures, and it excludes short 4-measure grooves such as the existing ghost-snare verifier case.
+- Rejected runtime probe: the aggressive no-floor Snare phase synthesis reached `28/30` but broke `ghost_snare` in `verify_current_solution.py` by adding one Snare, so it was not kept.
 
 Current classification:
 
@@ -87,6 +89,7 @@ Current classification:
 - New diagnostic conclusion: keep the 12/8 0.75-beat HH recovery, but do not relax NMS broadly, do not repeat pitch-weighted KD/SD head-only tuning, do not lower broad KD/SD/HH thresholds, and do not lower Snare phase-recovery threshold without new evidence.
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
 - Do not repeat KD/SD velocity/repeat fine-tuning in head-only or tiny-LR full-model form; it improves some recall but fails to pass and can damage unrelated channels.
+- Remaining accepted-code blocker after half-time phase synthesis: Round4 strong evidence still fails on Snare recall for `7_pop` and `1_funk`; exact raw/notation count gates remain `0/5`.
 
 ## 2026-07-06 Round3 repair status
 

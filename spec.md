@@ -717,6 +717,8 @@ Round4 subthreshold phase-candidate rule:
 3. Such candidates must not affect tempo detection, and may become notes only through repeated-phase consistency rules.
 4. This rule must not use file names, selected test identities, or expected counts.
 5. Snare phase recovery threshold may be lowered only inside repeated-phase recovery, never as a global raw peak threshold.
+6. For long half-time 4/4 dense-hat grooves, repeated KD/SD phase recovery may synthesize a missing row from the model probability near the target frame only when the phase is already confirmed across measures and the probability clears a conservative channel floor. This must remain a shared phase-consistency rule and must not feed tempo detection.
+7. The half-time dense phase rule must protect short 4-measure verifier grooves; current accepted guard requires at least 6 measures. Aggressive no-floor Snare synthesis is rejected because it breaks the existing ghost-snare verifier case.
 
 Round4 12/8-wrapper dense-HH recovery rule:
 
