@@ -98,6 +98,9 @@
     *   [x] Probe half-time dense 4/4 repeated-phase synthetic KD/SD recovery without feeding tempo detection.
     *   [x] Accept the guarded phase synthesis probe because Round4 strong evidence improves to `26/30` and `verify_current_solution.py` remains green.
     *   [x] Reject aggressive no-floor Snare synthesis because it reaches `28/30` but breaks `ghost_snare` in the current verifier.
+    *   [x] Reject dense-Snare recovery ceiling probe because it only adds one `1_funk` Snare and leaves Round4 at `26/30`.
+    *   [x] Add clustered strong-event diagnostic for dense E-GMD same-instrument ornaments before changing runtime again.
+    *   [x] Reject dense-Snare no-floor/cap target-time probe because it adds false positives without improving `1_funk` Snare TP.
     *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)

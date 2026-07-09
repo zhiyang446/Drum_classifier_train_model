@@ -225,6 +225,17 @@ def match_events(expected_times, predicted_times, tolerance):
     return tp, fp, fn, precision, recall, f1
 
 
+def cluster_close_events(times, window):
+    """
+    中文註解：將同鼓件過近的 MIDI 裝飾音合併為一個物理事件診斷點。
+    """
+    clustered = []
+    for t in sorted(times):
+        if not clustered or t - clustered[-1] > window:
+            clustered.append(t)
+    return clustered
+
+
 def filter_predictions_matching_weak(predicted_times, weak_times, tolerance):
     """
     中文註解：strong-hit 診斷中，預測若命中弱標註，不應被算成強音假陽性。
@@ -266,7 +277,7 @@ def write_event_report(meta, selected, summary_rows, output_csv, tolerance):
             'notation': row['notation_events'],
         }
         predictions = {layer: read_predicted_events(path) for layer, path in layer_paths.items()}
-        for target_name, velocity_min in [('full', 0.0), ('strong', None)]:
+        for target_name, velocity_min in [('full', 0.0), ('strong', None), ('clustered_strong', None)]:
             for inst in EVENT_FIELDS:
                 min_velocity = STRONG_VELOCITY[inst] if velocity_min is None else velocity_min
                 expected = [
@@ -277,6 +288,8 @@ def write_event_report(meta, selected, summary_rows, output_csv, tolerance):
                         and excerpt_start <= float(ev['time']) < excerpt_end
                     )
                 ]
+                if target_name == 'clustered_strong':
+                    expected = cluster_close_events(expected, 0.035)
                 weak_expected = [
                     float(ev['time']) - excerpt_start for ev in item['events']
                     if (

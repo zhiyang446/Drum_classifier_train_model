@@ -630,6 +630,7 @@ Round4 event-level diagnostic gate:
 4. Strong-hit diagnostic thresholds are velocity `KD>=30`, `SD>=30`, `HH>=30`; full-MIDI counts remain reported separately.
 5. In the strong-hit diagnostic, predictions that match weak metadata events below the strong threshold should be ignored rather than counted as false positives.
 6. A Round4 fix is acceptable only when it improves event-level evidence without breaking `verify_current_solution.py`; changing expected targets only to make counts pass is not acceptable.
+7. Dense E-GMD ornaments may be inspected with an additional clustered diagnostic target that merges same-instrument metadata events closer than the model's physical debounce window. This diagnostic is evidence only until separately accepted as a gate rule.
 
 Round4 KD/SD/HH-only selection rule:
 

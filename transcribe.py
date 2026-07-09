@@ -593,7 +593,7 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
             else:
                 vel_snare = max(vel_value, int(0.50 * 127))
             return {
-                'raw_onset': best_frame * hop_length / sr,
+                'raw_onset': target_time,
                 'quantized_onset': target_beat * beat_duration,
                 'frame': best_frame,
                 'frames': [best_frame],
@@ -710,7 +710,7 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
                         row[vel_key] = max(row.get(vel_key, 0), int(0.55 * 127))
                         row[virtual_key] = not row.get(f'{inst_name}_originally_triggered', False)
                         row[phase_key] = True
-                    elif allow_phase_recovery and row is None and half_time_dense_4_4:
+                    elif allow_phase_recovery and row is None and half_time_dense_4_4 and inst_name == 'kick':
                         created = synthesize_phase_decision(inst_name, prob_idx, target_beat, phase_recovery_floor)
                         if created is not None:
                             created[phase_key] = True

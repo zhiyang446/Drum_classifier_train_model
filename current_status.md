@@ -78,6 +78,8 @@ Evidence so far:
 - Rejected validation-gate probe: physically merging very close same-instrument metadata events is not a clean fix in this form because it over-collapses some clips and would not align with current raw counts.
 - Accepted runtime improvement: `validation_runs\egmd_round4_halftime_phase_synth_probe6` improves Round4 strong event evidence from `24/30` to `26/30` while `verify_current_solution.py` remains green. The change lets long half-time dense 4/4 grooves synthesize missing repeated-phase KD/SD rows from model probabilities only after the phase is confirmed across measures, and it excludes short 4-measure grooves such as the existing ghost-snare verifier case.
 - Rejected runtime probe: the aggressive no-floor Snare phase synthesis reached `28/30` but broke `ghost_snare` in `verify_current_solution.py` by adding one Snare, so it was not kept.
+- Rejected runtime probe: dense-Snare no-floor/cap synthesis with target-time rows reached `28/30` but did not improve `1_funk` Snare TP; it added false positives, so it was not kept.
+- Added clustered strong-event diagnostic in `run_egmd_round4_validation.py`; it shows the remaining `1_funk` Snare issue is not solved by merging close MIDI ornaments alone.
 
 Current classification:
 
@@ -90,6 +92,7 @@ Current classification:
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
 - Do not repeat KD/SD velocity/repeat fine-tuning in head-only or tiny-LR full-model form; it improves some recall but fails to pass and can damage unrelated channels.
 - Remaining accepted-code blocker after half-time phase synthesis: Round4 strong evidence still fails on Snare recall for `7_pop` and `1_funk`; exact raw/notation count gates remain `0/5`.
+- Do not accept Snare phase synthesis that increases predicted count without increasing matched TP; it only moves the problem from false negatives to false positives.
 
 ## 2026-07-06 Round3 repair status
 
