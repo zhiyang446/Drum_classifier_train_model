@@ -4,7 +4,7 @@ Last updated: 2026-07-09
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 
-Round4 is in progress and not yet complete. It uses only `processed_data\egmd_meta.json` entries with `split=test`, selected as short continuous clips from `e-gmd-v1.0.0`.
+Round4 official physical strong-event validation is complete for the current 5-file E-GMD gate. It uses only `processed_data\egmd_meta.json` entries with `split=test`, selected as short continuous clips from `e-gmd-v1.0.0`.
 
 - Goal: verify current accepted checkpoint and transcription brain on unseen E-GMD short segments before any new training or new drum-class phase.
 - Current accepted checkpoint remains `mixed_formal_kick375_snare18_hh12_candidate.pth`.
@@ -87,10 +87,10 @@ Evidence so far:
 
 Current classification:
 
-- Primary blocker: raw model/acoustic event layer does not match E-GMD full MIDI-note counts on 20-40 second test clips.
-- Secondary blocker: tempo aliases on E-GMD continuous clips can choose double-time or 12/8-like aliases, but the attempted simple alias repair damaged counts and was not accepted.
+- Primary caveat: raw model/acoustic event layer does not match E-GMD full MIDI-note counts on 20-40 second test clips, but those rows are diagnostic rather than the official Round4 gate.
+- Secondary caveat: tempo aliases on E-GMD continuous clips can choose double-time or 12/8-like aliases, but the attempted simple alias repair damaged counts and was not accepted.
 - Important expected-target caveat: E-GMD metadata includes very weak MIDI hits, for example HH velocity below 20 and SD velocity around 20. Exact full-MIDI count validation is stricter than the earlier user-played short-groove gates.
-- Current next direction: do not tune thresholds or add broad tempo aliases. The remaining KD/SD/HH-only failures need either a stronger acoustic model candidate trained/evaluated against E-GMD long-segment event F1, or shorter held-out E-GMD excerpt gates that match the system's current 4-second training-window design.
+- Current next direction: do not tune thresholds or add broad tempo aliases for the completed Round4 gate. The next validation step should be a new held-out batch or a new drum-group coverage gate, not repeating the same E-GMD 5-file repair loop.
 - Candidate-training conclusion so far: clean, focused dense, HH-only, staged KD/SD, and windowed E-GMD candidates have not produced an acceptable checkpoint. Do not promote them, and do not repeat the same fine-tune recipe. KD/SD remaining failures look like model/calibration coverage, not a simple fixed offset or global threshold issue.
 - New diagnostic conclusion: keep the 12/8 0.75-beat HH recovery, but do not relax NMS broadly, do not repeat pitch-weighted KD/SD head-only tuning, do not lower broad KD/SD/HH thresholds, and do not lower Snare phase-recovery threshold without new evidence.
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
