@@ -80,6 +80,7 @@ Evidence so far:
 - Rejected runtime probe: the aggressive no-floor Snare phase synthesis reached `28/30` but broke `ghost_snare` in `verify_current_solution.py` by adding one Snare, so it was not kept.
 - Rejected runtime probe: dense-Snare no-floor/cap synthesis with target-time rows reached `28/30` but did not improve `1_funk` Snare TP; it added false positives, so it was not kept.
 - Added clustered strong-event diagnostic in `run_egmd_round4_validation.py`; it shows the remaining `1_funk` Snare issue is not solved by merging close MIDI ornaments alone.
+- Rejected existing-root-checkpoint route after the accepted phase-synthesis code: `validation_runs\egmd_round4_best_model_after_phase` tied the accepted strong-event evidence at `26/30`, and `validation_runs\egmd_round4_backup_model_after_phase` dropped to `15/30`. Neither `best_drum_model.pth` nor `best_drum_model_backup.pth` should replace `mixed_formal_kick375_snare18_hh12_candidate.pth`.
 
 Current classification:
 
@@ -91,6 +92,7 @@ Current classification:
 - New diagnostic conclusion: keep the 12/8 0.75-beat HH recovery, but do not relax NMS broadly, do not repeat pitch-weighted KD/SD head-only tuning, do not lower broad KD/SD/HH thresholds, and do not lower Snare phase-recovery threshold without new evidence.
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
 - Do not repeat KD/SD velocity/repeat fine-tuning in head-only or tiny-LR full-model form; it improves some recall but fails to pass and can damage unrelated channels.
+- Do not switch to `best_drum_model.pth` or `best_drum_model_backup.pth` as a shortcut; the after-phase comparison did not improve Round4.
 - Remaining accepted-code blocker after half-time phase synthesis: Round4 strong evidence still fails on Snare recall for `7_pop` and `1_funk`; exact raw/notation count gates remain `0/5`.
 - Do not accept Snare phase synthesis that increases predicted count without increasing matched TP; it only moves the problem from false negatives to false positives.
 
