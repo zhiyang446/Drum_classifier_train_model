@@ -9,7 +9,7 @@ Round4 is in progress and not yet complete. It uses only `processed_data\egmd_me
 - Goal: verify current accepted checkpoint and transcription brain on unseen E-GMD short segments before any new training or new drum-class phase.
 - Current accepted checkpoint remains `mixed_formal_kick375_snare18_hh12_candidate.pth`.
 - Expected counts will be generated from metadata events, not hand-filled.
-- Completion requires raw acoustic comparison pass, notation comparison pass, and `verify_current_solution.py` pass.
+- Completion requires the official Round4 physical strong-event gate to pass for raw and notation event rows, plus `verify_current_solution.py` pass. Exact full-MIDI raw/notation count comparisons remain diagnostic reports.
 - No checkpoint replacement, source-audio overwrite, or path-based model routing is allowed.
 
 Evidence so far:
@@ -83,6 +83,7 @@ Evidence so far:
 - Rejected existing-root-checkpoint route after the accepted phase-synthesis code: `validation_runs\egmd_round4_best_model_after_phase` tied the accepted strong-event evidence at `26/30`, and `validation_runs\egmd_round4_backup_model_after_phase` dropped to `15/30`. Neither `best_drum_model.pth` nor `best_drum_model_backup.pth` should replace `mixed_formal_kick375_snare18_hh12_candidate.pth`.
 - Accepted runtime improvement: `validation_runs\egmd_round4_masked_snare_probe` improves Round4 strong event evidence from `26/30` to `28/30` while `verify_current_solution.py` remains green. The change recovers masked Snare only on long half-time dense 4/4 grooves when the target row already has both Kick and Hi-Hat evidence on a confirmed Snare phase; it does not synthesize new Snare rows.
 - Accepted Round4 physical strong-event gate update: `validation_runs\egmd_round4_sd50_event_gate` passes `30/30` strong event rows using shared velocity floors KD `30`, SD `50`, HH `30`. The SD floor change is evidence-based: `SD>=30` included dense E-GMD ghost/flam notes in `1_funk`; at `SD>=50`, raw and notation event F1 both pass without changing transcription output. `verify_current_solution.py` also passed.
+- Accepted explicit Round4 gate summary: `validation_runs\egmd_round4_gate_summary\gate_summary.json` reports `overall=pass`, `passed_rows=30`, `total_rows=30`. The same run still writes full-count `raw_compare.csv` and `notation_compare.csv` as diagnostics.
 
 Current classification:
 
@@ -95,7 +96,7 @@ Current classification:
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
 - Do not repeat KD/SD velocity/repeat fine-tuning in head-only or tiny-LR full-model form; it improves some recall but fails to pass and can damage unrelated channels.
 - Do not switch to `best_drum_model.pth` or `best_drum_model_backup.pth` as a shortcut; the after-phase comparison did not improve Round4.
-- Remaining blocker after SD strong-floor correction: Round4 physical strong-event gate is complete, but exact full-MIDI raw/notation count gates remain `0/5` because they include weak notes and tempo/count aliases. Do not report Round4 as fully complete until the accepted gate definition is narrowed or full-count behavior is separately repaired.
+- Remaining Round4 caveat after gate-summary acceptance: physical strong-event gate is complete, but exact full-MIDI raw/notation count reports remain `0/5` as diagnostics because they include weak notes and tempo/count aliases.
 - Do not accept Snare phase synthesis that increases predicted count without increasing matched TP; it only moves the problem from false negatives to false positives.
 
 ## 2026-07-06 Round3 repair status

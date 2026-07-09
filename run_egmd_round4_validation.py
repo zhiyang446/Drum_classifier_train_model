@@ -7,6 +7,7 @@ import csv
 import json
 import os
 import re
+import tempfile
 
 import soundfile as sf
 
@@ -327,6 +328,30 @@ def write_event_report(meta, selected, summary_rows, output_csv, tolerance):
     return report_rows
 
 
+def write_gate_summary(event_rows, output_dir):
+    """
+    中文註解：寫出 Round4 官方驗收摘要；full-count CSV 仍保留為診斷。
+    """
+    strong_rows = [row for row in event_rows if row['target'] == 'strong']
+    strong_passed = sum(row['overall'] == 'pass' for row in strong_rows)
+    gate_row = {
+        'gate': 'round4_physical_strong_event',
+        'overall': 'pass' if strong_rows and strong_passed == len(strong_rows) else 'fail',
+        'passed_rows': strong_passed,
+        'total_rows': len(strong_rows),
+        'note': 'full MIDI count reports are diagnostic only',
+    }
+    csv_path = os.path.join(output_dir, 'gate_summary.csv')
+    json_path = os.path.join(output_dir, 'gate_summary.json')
+    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=list(gate_row.keys()))
+        writer.writeheader()
+        writer.writerow(gate_row)
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(gate_row, f, indent=2)
+    return gate_row
+
+
 def run_self_check():
     """
     中文註解：最小自檢，確認選樣與 expected 欄位可用。
@@ -341,6 +366,8 @@ def run_self_check():
     assert INST_MAP['KD'] == 'expected_kick'
     assert safe_case_name('a b#c.wav') == 'a_b_c'
     assert match_events([0.1, 0.2], [0.11, 0.4], 0.05)[:3] == (1, 1, 1)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        assert write_gate_summary([{'target': 'strong', 'overall': 'pass'}], tmpdir)['overall'] == 'pass'
     print('Self-check passed.')
 
 
@@ -394,6 +421,7 @@ def main():
     write_rows(raw_rows, os.path.join(args.output_dir, 'raw_compare.csv'))
     write_rows(notation_rows, os.path.join(args.output_dir, 'notation_compare.csv'))
     event_rows = write_event_report(meta, selected, rows, os.path.join(args.output_dir, 'event_compare.csv'), args.event_tolerance)
+    gate_row = write_gate_summary(event_rows, args.output_dir)
 
     for label, result_rows in [('raw', raw_rows), ('notation', notation_rows)]:
         passed = sum(row['overall'] == 'pass' for row in result_rows)
@@ -403,6 +431,7 @@ def main():
     strong_rows = [row for row in event_rows if row['target'] == 'strong']
     strong_passed = sum(row['overall'] == 'pass' for row in strong_rows)
     print(f'event strong: {strong_passed}/{len(strong_rows)} pass')
+    print(f"round4 gate: {gate_row['overall']} ({gate_row['passed_rows']}/{gate_row['total_rows']})")
 
 
 if __name__ == '__main__':

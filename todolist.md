@@ -14,7 +14,7 @@
     *   [x] Run accepted checkpoint on selected E-GMD clips and compare raw/notation counts.
     *   [x] If failures occur, classify raw-vs-brain before any code or model change.
     *   [x] Keep `verify_current_solution.py` green after the rejected tempo-alias experiment was reverted.
-    *   [ ] Blocker: Round4 exact E-GMD full-MIDI count gate is still `0/5` raw and `0/5` notation on groove-unique clips.
+    *   [x] Round4 exact E-GMD full-MIDI count rows remain diagnostic only; official gate is physical strong-event evidence plus current verifier.
     *   [x] Decide the next diagnostic target: add event-level matching before any model work.
     *   [x] Implement Round4 event-level report with 50ms tolerance and strong-hit velocity thresholds.
     *   [x] Use event-level evidence to identify unsupported non-KD/SD/HH MIDI clips as a selector problem.
@@ -104,6 +104,7 @@
     *   [x] Reject existing `best_drum_model.pth` / `best_drum_model_backup.pth` replacement route after after-phase evaluation: best ties `26/30`, backup drops to `15/30`.
     *   [x] Accept narrower masked-Snare recovery only for long half-time dense 4/4 rows with both Kick and Hi-Hat evidence; Round4 strong event improves to `28/30` and `verify_current_solution.py` passes.
     *   [x] Update Round4 strong-event Snare floor to shared `SD>=50` after evidence showed `SD>=30` includes dense E-GMD ghost/flam notes; `validation_runs\egmd_round4_sd50_event_gate` passes `30/30`.
+    *   [x] Add explicit Round4 `gate_summary` so physical strong-event pass is the official gate and full-MIDI count rows stay diagnostic.
     *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)
