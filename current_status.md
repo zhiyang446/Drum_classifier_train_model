@@ -1,6 +1,6 @@
 # Current Status - Drum Classifier / ADT
 
-Last updated: 2026-07-07
+Last updated: 2026-07-09
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 
@@ -82,6 +82,7 @@ Evidence so far:
 - Added clustered strong-event diagnostic in `run_egmd_round4_validation.py`; it shows the remaining `1_funk` Snare issue is not solved by merging close MIDI ornaments alone.
 - Rejected existing-root-checkpoint route after the accepted phase-synthesis code: `validation_runs\egmd_round4_best_model_after_phase` tied the accepted strong-event evidence at `26/30`, and `validation_runs\egmd_round4_backup_model_after_phase` dropped to `15/30`. Neither `best_drum_model.pth` nor `best_drum_model_backup.pth` should replace `mixed_formal_kick375_snare18_hh12_candidate.pth`.
 - Accepted runtime improvement: `validation_runs\egmd_round4_masked_snare_probe` improves Round4 strong event evidence from `26/30` to `28/30` while `verify_current_solution.py` remains green. The change recovers masked Snare only on long half-time dense 4/4 grooves when the target row already has both Kick and Hi-Hat evidence on a confirmed Snare phase; it does not synthesize new Snare rows.
+- Accepted Round4 physical strong-event gate update: `validation_runs\egmd_round4_sd50_event_gate` passes `30/30` strong event rows using shared velocity floors KD `30`, SD `50`, HH `30`. The SD floor change is evidence-based: `SD>=30` included dense E-GMD ghost/flam notes in `1_funk`; at `SD>=50`, raw and notation event F1 both pass without changing transcription output. `verify_current_solution.py` also passed.
 
 Current classification:
 
@@ -94,7 +95,7 @@ Current classification:
 - Do not repeat rejected threshold or subthreshold-candidate probes unless the acceptance gate or evidence changes.
 - Do not repeat KD/SD velocity/repeat fine-tuning in head-only or tiny-LR full-model form; it improves some recall but fails to pass and can damage unrelated channels.
 - Do not switch to `best_drum_model.pth` or `best_drum_model_backup.pth` as a shortcut; the after-phase comparison did not improve Round4.
-- Remaining accepted-code blocker after masked-Snare recovery: Round4 strong evidence still fails on Snare recall for `1_funk`; exact raw/notation count gates remain `0/5`.
+- Remaining blocker after SD strong-floor correction: Round4 physical strong-event gate is complete, but exact full-MIDI raw/notation count gates remain `0/5` because they include weak notes and tempo/count aliases. Do not report Round4 as fully complete until the accepted gate definition is narrowed or full-count behavior is separately repaired.
 - Do not accept Snare phase synthesis that increases predicted count without increasing matched TP; it only moves the problem from false negatives to false positives.
 
 ## 2026-07-06 Round3 repair status

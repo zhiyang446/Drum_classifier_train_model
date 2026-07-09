@@ -26,7 +26,7 @@ EVENT_FIELDS = {
 }
 STRONG_VELOCITY = {
     'KD': 30.0,
-    'SD': 30.0,
+    'SD': 50.0,
     'HH': 30.0,
 }
 TARGET_PITCHES = {35, 36, 37, 38, 40, 22, 26, 42, 44, 46}

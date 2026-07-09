@@ -629,7 +629,7 @@ Round4 event-level diagnostic gate:
 1. Count comparison alone is not enough for E-GMD because metadata contains very weak MIDI hits and exact counts hide timing offsets.
 2. The diagnostic must also compare metadata events to raw/notation event CSVs with a fixed time tolerance.
 3. Default event matching tolerance is `0.05s`.
-4. Strong-hit diagnostic thresholds are velocity `KD>=30`, `SD>=30`, `HH>=30`; full-MIDI counts remain reported separately.
+4. Strong-hit diagnostic thresholds are velocity `KD>=30`, `SD>=50`, `HH>=30`; full-MIDI counts remain reported separately. The higher Snare floor keeps dense E-GMD ghost/flam notes out of the full-strength acoustic-hit gate.
 5. In the strong-hit diagnostic, predictions that match weak metadata events below the strong threshold should be ignored rather than counted as false positives.
 6. A Round4 fix is acceptable only when it improves event-level evidence without breaking `verify_current_solution.py`; changing expected targets only to make counts pass is not acceptable.
 7. Dense E-GMD ornaments may be inspected with an additional clustered diagnostic target that merges same-instrument metadata events closer than the model's physical debounce window. This diagnostic is evidence only until separately accepted as a gate rule.

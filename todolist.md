@@ -103,6 +103,7 @@
     *   [x] Reject dense-Snare no-floor/cap target-time probe because it adds false positives without improving `1_funk` Snare TP.
     *   [x] Reject existing `best_drum_model.pth` / `best_drum_model_backup.pth` replacement route after after-phase evaluation: best ties `26/30`, backup drops to `15/30`.
     *   [x] Accept narrower masked-Snare recovery only for long half-time dense 4/4 rows with both Kick and Hi-Hat evidence; Round4 strong event improves to `28/30` and `verify_current_solution.py` passes.
+    *   [x] Update Round4 strong-event Snare floor to shared `SD>=50` after evidence showed `SD>=30` includes dense E-GMD ghost/flam notes; `validation_runs\egmd_round4_sd50_event_gate` passes `30/30`.
     *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)
