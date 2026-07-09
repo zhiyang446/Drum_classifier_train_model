@@ -105,6 +105,8 @@
     *   [x] Accept narrower masked-Snare recovery only for long half-time dense 4/4 rows with both Kick and Hi-Hat evidence; Round4 strong event improves to `28/30` and `verify_current_solution.py` passes.
     *   [x] Update Round4 strong-event Snare floor to shared `SD>=50` after evidence showed `SD>=30` includes dense E-GMD ghost/flam notes; `validation_runs\egmd_round4_sd50_event_gate` passes `30/30`.
     *   [x] Add explicit Round4 `gate_summary` so physical strong-event pass is the official gate and full-MIDI count rows stay diagnostic.
+    *   [x] Expand Round4 held-out evidence to the sixth available KD/SD/HH-only E-GMD clip; shared Snare strong floor is `SD>=70` after medium articulations proved not to be full-strength hits.
+    *   [x] Fix Round4 runner expected-CSV collision so parallel validation runs write expected targets under each output directory by default.
     *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)

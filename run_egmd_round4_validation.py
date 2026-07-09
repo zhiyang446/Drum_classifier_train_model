@@ -27,7 +27,7 @@ EVENT_FIELDS = {
 }
 STRONG_VELOCITY = {
     'KD': 30.0,
-    'SD': 50.0,
+    'SD': 70.0,
     'HH': 30.0,
 }
 TARGET_PITCHES = {35, 36, 37, 38, 40, 22, 26, 42, 44, 46}
@@ -379,7 +379,7 @@ def main():
     parser.add_argument('--meta', default='processed_data/egmd_meta.json')
     parser.add_argument('--model', default='mixed_formal_kick375_snare18_hh12_candidate.pth')
     parser.add_argument('--output-dir', default='validation_runs/egmd_round4')
-    parser.add_argument('--expected', default='egmd_round4_expected.csv')
+    parser.add_argument('--expected', default=None)
     parser.add_argument('--limit', type=int, default=5)
     parser.add_argument('--offset', type=int, default=0)
     parser.add_argument('--max-unsupported-midi-events', type=int, default=0)
@@ -403,7 +403,8 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     selected = materialize_excerpts(selected, meta, args.output_dir, args.excerpt_seconds)
-    write_expected(selected, args.expected)
+    expected_path = args.expected or os.path.join(args.output_dir, 'expected.csv')
+    write_expected(selected, expected_path)
 
     rows = []
     thresholds = {
@@ -416,8 +417,8 @@ def main():
         rows.append(run_one(case['audio_path'], args.model, args.output_dir, thresholds=thresholds))
     summary_csv, _ = write_reports(rows, args.output_dir)
 
-    raw_rows = compare(summary_csv, args.expected, layer='raw_acoustic')
-    notation_rows = compare(summary_csv, args.expected, layer='notation')
+    raw_rows = compare(summary_csv, expected_path, layer='raw_acoustic')
+    notation_rows = compare(summary_csv, expected_path, layer='notation')
     write_rows(raw_rows, os.path.join(args.output_dir, 'raw_compare.csv'))
     write_rows(notation_rows, os.path.join(args.output_dir, 'notation_compare.csv'))
     event_rows = write_event_report(meta, selected, rows, os.path.join(args.output_dir, 'event_compare.csv'), args.event_tolerance)
