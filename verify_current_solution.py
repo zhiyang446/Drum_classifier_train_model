@@ -45,6 +45,12 @@ def run_self_check():
         writer.writeheader()
         writer.writerow({'name': 'demo', 'overall': 'pass'})
     require_all_pass(path, 'overall')
+    gate_path = os.path.join('validation_runs', '_self_check', 'gate_summary.csv')
+    with open(gate_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['gate', 'overall'])
+        writer.writeheader()
+        writer.writerow({'gate': 'round4_demo', 'overall': 'pass'})
+    require_all_pass(gate_path, 'overall')
     print('Self-check passed.')
 
 
@@ -67,6 +73,8 @@ def main():
 
     blind_dir = os.path.join(args.output_dir, 'blind')
     hard_dir = os.path.join(args.output_dir, 'hard')
+    round4_first_dir = os.path.join(args.output_dir, 'round4_first5')
+    round4_sixth_dir = os.path.join(args.output_dir, 'round4_offset5_single')
     raw_cmp = os.path.join(blind_dir, 'raw_acoustic_comparison.csv')
     notation_cmp = os.path.join(blind_dir, 'expected_comparison.csv')
 
@@ -95,10 +103,25 @@ def main():
         '--model', args.model,
         '--output-dir', hard_dir,
     ])
+    run_command([
+        sys.executable, 'run_egmd_round4_validation.py',
+        '--model', args.model,
+        '--output-dir', round4_first_dir,
+        '--limit', '5',
+    ])
+    run_command([
+        sys.executable, 'run_egmd_round4_validation.py',
+        '--model', args.model,
+        '--output-dir', round4_sixth_dir,
+        '--limit', '1',
+        '--offset', '5',
+    ])
 
     require_all_pass(raw_cmp, 'overall')
     require_all_pass(notation_cmp, 'overall')
     require_all_pass(os.path.join(hard_dir, 'summary.csv'), 'gate_status')
+    require_all_pass(os.path.join(round4_first_dir, 'gate_summary.csv'), 'overall')
+    require_all_pass(os.path.join(round4_sixth_dir, 'gate_summary.csv'), 'overall')
     print('Current solution verification PASSED.')
 
 

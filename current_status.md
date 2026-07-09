@@ -85,6 +85,7 @@ Evidence so far:
 - Accepted Round4 physical strong-event gate update: `validation_runs\egmd_round4_sd50_event_gate` passes `30/30` strong event rows using shared velocity floors KD `30`, SD `50`, HH `30`. The SD floor change is evidence-based: `SD>=30` included dense E-GMD ghost/flam notes in `1_funk`; at `SD>=50`, raw and notation event F1 both pass without changing transcription output. `verify_current_solution.py` also passed.
 - Accepted explicit Round4 gate summary: `validation_runs\egmd_round4_gate_summary\gate_summary.json` reports `overall=pass`, `passed_rows=30`, `total_rows=30`. The same run still writes full-count `raw_compare.csv` and `notation_compare.csv` as diagnostics.
 - Accepted expanded Round4 evidence: `validation_runs\egmd_round4_sd70_gate_first5_rerun` passes `30/30` and `validation_runs\egmd_round4_sd70_gate_offset5_single_rerun` passes `6/6`. The shared Snare strong floor is now SD `70`, based on the sixth clip showing model-matched Snare accents at velocity `91-127` while missed medium articulations were mostly below `90`. The runner now writes generated `expected.csv` inside each output directory by default so parallel validation runs cannot overwrite each other.
+- Accepted one-command verifier update: `verify_current_solution.py` now includes Round4 first5 and offset5 single gates. Latest run passed blind raw acoustic `5/5`, blind notation `5/5`, hard validation `4/4`, Round4 first5 `30/30`, and Round4 offset5 single `6/6`.
 
 Current classification:
 

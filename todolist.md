@@ -107,6 +107,7 @@
     *   [x] Add explicit Round4 `gate_summary` so physical strong-event pass is the official gate and full-MIDI count rows stay diagnostic.
     *   [x] Expand Round4 held-out evidence to the sixth available KD/SD/HH-only E-GMD clip; shared Snare strong floor is `SD>=70` after medium articulations proved not to be full-strength hits.
     *   [x] Fix Round4 runner expected-CSV collision so parallel validation runs write expected targets under each output directory by default.
+    *   [x] Add accepted Round4 first5 and sixth-clip gates to `verify_current_solution.py`.
     *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)

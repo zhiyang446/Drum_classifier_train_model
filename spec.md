@@ -32,7 +32,9 @@ The user blind expected CSV is a notation target and must not be used as the Raw
 
 ## Current solution verification note
 
-The accepted solution must be checked through one repeatable verification entrypoint. `verify_current_solution.py` runs the accepted checkpoint through the blind transcription batch, compares both raw acoustic and notation gates, then runs hard validation. A run is accepted only when every row in all three generated reports is `pass`.
+The accepted solution must be checked through one repeatable verification entrypoint. `verify_current_solution.py` runs the accepted checkpoint through the blind transcription batch, compares both raw acoustic and notation gates, runs hard validation, and runs the accepted Round4 E-GMD physical strong-event gates. A run is accepted only when every generated gate report is `pass`.
+
+Round4 verification inside `verify_current_solution.py` checks the first 5 selected clips plus the sixth available KD/SD/HH-only clip (`--offset 5 --limit 1`) using each run's `gate_summary.csv`, not the diagnostic full-MIDI count CSVs.
 
 ## Score-time to physical-time conversion note
 
