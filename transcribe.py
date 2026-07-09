@@ -705,7 +705,15 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
                 for meas_idx in range(num_measures):
                     target_beat = meas_idx * 4.0 + step * (4.0 / steps_per_measure)
                     row = nearest_decision(target_beat, step_dist)
-                    if allow_phase_recovery and row is not None and not row.get(trigger_key, False) and (row['probs'][prob_idx] >= phase_recovery_floor or (inst_name == 'kick' and 80.0 <= estimated_tempo <= 95.0)):
+                    # 中文註解：半速 dense groove 的 Snare 可能被同格 Kick+Hi-Hat 遮蔽；只在已確認相位補同一格，不新增事件。
+                    masked_snare = (
+                        half_time_dense_4_4
+                        and inst_name == 'snare'
+                        and row is not None
+                        and row.get('kick_triggered', False)
+                        and row.get('hh_triggered', False)
+                    )
+                    if allow_phase_recovery and row is not None and not row.get(trigger_key, False) and (row['probs'][prob_idx] >= phase_recovery_floor or masked_snare or (inst_name == 'kick' and 80.0 <= estimated_tempo <= 95.0)):
                         row[trigger_key] = True
                         row[vel_key] = max(row.get(vel_key, 0), int(0.55 * 127))
                         row[virtual_key] = not row.get(f'{inst_name}_originally_triggered', False)
