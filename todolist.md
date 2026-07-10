@@ -108,7 +108,8 @@
     *   [x] Expand Round4 held-out evidence to the sixth available KD/SD/HH-only E-GMD clip; shared Snare strong floor is `SD>=70` after medium articulations proved not to be full-strength hits.
     *   [x] Fix Round4 runner expected-CSV collision so parallel validation runs write expected targets under each output directory by default.
     *   [x] Add accepted Round4 first5 and sixth-clip gates to `verify_current_solution.py`.
-    *   [ ] Next: stop repeating KD/SD fine-tune recipes; inspect model architecture/calibration or redefine E-GMD gate around a documented physical target before more candidates.
+    *   [x] Audit the first 500 E-GMD `split=test` MIDI files for excluded non-KD/SD/HH pitches; pitch `22` and `26` dominate and should be checked as HH articulations before adding new drum classes.
+    *   [ ] Next: validate a reusable HH-articulation coverage rule for E-GMD pitch `22` and `26`; do not train or add new classes until this mapping question is settled.
 
 *   [ ] **Raw AI model-layer diagnosis and minimal repair** (2026-07-01)
     *   [x] Compare current raw AI event CSVs against user expected targets and classify failures as threshold/NMS vs model/data.

@@ -644,6 +644,13 @@ Round4 KD/SD/HH-only selection rule:
 2. The selector must inspect the sibling `.midi` file and skip clips with non-target drum pitches before count or event comparison.
 3. Clips with ride, crash, tom, cowbell, or other unsupported drum pitches belong to the later new-drum-class phase, not this KD/SD/HH stability gate.
 
+Round4 next-coverage rule:
+
+1. Before adding a new drum class, audit E-GMD `split=test` MIDI pitches that are excluded from the current KD/SD/HH selector.
+2. A 500-file read-only sample on 2026-07-10 showed the largest excluded pitches are `22` and `26`, which behave like additional E-GMD Hi-Hat articulations rather than a new ride/tom class.
+3. The next gate should therefore validate whether `22` and `26` can be treated as HH coverage in a reusable mapping rule before training or adding new output classes.
+4. This must not weaken the accepted Round4 strong-event gate or change expected counts by filename.
+
 Round4 held-out excerpt gate:
 
 1. Because the acoustic model is trained on about 4-second slices, Round4 may also create fixed held-out excerpts from E-GMD `split=test` clips.
