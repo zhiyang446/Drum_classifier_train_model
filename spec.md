@@ -647,9 +647,9 @@ Round4 KD/SD/HH-only selection rule:
 Round4 next-coverage rule:
 
 1. Before adding a new drum class, audit E-GMD `split=test` MIDI pitches that are excluded from the current KD/SD/HH selector.
-2. A 500-file read-only sample on 2026-07-10 showed the largest excluded pitches are `22` and `26`, which behave like additional E-GMD Hi-Hat articulations rather than a new ride/tom class.
-3. The next gate should therefore validate whether `22` and `26` can be treated as HH coverage in a reusable mapping rule before training or adding new output classes.
-4. This must not weaken the accepted Round4 strong-event gate or change expected counts by filename.
+2. Pitch `22` and `26` are already accepted E-GMD Hi-Hat articulations in the shared preprocessing and Round4 selector mapping: `{22, 26, 42, 44, 46}`. They are not a new drum class and must not trigger retraining.
+3. The validation-only articulation report confirms acoustic coverage: pitch `22` has 142 events with `97.89%` 30ms best-hit rate, and pitch `26` has 4 events with `100%` rate. Evidence: `validation_runs\\egmd_round4_pitch_articulation_audit\\summary.csv`.
+4. The next new-class audit must inspect pitches still outside this shared set, such as ride/tom/crash, without weakening the accepted Round4 strong-event gate or changing expected counts by filename.
 
 Round4 held-out excerpt gate:
 
