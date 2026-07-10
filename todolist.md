@@ -108,6 +108,7 @@
     *   [x] Expand Round4 held-out evidence to the sixth available KD/SD/HH-only E-GMD clip; shared Snare strong floor is `SD>=70` after medium articulations proved not to be full-strength hits.
     *   [x] Fix Round4 runner expected-CSV collision so parallel validation runs write expected targets under each output directory by default.
     *   [x] Add accepted Round4 first5 and sixth-clip gates to `verify_current_solution.py`.
+    *   [x] Re-run the complete accepted verifier on 2026-07-10 in `validation_runs\current_solution_verification_20260710_recheck`: blind raw `5/5`, notation `5/5`, hard `4/4`, Round4 `30/30 + 6/6`.
     *   [x] Audit the first 500 E-GMD `split=test` MIDI files for excluded non-KD/SD/HH pitches; pitch `22` and `26` dominate.
     *   [x] Validate the reusable HH-articulation coverage rule for E-GMD pitch `22` and `26`: both are already mapped as HH by shared preprocessing and Round4 selection, with articulation-audit evidence. No retraining or new class is needed.
     *   [ ] Next: audit only pitches outside the shared KD/SD/HH mapping before proposing a new drum class.

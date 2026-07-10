@@ -36,6 +36,8 @@ The accepted solution must be checked through one repeatable verification entryp
 
 Round4 verification inside `verify_current_solution.py` checks the first 5 selected clips plus the sixth available KD/SD/HH-only clip (`--offset 5 --limit 1`) using each run's `gate_summary.csv`, not the diagnostic full-MIDI count CSVs.
 
+The 2026-07-10 recheck at `validation_runs\\current_solution_verification_20260710_recheck` passed every accepted gate: blind raw acoustic `5/5`, blind notation `5/5`, hard validation `4/4`, Round4 first 5 `30/30`, and the sixth Round4 clip `6/6`.
+
 ## Score-time to physical-time conversion note
 
 When notation gate already passes, score-time annotation rows can be converted to physical audio time by aligning each confirmed annotation with the same instrument occurrence in the passed `notation_events.csv`. The converted CSV must preserve the original score time in `score_time`, write the corresponding notation event `raw_time` into `time`, and set `source=notation_physical_map`. Raw acoustic expected counts may then include these converted rows.
