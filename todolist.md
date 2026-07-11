@@ -24,7 +24,7 @@
     *   [x] Train lower-ratio SD-only real-audio candidate; it passes existing verifier but does not make material Rosanna improvement and cannot be promoted without the removed Rolling reference MIDI.
     *   [x] Restore independent Rolling score MIDI and reject the SD-only candidate after final Round5 comparison: Rolling is unchanged and Rosanna improves by only one SD event.
     *   [x] Audit training/inference feature extraction; both use standard Mel/Superflux features, so no feature-path mismatch is present.
-    *   [ ] Prepare second-round, independent real-audio pairs that specifically include weak/ghost Snare and busy Hi-Hat; do not repeat the first three training songs.
+    *   [ ] Audit model capacity, label/source-domain differences, and separation residuals before requesting any second-round real-audio pairs.
     *   [ ] Retain only a brain-layer change that independently prevents measured virtual-HH over-completion.
     *   [ ] Run `verify_current_solution.py` before accepting any retained runtime or model change; do not run training unless a diagnosed failure warrants it.
 
