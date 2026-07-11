@@ -29,6 +29,7 @@ Last updated: 2026-07-12
 10. Round1 真實音訊訓練資料已通過對齊審計：`blue-yung-kai`、`counting-stars`、`payphone` 的最佳 MIDI-to-audio scale 均為 `1.0`，偏移分別為 `+1.00s`、`+0.10s`、`-2.10s`。這三首將用於候選模型訓練；Rolling 與 Rosanna 繼續只作 Round5 最終測試。
 11. 已拒絕第一個真實音訊候選 `validation_runs\real_audio_round1_sdhh_candidate.pth`：它使用三首真實音訊的 165 個對齊窗口，以 SD/HH head-only loss 訓練。blind Raw/notation 與 hard `4/4` 均通過，但 Round4 first5 strong-event 從接受版本 `30/30` 降至 `29/30`，因 `7_pop-groove7_138` 的 HH 強事件顯著退步。因此不得進入 Round5 或替換正式 checkpoint。
 12. 第二個真實音訊 SD-only 候選 `validation_runs\real_audio_round1_sd_candidate.pth` 通過完整既有驗證：blind Raw/notation `5/5`、hard `4/4`、Round4 `30/30` 與 `6/6`。但 Rosanna Raw SD 只從 `544` TP 提升至 `545` TP，其餘主要 F1 幾乎不變；Rolling 的 KD/SD/HH 總輸出仍為 `332/64/704`，沒有足以接受的模型改善。原本的 `rolling-in-the-deep-adele-drum-sheet-music.mid` 已不在 `test_real_audio`，目前只剩已確認為模型輸出的 `_drums.mid` 副本，故不能以它完成合法的 Rolling 最終驗收或推廣候選。
+13. Rolling 獨立真值 MIDI 已恢復並完成最終比較：SD-only 候選在 Rolling Raw KD/SD/HH F1 仍為 `0.974/0.521/0.694`，與接受版本完全相同；Rosanna Raw SD 僅由 F1 `0.853` 升至 `0.854`（多 1 TP）。候選沒有實質改善，已拒絕。訓練/推論 feature audit 亦確認兩者都使用標準雙通道 Mel/Superflux（`use_hybrid=False`），不是特徵提取不一致造成的失敗。
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 

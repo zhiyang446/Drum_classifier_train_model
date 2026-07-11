@@ -22,7 +22,9 @@
     *   [x] Build reusable physical-time, windowed metadata for the three real-audio train pairs: `165` windows under `validation_runs\real_audio_round1_meta.json`.
     *   [x] Reject SD/HH real-audio candidate because Round4 strong-event regresses from `30/30` to `29/30`; do not run Round5 for it.
     *   [x] Train lower-ratio SD-only real-audio candidate; it passes existing verifier but does not make material Rosanna improvement and cannot be promoted without the removed Rolling reference MIDI.
-    *   [ ] Restore the original independent Rolling score MIDI before any final Round5 comparison; do not use `rolling-in-the-deep_drums.mid` because it is generated model output.
+    *   [x] Restore independent Rolling score MIDI and reject the SD-only candidate after final Round5 comparison: Rolling is unchanged and Rosanna improves by only one SD event.
+    *   [x] Audit training/inference feature extraction; both use standard Mel/Superflux features, so no feature-path mismatch is present.
+    *   [ ] Prepare second-round, independent real-audio pairs that specifically include weak/ghost Snare and busy Hi-Hat; do not repeat the first three training songs.
     *   [ ] Retain only a brain-layer change that independently prevents measured virtual-HH over-completion.
     *   [ ] Run `verify_current_solution.py` before accepting any retained runtime or model change; do not run training unless a diagnosed failure warrants it.
 
