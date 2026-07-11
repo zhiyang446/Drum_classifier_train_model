@@ -25,6 +25,7 @@ Last updated: 2026-07-11
 6. 已拒絕 `validation_runs\round5_sdhh_mixed_acoustic_candidate.pth`：此候選使用 E-GMD/STAR/local `split=train` 的 SD/HH head-only 混合訓練，並保住 Round4 strong-event `30/30` 與 `6/6`；但 `verify_current_solution.py` 的 blind gate 在 `ghost_snare` 退步為 Raw HH `61/32`、Notation HH `64/32`。因此它不得進入 Round5 或替換接受中的 checkpoint。
 7. 已接受共享大腦修正：Fano dispersion 上限與 GPAR 虛擬 HH 的 `>=80%` 相位重複門檻，完整驗證位於 `validation_runs\round5_brain_safeguards_verify`，blind Raw `5/5`、blind notation `5/5`、hard `4/4`、Round4 `30/30` 與 `6/6` 均通過。Round5 中，`rolling-in-the-deep.wav` 已由 `140 BPM, 5/8` 更正為 `105 BPM, 4/4`；`toto-rosanna.wav` 的 virtual HH 由 `288` 降為 `62`，Notation HH F1 由 `0.805` 升至 `0.864`。
 8. Round5 仍未通過：強制 Rolling 使用 `105 BPM, 4/4` 時，Raw AI 仍為 KD/SD/HH F1 `0.974/0.521/0.694`，證明其 SD 漏檢與 HH 誤報是模型/聲源泛化問題，不是 tempo 或 notation 問題。現有的混合 SD/HH 候選與既有不同 checkpoint 都沒有通過既有 gate；若要再訓練並證明商業泛化，需要新增不屬於 Round5 的真實分離鼓組音訊加對應 MIDI/標註作為開發資料，Round5 兩首必須繼續保留為最終測試。
+9. `test_real_audio\rolling-in-the-deep_drums.mid` 已確認與 `validation_runs\round5_real_audio_smoke_20260711\rolling-in-the-deep\rolling-in-the-deep.mid` 的 SHA-256 完全相同。它是先前系統輸出的副本，不是獨立真值或訓練標註，必須排除於任何訓練與驗收參考之外。
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 

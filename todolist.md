@@ -17,6 +17,7 @@
     *   [x] Reject `round5_sdhh_mixed_acoustic_candidate.pth`: it fails `verify_current_solution.py` because `ghost_snare` HH regresses to Raw `61/32` and Notation `64/32`; Round5 is not run for a candidate that fails the existing gate.
     *   [x] Evaluate available independent checkpoints on the same held-out Round5 inputs: `best_drum_model.pth` equals the accepted checkpoint; the earlier kick35 checkpoint only trades one error for another and is rejected.
     *   [x] Apply and verify shared tempo-score and virtual-HH safeguards; they pass `verify_current_solution.py`, correct Rolling to `105 BPM, 4/4`, and reduce Rosanna virtual HH without substituting for the outstanding Raw AI model repair.
+    *   [x] Reject `rolling-in-the-deep_drums.mid` as a reference: its SHA-256 exactly matches the prior system-generated Round5 MIDI output.
     *   [ ] Obtain independent real separated-drum audio with matching MIDI/annotations for model training; do not train on the two Round5 songs if they remain the commercial generalization test.
     *   [ ] Retain only a brain-layer change that independently prevents measured virtual-HH over-completion.
     *   [ ] Run `verify_current_solution.py` before accepting any retained runtime or model change; do not run training unless a diagnosed failure warrants it.
