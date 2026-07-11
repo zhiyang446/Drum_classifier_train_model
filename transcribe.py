@@ -272,7 +272,9 @@ def evaluate_tempo_meter_score(onset_times, onset_frames, kick_peaks, snare_peak
             bins[idx % steps] += 1
         mean_val = np.mean(bins)
         var_val = np.var(bins)
-        fano = var_val / mean_val if mean_val > 0 else 0.0
+        raw_fano = var_val / mean_val if mean_val > 0 else 0.0
+        # 中文註解：避免過細網格的離散度異常值壓過跨小節重複性，保留原始值供診斷。
+        fano = min(raw_fano, 15.0)
         
         num_measures = (max_step + 1) // steps
         if num_measures >= 2:
@@ -304,7 +306,8 @@ def evaluate_tempo_meter_score(onset_times, onset_frames, kick_peaks, snare_peak
         candidate_metrics[ts_name] = {
             'score': float(score),
             'avg_sim': float(avg_sim),
-            'fano': float(fano),
+            'fano_raw': float(raw_fano),
+            'fano_capped': float(fano),
             'num_measures': int(num_measures),
         }
         if score > best_score:
@@ -2053,13 +2056,21 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     # Suppress false trigger
                     d['hh_triggered'] = False
                     
-        # Add virtual hi-hat decisions if an active step has no onset decision in some measure
+        # 中文註解：只有高度重複的相位可跨小節補音；35% active 門檻只足以做抑制判斷。
+        virtual_fill_steps = {
+            ps for ps in active_steps
+            if len(phase_occupancy[ps]) / num_measures >= 0.80
+        }
+        if virtual_fill_steps != active_steps:
+            print(f"[GPAR] Virtual-fill hi-hat steps: {sorted(list(virtual_fill_steps))}")
+
+        # Add virtual hi-hat decisions if a stable phase has no onset decision in some measure
         virtual_decisions = []
         is_odd_eighth_meter = detected_ts in {'5/8', '7/8', '9/8'}
         # 中文註解：奇數八分拍的 Hi-Hat 常是切分型態，禁止 GPAR 主動補滿以免過度補音。
         if hh_occupancy < 0.85 and not is_odd_eighth_meter and not slow_shuffle_folded_4_4:
             for m in range(num_measures):
-                for ps in active_steps:
+                for ps in virtual_fill_steps:
                     target_step = m * steps_per_measure + ps
                     quant_time = target_step * gpar_grid_spacing * beat_duration
                     target_time = first_onset + quant_time

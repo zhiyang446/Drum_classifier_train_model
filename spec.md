@@ -44,6 +44,14 @@ Round5 evaluates new user-provided, main-system-separated full drum tracks witho
 
 Only the user-provided, main-system-separated WAV is a Round5 test input. A score-playback MP3 or other reference audio stored beside it is excluded from the verdict. A Round5 failure is diagnostic evidence, not tuning data: no file-name routing, expected-count rule, fixed-tempo rule, or direct retraining on the held-out song is permitted. A correction must first reproduce the failure with independent development data and must then re-run all Round5 inputs.
 
+### Round5 model-priority repair rule
+
+The user has explicitly authorized candidate-model training when Raw AI evidence is below the real-audio gate. Training must start from `mixed_formal_kick375_snare18_hh12_candidate.pth`, write only a new candidate under `validation_runs`, and use only `split=train` E-GMD/STAR/local metadata. The first candidate trains the SD/HH output head while freezing KD and BatchNorm statistics, so the accepted KD behavior remains a regression guard. It must pass `verify_current_solution.py` before Round5 is rerun. A brain-layer change may only be retained when it prevents a measured notation regression without concealing a Raw AI failure.
+
+### Round5 shared brain safeguards
+
+Tempo/meter scoring must cap the Fano dispersion contribution at `15.0` before it is combined with cross-measure similarity. This prevents a fine-grid dispersion outlier from dominating the shared score, while leaving the grid, candidate tempos, and true odd-meter candidates available. GPAR may still classify a phase as active at its existing `35%` repeat threshold for suppression decisions, but it may create a new virtual Hi-Hat only when that phase occurs in at least `80%` of measures. This separates weak repeating evidence from a stable pattern that is safe to complete. Both safeguards are shared rules: they must pass `verify_current_solution.py` and the full Round5 rerun; they must not be conditioned on song name, expected count, or path.
+
 ## Score-time to physical-time conversion note
 
 When notation gate already passes, score-time annotation rows can be converted to physical audio time by aligning each confirmed annotation with the same instrument occurrence in the passed `notation_events.csv`. The converted CSV must preserve the original score time in `score_time`, write the corresponding notation event `raw_time` into `time`, and set `source=notation_physical_map`. Raw acoustic expected counts may then include these converted rows.

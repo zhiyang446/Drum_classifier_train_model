@@ -12,7 +12,13 @@
     *   [x] Run the accepted checkpoint on both complete tracks without retraining or runtime changes.
     *   [x] Automatically align MIDI reference events to audio and report KD/SD/HH event evidence separately from unsupported drum articulations; both pairs align at `+0.020s`.
     *   [x] Exclude `rolling-in-the-deep-adele-drum-sheet-music.custom_score.mp3` from the Round5 verdict because it is score-playback reference audio, not a separated test WAV.
-    *   [ ] Blocker: both held-out real-audio tracks fail the Round5 gate. Do not train or tune on these songs; reproduce the failure classes with independent development data first.
+    *   [x] User authorized candidate-model training after Raw AI evidence confirmed SD/HH model errors; Round5 songs remain held-out.
+    *   [x] Train one independent SD/HH head-only mixed-data candidate from the accepted checkpoint without replacing it.
+    *   [x] Reject `round5_sdhh_mixed_acoustic_candidate.pth`: it fails `verify_current_solution.py` because `ghost_snare` HH regresses to Raw `61/32` and Notation `64/32`; Round5 is not run for a candidate that fails the existing gate.
+    *   [x] Evaluate available independent checkpoints on the same held-out Round5 inputs: `best_drum_model.pth` equals the accepted checkpoint; the earlier kick35 checkpoint only trades one error for another and is rejected.
+    *   [x] Apply and verify shared tempo-score and virtual-HH safeguards; they pass `verify_current_solution.py`, correct Rolling to `105 BPM, 4/4`, and reduce Rosanna virtual HH without substituting for the outstanding Raw AI model repair.
+    *   [ ] Obtain independent real separated-drum audio with matching MIDI/annotations for model training; do not train on the two Round5 songs if they remain the commercial generalization test.
+    *   [ ] Retain only a brain-layer change that independently prevents measured virtual-HH over-completion.
     *   [ ] Run `verify_current_solution.py` before accepting any retained runtime or model change; do not run training unless a diagnosed failure warrants it.
 
 *   [ ] **Round4 E-GMD test-split short-segment validation** (2026-07-07)

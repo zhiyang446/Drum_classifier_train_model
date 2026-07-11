@@ -21,6 +21,10 @@ Last updated: 2026-07-11
 2. 本輪確認的問題分屬兩層：`rolling-in-the-deep` 是原始模型的 SD 漏檢與 HH 誤報；`toto-rosanna` 則另有大腦的 HH 過度虛擬補音。
 3. 既有 KD/SD/HH 受控測試的驗收狀態不變；但在新的真實歌曲門檻下，系統尚不具備可驗證的商業泛化結論。
 4. 修正必須先從非 Round5 的訓練/驗證資料重現相同失敗型態，建立跨檔案有效的量測後，才可變更模型或大腦；變更後必須重新跑完整 Round5。
+5. 使用者已明確允許重新訓練候選模型。下一個候選只會用 E-GMD/STAR/local 的 `split=train` 資料，從接受中的 checkpoint 進行 SD/HH head-only 訓練，且不覆蓋正式 checkpoint。
+6. 已拒絕 `validation_runs\round5_sdhh_mixed_acoustic_candidate.pth`：此候選使用 E-GMD/STAR/local `split=train` 的 SD/HH head-only 混合訓練，並保住 Round4 strong-event `30/30` 與 `6/6`；但 `verify_current_solution.py` 的 blind gate 在 `ghost_snare` 退步為 Raw HH `61/32`、Notation HH `64/32`。因此它不得進入 Round5 或替換接受中的 checkpoint。
+7. 已接受共享大腦修正：Fano dispersion 上限與 GPAR 虛擬 HH 的 `>=80%` 相位重複門檻，完整驗證位於 `validation_runs\round5_brain_safeguards_verify`，blind Raw `5/5`、blind notation `5/5`、hard `4/4`、Round4 `30/30` 與 `6/6` 均通過。Round5 中，`rolling-in-the-deep.wav` 已由 `140 BPM, 5/8` 更正為 `105 BPM, 4/4`；`toto-rosanna.wav` 的 virtual HH 由 `288` 降為 `62`，Notation HH F1 由 `0.805` 升至 `0.864`。
+8. Round5 仍未通過：強制 Rolling 使用 `105 BPM, 4/4` 時，Raw AI 仍為 KD/SD/HH F1 `0.974/0.521/0.694`，證明其 SD 漏檢與 HH 誤報是模型/聲源泛化問題，不是 tempo 或 notation 問題。現有的混合 SD/HH 候選與既有不同 checkpoint 都沒有通過既有 gate；若要再訓練並證明商業泛化，需要新增不屬於 Round5 的真實分離鼓組音訊加對應 MIDI/標註作為開發資料，Round5 兩首必須繼續保留為最終測試。
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 
