@@ -38,6 +38,12 @@ Round4 verification inside `verify_current_solution.py` checks the first 5 selec
 
 The 2026-07-10 recheck at `validation_runs\\current_solution_verification_20260710_recheck` passed every accepted gate: blind raw acoustic `5/5`, blind notation `5/5`, hard validation `4/4`, Round4 first 5 `30/30`, and the sixth Round4 clip `6/6`.
 
+## Round5 MIDI-assisted real-audio smoke test
+
+Round5 evaluates new user-provided, main-system-separated full drum tracks without retraining or changing transcription behavior. A paired MIDI file may supply KD/SD/HH reference events only after automatic audio/MIDI alignment; non-KD/SD/HH MIDI pitches remain unsupported and must not become expected KD/SD/HH events. The same shared pitch mapping, fixed matching tolerance, and accepted checkpoint apply to every Round5 pair. A failed alignment or a mismatch must be reported as evidence, never repaired by file-name rules, path routing, or changed model thresholds.
+
+Only the user-provided, main-system-separated WAV is a Round5 test input. A score-playback MP3 or other reference audio stored beside it is excluded from the verdict. A Round5 failure is diagnostic evidence, not tuning data: no file-name routing, expected-count rule, fixed-tempo rule, or direct retraining on the held-out song is permitted. A correction must first reproduce the failure with independent development data and must then re-run all Round5 inputs.
+
 ## Score-time to physical-time conversion note
 
 When notation gate already passes, score-time annotation rows can be converted to physical audio time by aligning each confirmed annotation with the same instrument occurrence in the passed `notation_events.csv`. The converted CSV must preserve the original score time in `score_time`, write the corresponding notation event `raw_time` into `time`, and set `source=notation_physical_map`. Raw acoustic expected counts may then include these converted rows.

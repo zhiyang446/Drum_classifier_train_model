@@ -1,6 +1,26 @@
 # Current Status - Drum Classifier / ADT
 
-Last updated: 2026-07-09
+Last updated: 2026-07-11
+
+## 2026-07-11 Round5 MIDI-assisted real-audio smoke test
+
+### 結論：未通過，不可宣稱真實歌曲泛化已完成
+
+- 測試輸入：使用者主系統已分離的鼓組 WAV，搭配同版本 MIDI 作為自動比對參考；未使用 Demucs，也未進行訓練或推論邏輯修改。
+- 對齊檢查：`rolling-in-the-deep.wav` 與其 MIDI、`toto-rosanna.wav` 與其 MIDI 的最佳固定偏移皆為 `+0.020s`。因此失敗不是音檔與 MIDI 版本錯配造成。
+- 範圍排除：`rolling-in-the-deep-adele-drum-sheet-music.custom_score.mp3` 是譜面播放參考，不是主系統分離後的測試 WAV；雖被批次程式掃到，Round5 結論不採用它。
+
+| 音檔 | 結構結果 | Raw AI 問題 | Notation/大腦問題 | 結果 |
+|---|---|---|---|---|
+| `rolling-in-the-deep.wav` | 輸出 `140 BPM, 5/8`，與參考 MIDI 的 `105 BPM, 4/4` 不符 | KD F1 `0.974`；SD 僅召回 `62/174`，F1 `0.521`；HH 多出 `286` 個，F1 `0.694` | 無虛擬補音，與 Raw AI 相同 | fail |
+| `toto-rosanna.wav` | 輸出 `172 BPM, 4/4`；拍號正確，速度仍須以實際記譜慣例另行確認 | KD/SD/HH F1 為 `0.880/0.853/0.854`，主要是 KD/HH 假陽性 | HH 額外虛擬補入 `288` 個，HH F1 由 `0.854` 降至 `0.805` | fail |
+
+### 保護原則與下一步
+
+1. Round5 是保留測試集，禁止依這兩首歌的檔名、音符數、固定速度或固定規則硬編碼，也不可直接用它們訓練。
+2. 本輪確認的問題分屬兩層：`rolling-in-the-deep` 是原始模型的 SD 漏檢與 HH 誤報；`toto-rosanna` 則另有大腦的 HH 過度虛擬補音。
+3. 既有 KD/SD/HH 受控測試的驗收狀態不變；但在新的真實歌曲門檻下，系統尚不具備可驗證的商業泛化結論。
+4. 修正必須先從非 Round5 的訓練/驗證資料重現相同失敗型態，建立跨檔案有效的量測後，才可變更模型或大腦；變更後必須重新跑完整 Round5。
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 
