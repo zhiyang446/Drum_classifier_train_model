@@ -18,7 +18,11 @@
     *   [x] Evaluate available independent checkpoints on the same held-out Round5 inputs: `best_drum_model.pth` equals the accepted checkpoint; the earlier kick35 checkpoint only trades one error for another and is rejected.
     *   [x] Apply and verify shared tempo-score and virtual-HH safeguards; they pass `verify_current_solution.py`, correct Rolling to `105 BPM, 4/4`, and reduce Rosanna virtual HH without substituting for the outstanding Raw AI model repair.
     *   [x] Reject `rolling-in-the-deep_drums.mid` as a reference: its SHA-256 exactly matches the prior system-generated Round5 MIDI output.
-    *   [ ] Obtain independent real separated-drum audio with matching MIDI/annotations for model training; do not train on the two Round5 songs if they remain the commercial generalization test.
+    *   [x] Audit independent round1 real-audio pairs: Blue, Counting Stars, and Payphone all have stable audio/MIDI alignment; Rolling and Rosanna remain holdouts.
+    *   [x] Build reusable physical-time, windowed metadata for the three real-audio train pairs: `165` windows under `validation_runs\real_audio_round1_meta.json`.
+    *   [x] Reject SD/HH real-audio candidate because Round4 strong-event regresses from `30/30` to `29/30`; do not run Round5 for it.
+    *   [x] Train lower-ratio SD-only real-audio candidate; it passes existing verifier but does not make material Rosanna improvement and cannot be promoted without the removed Rolling reference MIDI.
+    *   [ ] Restore the original independent Rolling score MIDI before any final Round5 comparison; do not use `rolling-in-the-deep_drums.mid` because it is generated model output.
     *   [ ] Retain only a brain-layer change that independently prevents measured virtual-HH over-completion.
     *   [ ] Run `verify_current_solution.py` before accepting any retained runtime or model change; do not run training unless a diagnosed failure warrants it.
 

@@ -1,6 +1,6 @@
 # Current Status - Drum Classifier / ADT
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## 2026-07-11 Round5 MIDI-assisted real-audio smoke test
 
@@ -26,6 +26,9 @@ Last updated: 2026-07-11
 7. 已接受共享大腦修正：Fano dispersion 上限與 GPAR 虛擬 HH 的 `>=80%` 相位重複門檻，完整驗證位於 `validation_runs\round5_brain_safeguards_verify`，blind Raw `5/5`、blind notation `5/5`、hard `4/4`、Round4 `30/30` 與 `6/6` 均通過。Round5 中，`rolling-in-the-deep.wav` 已由 `140 BPM, 5/8` 更正為 `105 BPM, 4/4`；`toto-rosanna.wav` 的 virtual HH 由 `288` 降為 `62`，Notation HH F1 由 `0.805` 升至 `0.864`。
 8. Round5 仍未通過：強制 Rolling 使用 `105 BPM, 4/4` 時，Raw AI 仍為 KD/SD/HH F1 `0.974/0.521/0.694`，證明其 SD 漏檢與 HH 誤報是模型/聲源泛化問題，不是 tempo 或 notation 問題。現有的混合 SD/HH 候選與既有不同 checkpoint 都沒有通過既有 gate；若要再訓練並證明商業泛化，需要新增不屬於 Round5 的真實分離鼓組音訊加對應 MIDI/標註作為開發資料，Round5 兩首必須繼續保留為最終測試。
 9. `test_real_audio\rolling-in-the-deep_drums.mid` 已確認與 `validation_runs\round5_real_audio_smoke_20260711\rolling-in-the-deep\rolling-in-the-deep.mid` 的 SHA-256 完全相同。它是先前系統輸出的副本，不是獨立真值或訓練標註，必須排除於任何訓練與驗收參考之外。
+10. Round1 真實音訊訓練資料已通過對齊審計：`blue-yung-kai`、`counting-stars`、`payphone` 的最佳 MIDI-to-audio scale 均為 `1.0`，偏移分別為 `+1.00s`、`+0.10s`、`-2.10s`。這三首將用於候選模型訓練；Rolling 與 Rosanna 繼續只作 Round5 最終測試。
+11. 已拒絕第一個真實音訊候選 `validation_runs\real_audio_round1_sdhh_candidate.pth`：它使用三首真實音訊的 165 個對齊窗口，以 SD/HH head-only loss 訓練。blind Raw/notation 與 hard `4/4` 均通過，但 Round4 first5 strong-event 從接受版本 `30/30` 降至 `29/30`，因 `7_pop-groove7_138` 的 HH 強事件顯著退步。因此不得進入 Round5 或替換正式 checkpoint。
+12. 第二個真實音訊 SD-only 候選 `validation_runs\real_audio_round1_sd_candidate.pth` 通過完整既有驗證：blind Raw/notation `5/5`、hard `4/4`、Round4 `30/30` 與 `6/6`。但 Rosanna Raw SD 只從 `544` TP 提升至 `545` TP，其餘主要 F1 幾乎不變；Rolling 的 KD/SD/HH 總輸出仍為 `332/64/704`，沒有足以接受的模型改善。原本的 `rolling-in-the-deep-adele-drum-sheet-music.mid` 已不在 `test_real_audio`，目前只剩已確認為模型輸出的 `_drums.mid` 副本，故不能以它完成合法的 Rolling 最終驗收或推廣候選。
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 

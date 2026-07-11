@@ -52,6 +52,12 @@ The user has explicitly authorized candidate-model training when Raw AI evidence
 
 Tempo/meter scoring must cap the Fano dispersion contribution at `15.0` before it is combined with cross-measure similarity. This prevents a fine-grid dispersion outlier from dominating the shared score, while leaving the grid, candidate tempos, and true odd-meter candidates available. GPAR may still classify a phase as active at its existing `35%` repeat threshold for suppression decisions, but it may create a new virtual Hi-Hat only when that phase occurs in at least `80%` of measures. This separates weak repeating evidence from a stable pattern that is safe to complete. Both safeguards are shared rules: they must pass `verify_current_solution.py` and the full Round5 rerun; they must not be conditioned on song name, expected count, or path.
 
+### Real-audio round1 training-data rule
+
+The first real-audio training round uses only `blue-yung-kai`, `counting-stars`, and `payphone`; `rolling-in-the-deep` and `toto-rosanna` remain Round5 holdouts. A reusable metadata builder must pair WAV/MIDI names after removing common score-export suffixes, estimate one shared audio-time offset and optional scale from onset evidence, map only KD `{35,36}`, SD `{37,38,40}`, and HH `{22,26,42,44,46}`, and write only train metadata under `validation_runs`. Long songs must expand into deterministic event-bearing four-second windows so a song does not collapse into one median training slice. Unsupported drum pitches remain unlabeled rather than being remapped to KD/SD/HH.
+
+If a joint SD/HH real-audio candidate reduces the accepted Round4 strong-HH evidence, the next candidate must train SD only with a lower real-audio sampling ratio. This is channel isolation, not a file-specific exception: it preserves the accepted HH detector while testing whether real-audio Snare labels improve the Rolling model-layer recall.
+
 ## Score-time to physical-time conversion note
 
 When notation gate already passes, score-time annotation rows can be converted to physical audio time by aligning each confirmed annotation with the same instrument occurrence in the passed `notation_events.csv`. The converted CSV must preserve the original score time in `score_time`, write the corresponding notation event `raw_time` into `time`, and set `source=notation_physical_map`. Raw acoustic expected counts may then include these converted rows.
