@@ -117,11 +117,11 @@ def main():
         target_best_path = os.path.join(args.output_dir, f"{args.candidate_base}_best.pth")
         
         shutil.copyfile(best_model_path, target_best_path)
-        print(f"🎉 Promotion Success! Sieve selected Epoch {best_epoch} as the best model.", flush=True)
+        print(f"[SUCCESS] Promotion Success! Sieve selected Epoch {best_epoch} as the best model.", flush=True)
         print(f"Copied {best_model_path} -> {target_best_path}", flush=True)
         print(f"Promoted Best STAR Macro F1: {best_f1:.4f}", flush=True)
     else:
-        print("❌ Sieve Failure: No checkpoint passed the regression check!", flush=True)
+        print("[FAIL] Sieve Failure: No checkpoint passed the regression check!", flush=True)
         sys.exit(1)
 
 if __name__ == '__main__':
