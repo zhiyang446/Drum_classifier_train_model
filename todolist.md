@@ -2,9 +2,16 @@
 
 本文件记录自动打鼓转谱 (ADT) 系统项目的当前待办任务、进行中的任务以及已完成的历史任务。
 
----
-
 ## 📅 进行中的任务 (In Progress)
+
+*   [x] **切換 Git 分支至 antigravity 並設定提交策略** (2026-07-12)
+    *   [x] 讀取 `todolist.md`、`spec.md` 和 `current_status.md`。
+    *   [x] 檢查當前 Git 分支狀態，並從遠端 fetch。
+    *   [x] 切換本地工作分支至 `antigravity`，並設定追蹤 `origin/antigravity`。
+    *   [x] 在 `todolist.md` 記錄並更新任務状态。
+    *   [x] 在 `current_status.md` 中更新分支切換資訊。
+    *   [x] 將 `todolist.md` 和 `current_status.md` 的變更 commit 到本地 `antigravity` 分支。
+    *   [x] 向使用者確認後，將 commit push 至 GitHub 的 `antigravity` 分支。
 
 *   [ ] **Round5 MIDI-assisted real-audio smoke test** (2026-07-11, failed gate recorded)
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.

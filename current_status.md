@@ -2,6 +2,12 @@
 
 Last updated: 2026-07-12
 
+## Git 分支策略變更 (2026-07-12)
+
+- 目前本地工作目錄已成功切換至 `antigravity` 分支，設定追蹤 `origin/antigravity`。
+- 後續所有的開發與變更 commits / push 將統一提交至 `antigravity` 分支。
+- 依安全規範要求，執行 `git push` 前需取得人工確認。
+
 ## 2026-07-11 Round5 MIDI-assisted real-audio smoke test
 
 ### 結論：未通過，不可宣稱真實歌曲泛化已完成
