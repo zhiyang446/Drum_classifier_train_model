@@ -4,14 +4,21 @@
 
 ## 📅 进行中的任务 (In Progress)
 
-*   [x] **切換 Git 分支至 antigravity 並設定提交策略** (2026-07-12)
+*   [/] **切換 Git 分支至 antigravity 並設定提交策略** (2026-07-12)
     *   [x] 讀取 `todolist.md`、`spec.md` 和 `current_status.md`。
     *   [x] 檢查當前 Git 分支狀態，並從遠端 fetch。
     *   [x] 切換本地工作分支至 `antigravity`，並設定追蹤 `origin/antigravity`。
     *   [x] 在 `todolist.md` 記錄並更新任務状态。
     *   [x] 在 `current_status.md` 中更新分支切換資訊。
     *   [x] 將 `todolist.md` 和 `current_status.md` 的變更 commit 到本地 `antigravity` 分支。
-    *   [x] 向使用者確認後，將 commit push 至 GitHub 的 `antigravity` 分支。
+    *   [ ] 向使用者確認後，將 commit push 至 GitHub 的 `antigravity` 分支。
+
+*   [/] **設定 Codex 與 Antigravity 協作接力分支工作流規範** (2026-07-12)
+    *   [x] 讀取並分析 `AGENTS.md` 中的開發前規則與安全規範。
+    *   [x] 檢查 `origin/codex` 遠端分支的 commits 歷史以確認最新進度。
+    *   [x] 將協作接力分支策略寫入 `AGENTS.md` 規範文檔。
+    *   [x] 在 `todolist.md` 與 `current_status.md` 中記錄此項變更。
+    *   [ ] commit 此變更並再次向使用者尋求 push 許可。
 
 *   [ ] **Round5 MIDI-assisted real-audio smoke test** (2026-07-11, failed gate recorded)
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.

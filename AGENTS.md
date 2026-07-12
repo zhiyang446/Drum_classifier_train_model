@@ -61,3 +61,14 @@ loop-cost.cmd --pattern daily-triage --level L1
 - 任何高風險操作必須先取得人工確認。
 - 詳細規則見 `LOOP.md`、`loop-constraints.md`、`docs/safety.md`。
 
+## AI 協作接力分支策略 (Antigravity & Codex)
+
+- **分支分配**：
+  - Antigravity AI (我) 的開發分支與 push 目標為 `antigravity` 分支。
+  - Codex AI 的開發分支與 push 目標為 `codex` 分支。
+- **接力工作流**：
+  - 當 Codex 額度用完時，會將其最新進度 commit 並 push 至 `origin/codex`。
+  - Antigravity (我) 開始新任務前，必須先執行 `git fetch origin`。
+  - 檢查 `origin/codex` 是否有更新的進度。若有，須經由使用者確認後，將 `origin/codex` 合併（merge）或拉取至本地的 `antigravity` 分支，再繼續開發。
+  - 任何在 `antigravity` 分支上的修改 commits，在 `git push` 前皆必須取得人工確認。
+

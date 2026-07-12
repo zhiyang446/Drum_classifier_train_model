@@ -4,8 +4,8 @@ Last updated: 2026-07-12
 
 ## Git 分支策略變更 (2026-07-12)
 
-- 目前本地工作目錄已成功切換至 `antigravity` 分支，設定追蹤 `origin/antigravity`。
-- 後續所有的開發與變更 commits / push 將統一提交至 `antigravity` 分支。
+- **分支分配**：目前本地工作目錄已成功切換至 `antigravity` 分支，設定追蹤 `origin/antigravity`。Codex 的分支為 `codex`。
+- **AI 協作接力分支策略**：當 Codex 額度用完時，其變更將推送至 `origin/codex`；Antigravity 開始任務前需執行 `git fetch origin`，並經使用者確認後合併 `origin/codex` 的新進度到本地 `antigravity` 分支。
 - 依安全規範要求，執行 `git push` 前需取得人工確認。
 
 ## 2026-07-11 Round5 MIDI-assisted real-audio smoke test
