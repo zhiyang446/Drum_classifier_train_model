@@ -249,6 +249,9 @@ def main():
             batch_number = start // args.batch_size + 1
             if batch_number % args.log_every == 0 or batch_number == batches_per_epoch:
                 print(f'epoch={epoch}/{args.epochs} batch={batch_number}/{batches_per_epoch} loss={losses[-1]:.4f}', flush=True)
+        # 中文註解：儲存每個 Epoch 的獨立候選權重以供自動篩選哨兵進行測試
+        epoch_cand_name = f"{os.path.splitext(args.candidate_name)[0]}_epoch{epoch}.pth"
+        torch.save(model.state_dict(), os.path.join(args.output_dir, epoch_cand_name))
     candidate_path = os.path.join(args.output_dir, args.candidate_name)
     torch.save(model.state_dict(), candidate_path)
     report = {
