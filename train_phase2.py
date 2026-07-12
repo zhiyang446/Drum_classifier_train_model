@@ -182,8 +182,10 @@ class SharedCNNBackbone(nn.Module):
         return out
 
 class SymmetricDrumTCN(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes=3):
+        """中文註解：建立可指定輸出鼓件數的模型；預設三類以相容既有 checkpoint。"""
         super().__init__()
+        self.num_classes = num_classes
         self.backbone = SharedCNNBackbone()
         
         self.onset_tcn = nn.Sequential(
@@ -193,7 +195,7 @@ class SymmetricDrumTCN(nn.Module):
             TCNBlock(64, 64, kernel_size=5, dilation=8),
             TCNBlock(64, 64, kernel_size=5, dilation=16)
         )
-        self.onset_head = nn.Conv1d(64, 3, kernel_size=1)
+        self.onset_head = nn.Conv1d(64, num_classes, kernel_size=1)
         
         self.velocity_tcn = nn.Sequential(
             TCNBlock(64, 64, kernel_size=5, dilation=1),
@@ -202,9 +204,10 @@ class SymmetricDrumTCN(nn.Module):
             TCNBlock(64, 64, kernel_size=5, dilation=8),
             TCNBlock(64, 64, kernel_size=5, dilation=16)
         )
-        self.velocity_head = nn.Conv1d(64, 3, kernel_size=1)
+        self.velocity_head = nn.Conv1d(64, num_classes, kernel_size=1)
         
     def forward(self, x):
+        """中文註解：輸出每個時間框的 onset 與 velocity logits。"""
         feat = self.backbone(x)
         
         onset_feat = self.onset_tcn(feat)

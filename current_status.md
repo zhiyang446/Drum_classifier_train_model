@@ -37,6 +37,11 @@ Last updated: 2026-07-12
 12. 第二個真實音訊 SD-only 候選 `validation_runs\real_audio_round1_sd_candidate.pth` 通過完整既有驗證：blind Raw/notation `5/5`、hard `4/4`、Round4 `30/30` 與 `6/6`。但 Rosanna Raw SD 只從 `544` TP 提升至 `545` TP，其餘主要 F1 幾乎不變；Rolling 的 KD/SD/HH 總輸出仍為 `332/64/704`，沒有足以接受的模型改善。原本的 `rolling-in-the-deep-adele-drum-sheet-music.mid` 已不在 `test_real_audio`，目前只剩已確認為模型輸出的 `_drums.mid` 副本，故不能以它完成合法的 Rolling 最終驗收或推廣候選。
 13. Rolling 獨立真值 MIDI 已恢復並完成最終比較：SD-only 候選在 Rolling Raw KD/SD/HH F1 仍為 `0.974/0.521/0.694`，與接受版本完全相同；Rosanna Raw SD 僅由 F1 `0.853` 升至 `0.854`（多 1 TP）。候選沒有實質改善，已拒絕。訓練/推論 feature audit 亦確認兩者都使用標準雙通道 Mel/Superflux（`use_hybrid=False`），不是特徵提取不一致造成的失敗。
 14. 第一輪真實資料沒有產生實質改善，因此依既定停止條件，不可直接要求第二輪歌曲或重複同類微調。下一步先審計模型容量、標籤/聲源差異及主系統分離殘留的影響；只有找到可驗證的新根因，才決定是否需要第二輪資料。
+15. 根因審計已完成，且不需要要求第二輪歌曲：`SymmetricDrumTCN` 與訓練標籤目前都只有 KD/SD/HH 三類。以固定 `+0.020s` 對齊和 50ms 一對一比對，Rolling 的 `286` 個未匹配原生 HH 中有 `147` 個（`51.4%`）貼合未支援鼓件，其中 Ride（pitch 51）有 `128` 個、Crash（49）有 `6` 個；Rosanna 的 `422` 個未匹配原生 HH 中有 `223` 個（`52.8%`）貼合未支援鼓件，其中 Ride 有 `167` 個。這證明大量 HH 所謂假陽性其實是三類模型無法表示的 Ride/Crash/Tom，而不是大腦過度補音或可由降門檻修正的錯誤。Rolling 的 SD 漏檢在真實 SD 時間點的模型機率中位數為 `0.075`，遠低於已命中 SD 的 `0.680`；且 SD 假陽性中位數為 `0.707`，所以降低 SD 門檻會增加錯誤，不能當作修復。下一步是一次性的多分類資料覆蓋與標籤設計審計，再決定是否建立新的候選模型；Round5 兩首歌維持完全保留，不作訓練資料。
+16. 多分類覆蓋審計已完成，不需第二輪真實歌曲：STAR 的獨立 annotation 已有 Tom `LT/MT/HT` 共 `166,109`、Crash `CRC/CHC/SPC` 共 `56,892`、Ride `RD/RB` 共 `62,933` 個事件；E-GMD train/test 各 100 個原始 MIDI 抽樣亦出現 tom、ride 與 cymbal pitch。下一版的固定範圍是六類 `KD/SD/HH/TOM/CRASH/RIDE`，暫不混入 cowbell、clap、tambourine、splash 等稀疏或語義較模糊的鼓件。這是新的獨立候選與驗收軌道，不能改寫現有三分類 checkpoint 或其驗收結果。
+17. 六分類 smoke path 已完成且與現有系統隔離：`preprocess_star.py --label-scheme six-class` 產生 `5,727` 個 STAR metadata item，事件總數為 KD `653,178`、SD `452,297`、HH `1,096,870`、TOM `153,399`、CRASH `51,790`、RIDE `58,250`。`run_six_class_smoke.py` 從正式三分類 checkpoint 僅轉移 `178` 個形狀相容的非輸出頭權重，對單一 STAR train 視窗完成一次更新並重新載入六類候選；loss `1.4116` 有限，onset/velocity 形狀均為 `[1,688,6]`。候選只位於 `validation_runs\six_class_smoke`，`transcribe.py` 沒有載入它，也沒有讀取 `test_real_audio`。三分類回歸元件均通過：blind Raw/notation `5/5`、hard `4/4`、Round4 first5 `30/30`、第六段 `6/6`。這只證明資料、模型形狀與隔離正確，尚未證明六類辨識率；下一步需要一個獨立六類 held-out event gate 後才可做正式訓練。
+18. 六分類 STAR `split=test` held-out event gate 已建立並執行：以六個由原始標註決定的四秒窗口覆蓋 KD/SD/HH/TOM/CRASH/RIDE，採固定 onset `0.50` 與 50ms 一對一比對。smoke 候選宏平均 F1 為 `0.0332`，KD/SD/HH/TOM/CRASH/RIDE 分別為 `0.0591/0.0000/0.0634/0.0000/0.0769/0.0000`，未達 promotion 要求（macro `>=0.70` 且每類 `>=0.55`）。此 fail 是預期的訓練前基線：六個新 head 只更新過一個窗口。它確認 gate 能量測真正模型品質並阻止無效候選進入 `transcribe.py`；不可透過改門檻、檔名規則或讀取 `test_real_audio` 來讓它通過。
+19. 第一個正式六分類候選已拒絕：`six_class_candidate_v1.pth` 只用 STAR `split=train` 的固定 144 個窗口（每類 24 個、36 batch、head-only、lr `5e-4`），loss 從 `1.0748` 降至 `0.5450`，但保留 STAR test gate 的 macro F1 為 `0.0056`，KD/SD/HH/TOM/CRASH/RIDE 為 `0.0333/0/0/0/0/0`。因此訓練 loss 不是可接受的品質證據；此候選不得進入 `transcribe.py`、Round5 或取代任何三分類 checkpoint。Gate 失敗後已停止，禁止以改 threshold、重新選 test window 或重跑同一 head-only 配方來製造通過結果。
 
 ## 2026-07-07 Round4 E-GMD short-segment validation status
 
@@ -396,3 +401,49 @@ Older sections below describe previous failed attempts and are kept as history; 
    - Current known gates are complete for the accepted checkpoint plus raw acoustic hygiene.
    - This is not a newly trained model; it is the existing accepted model plus a raw acoustic cleanup layer.
    - Broader new audio outside the current blind/hard gates still needs normal validation before claiming universal correctness.
+
+## 2026-07-12 Six-class STAR candidate v7 blocker
+
+1. **What completed**
+   - Six-class STAR metadata and an isolated six-output candidate path exist for KD, SD, HH, TOM, CRASH, and RIDE.
+   - Candidate v7 trained only on deterministic STAR `split=train` windows: 96 anchors per class, 576 windows total, 30 epochs, 1,080 batches, frozen BatchNorm, Gaussian onset targets, and schedule-derived class weights.
+   - Its training report is `validation_runs\\six_class_candidate_v7\\train_report.json`; training loss reduced from `5.5178` to `2.7949`.
+
+2. **What did not complete**
+   - The fixed held-out STAR `split=test` event gate failed: `validation_runs\\six_class_candidate_v7\\heldout_validation\\gate_summary.json` reports macro F1 `0.0000`.
+   - KD, SD, HH, TOM, CRASH, and RIDE each produced zero events at the fixed shared onset threshold `0.50`; therefore no class meets the required per-class F1 `0.55`.
+   - This is a model-training/output-scale failure, not a transcription-brain, tempo, meter, threshold-tuning, Round5, or `test_real_audio` result.
+   - Read-only output audit found all six channels' maximum probability at frame `0` on each fixed test window. Real labeled frames are mostly `0.09` to `0.24`; accepting the boundary spike would create false positives, so lowering the gate or including frame `0` is not a valid repair.
+
+3. **Safety decision**
+   - v7 is rejected. It is not integrated into `transcribe.py`, not used on Round5, and does not replace `mixed_formal_kick375_snare18_hh12_candidate.pth`.
+   - Per `loop-constraints.md`, the failed gate stops further automatic training. The next permitted action is a documented diagnosis and a separately approved, materially different training-objective or dataset-scale proposal. The acceptance gate and test window selection remain unchanged.
+
+4. **Root cause confirmed after the failed gate**
+   - All STAR six-class train audio is 48 kHz. The six-class reader used the fixed 44.1 kHz source sample count, therefore read only about 3.669 physical seconds and padded the remainder after resampling.
+   - The deterministic schedule also grouped all rows by label and retained start-clamped anchors. Together with high positive weights, this rewards frame 0 and explains the all-channel boundary spikes.
+   - The repair is scoped to the isolated six-class reader/schedule: source-rate-correct four-second reads, centered-only anchors, and deterministic six-label interleaving. Existing three-class training and its accepted checkpoint are unchanged.
+
+5. **V8 result and next root cause**
+   - V8 applied the source-rate and schedule repair, but the unchanged gate still failed at macro F1 `0.0000`; its six channels continued to peak at frame 0.
+   - The accepted three-class model has the same shared-TCN frame-0 maximum on these windows. The six-class loader had additionally discarded all three accepted output heads because their shape changed from three to six rows.
+   - The next isolated repair preserves KD/SD/HH head rows and uses SD for TOM plus HH for CRASH/RIDE initialization. This is model transfer, not test-specific logic or a transcription-brain change.
+
+6. **V9 validation state-restoration defect**
+   - V9 trained with the accepted checkpoint's `legacy_slot_proj` branch enabled, but `run_six_class_validation.py` reloaded its six-class state into a default model without restoring `backbone.use_legacy_proj`.
+   - The reported zero-event v9 result is therefore not valid evidence of model quality: inference used an untrained projection branch. The next action is to share the existing legacy-branch restoration rule with both smoke reload and held-out validation, then re-run the same candidate and unchanged gate without retraining.
+
+7. **V9 corrected gate result**
+   - After restoring the legacy projection branch, the unchanged held-out gate is macro F1 `0.3345`: KD `0.7111` and HH `0.5672` pass; SD `0.4082`, TOM `0.0333`, CRASH `0.0769`, and RIDE `0.2105` fail.
+   - TOM/CRASH/RIDE have recall but unacceptable false positives. The schedule's raw inverse-density positive weights reach TOM `169`, CRASH `482`, and RIDE `299`, which over-rewards rare-class output.
+   - The next isolated model repair uses the square root of the same data-derived inverse density. It keeps all data splits, selected windows, threshold, tolerance, and architecture fixed.
+
+8. **V10 corrected-objective result**
+   - V10 uses square-root class weights and the unchanged gate reports macro F1 `0.3147`: KD `0.7143`, SD `0.4151`, HH `0.4800`, TOM `0.0000`, CRASH `0.1250`, RIDE `0.1538`.
+   - The lower rare-class weights reduce false positives but also reduce recall. Repeating 96 anchors per class for 30 epochs is now the remaining evidenced bottleneck, not thresholding or validation logic.
+   - The next candidate expands to 576 evenly spaced centered STAR train anchors per class and 10 epochs. It has six times more unique acoustic contexts and preserves all held-out rules.
+
+9. **V11 coverage-diversity result**
+   - V11 uses 3,456 distinct STAR train windows and improves the unchanged gate to macro F1 `0.3856`: KD `0.7143`, SD `0.5116`, HH `0.5385`, TOM `0.0000`, CRASH `0.1739`, RIDE `0.3750`.
+   - Direct event inspection confirms TOM/CRASH/RIDE errors occur at the correct physical times but with the wrong class. They are acoustic class-confusion errors, not timing, gate tolerance, or brain-layer errors.
+   - V11 remains under-converged. The next step resumes its six-class state on the same broad STAR train schedule with lower learning rates; it must not reinitialize or semantic-remap completed six-class heads.

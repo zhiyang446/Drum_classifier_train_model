@@ -1,6 +1,6 @@
 # STATE.md
 
-Last run: 2026-07-06
+Last run: 2026-07-12
 Pattern: daily-triage
 Level: L1 report-only
 Kill switch: off
@@ -14,6 +14,7 @@ Kill switch: off
 
 - Accepted checkpoint: `mixed_formal_kick375_snare18_hh12_candidate.pth`
 - Accepted verifier: `.\.venv\Scripts\python.exe verify_current_solution.py`
+- Round5 root cause: unsupported Ride/Crash/Tom proxying dominates the held-out HH error; the next planned path is a separate six-class candidate, while L1 remains report-only.
 - 新音訊失敗時，先分 raw acoustic/model layer 與 brain/notation layer。
 
 ## Recent Noise

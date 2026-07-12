@@ -17,8 +17,8 @@ STAR_DIR = os.path.join('STAR_Drums_full', 'STAR_publication')
 OUTPUT_DIR = 'processed_data'
 OUTPUT_JSON = os.path.join(OUTPUT_DIR, 'star_meta.json')
 
-# STAR 18 類到本專案三類的最小映射；tom/cymbal/ride 先不進三類模型。
-CLASS_TO_INST = {
+# STAR 18 類到現有三類的最小映射；這是預設行為，保持既有 metadata 相容。
+THREE_CLASS_TO_INST = {
     'BD': 'KD',
     'SD': 'SD',
     'SS': 'SD',
@@ -27,8 +27,30 @@ CLASS_TO_INST = {
     'OHH': 'HH',
 }
 
+# 六類實驗路徑直接使用 STAR 原始標註，不把未支援鼓件塞回 HH。
+SIX_CLASS_TO_INST = {
+    **THREE_CLASS_TO_INST,
+    'LT': 'TOM',
+    'MT': 'TOM',
+    'HT': 'TOM',
+    'CRC': 'CRASH',
+    'CHC': 'CRASH',
+    'SPC': 'CRASH',
+    'RD': 'RIDE',
+    'RB': 'RIDE',
+}
 
-def parse_annotation_file(annotation_path):
+
+def label_mapping(label_scheme):
+    """中文註解：依指定標籤方案回傳 STAR 原始類別映射。"""
+    if label_scheme == 'three-class':
+        return THREE_CLASS_TO_INST
+    if label_scheme == 'six-class':
+        return SIX_CLASS_TO_INST
+    raise ValueError(f'Unsupported label scheme: {label_scheme}')
+
+
+def parse_annotation_file(annotation_path, class_to_inst=THREE_CLASS_TO_INST):
     """
     解析 STAR annotation txt，回傳 KD/SD/HH 事件與原始類別統計。
 
@@ -49,7 +71,7 @@ def parse_annotation_file(annotation_path):
             velocity = float(parts[2])
             raw_counts[raw_class] += 1
 
-            inst = CLASS_TO_INST.get(raw_class)
+            inst = class_to_inst.get(raw_class)
             if inst is None:
                 continue
 
@@ -110,7 +132,7 @@ def iter_annotation_files(star_dir):
                     yield split, os.path.join(root, name)
 
 
-def build_star_metadata(star_dir):
+def build_star_metadata(star_dir, class_to_inst=THREE_CLASS_TO_INST):
     """
     建立 STAR 三類 metadata，格式對齊現有 E-GMD metadata。
 
@@ -133,7 +155,7 @@ def build_star_metadata(star_dir):
             stats['skipped_missing_audio'] += 1
             continue
 
-        events, raw_counts = parse_annotation_file(annotation_path)
+        events, raw_counts = parse_annotation_file(annotation_path, class_to_inst)
         stats['raw_classes'].update(raw_counts)
         if not events:
             stats['skipped_empty_events'] += 1
@@ -170,12 +192,15 @@ def run_self_check():
     for line in lines:
         onset, raw_class, velocity = line.split()
         raw_counts[raw_class] += 1
-        inst = CLASS_TO_INST.get(raw_class)
+        inst = THREE_CLASS_TO_INST.get(raw_class)
         if inst:
             events.append({'time': float(onset), 'inst': inst, 'velocity': float(velocity)})
 
     assert [e['inst'] for e in events] == ['KD', 'SD', 'SD', 'HH']
     assert raw_counts['MT'] == 1
+    assert label_mapping('six-class')['MT'] == 'TOM'
+    assert label_mapping('six-class')['CRC'] == 'CRASH'
+    assert label_mapping('six-class')['RD'] == 'RIDE'
     print('Self-check passed.')
 
 
@@ -186,6 +211,7 @@ def main():
     parser = argparse.ArgumentParser(description='Preprocess STAR Drums into KD/SD/HH metadata.')
     parser.add_argument('--star-dir', default=STAR_DIR, help='Path to STAR_publication directory.')
     parser.add_argument('--output', default=OUTPUT_JSON, help='Output JSON metadata path.')
+    parser.add_argument('--label-scheme', choices=['three-class', 'six-class'], default='three-class')
     parser.add_argument('--self-check', action='store_true', help='Run parser self-check and exit.')
     args = parser.parse_args()
 
@@ -196,7 +222,7 @@ def main():
     if not os.path.isdir(args.star_dir):
         raise FileNotFoundError(f'STAR directory not found: {args.star_dir}')
 
-    meta, stats = build_star_metadata(args.star_dir)
+    meta, stats = build_star_metadata(args.star_dir, label_mapping(args.label_scheme))
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w', encoding='utf-8') as f:
@@ -204,7 +230,7 @@ def main():
 
     print(f"Wrote {len(meta)} STAR items to {args.output}")
     print(f"Splits: {dict(stats['splits'])}")
-    print(f"KD/SD/HH events: {dict(stats['events'])}")
+    print(f"Mapped events ({args.label_scheme}): {dict(stats['events'])}")
     print(f"Raw STAR classes: {dict(stats['raw_classes'])}")
     print(f"Skipped missing audio: {stats['skipped_missing_audio']}")
     print(f"Skipped empty KD/SD/HH: {stats['skipped_empty_events']}")

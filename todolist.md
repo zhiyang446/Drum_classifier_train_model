@@ -38,7 +38,25 @@
     *   [x] Train lower-ratio SD-only real-audio candidate; it passes existing verifier but does not make material Rosanna improvement and cannot be promoted without the removed Rolling reference MIDI.
     *   [x] Restore independent Rolling score MIDI and reject the SD-only candidate after final Round5 comparison: Rolling is unchanged and Rosanna improves by only one SD event.
     *   [x] Audit training/inference feature extraction; both use standard Mel/Superflux features, so no feature-path mismatch is present.
-    *   [ ] Audit model capacity, label/source-domain differences, and separation residuals before requesting any second-round real-audio pairs.
+    *   [x] Audit model capacity, label/source-domain differences, and separation residuals before requesting any second-round real-audio pairs: more than half of unmatched native HH events align with unsupported Ride/Crash/Tom score events in both holdouts; Rolling SD misses are low model probability rather than peak-picking failures.
+    *   [x] Audit E-GMD/STAR pitch coverage and define the bounded six-class `KD/SD/HH/TOM/CRASH/RIDE` label set; STAR annotations provide Tom `166,109`, Crash `56,892`, and Ride `62,933` events, so no second real-audio round is required before implementation.
+    *   [x] Implement a separate six-class metadata/checkpoint/gate smoke path without altering the accepted three-class checkpoint.
+        *   [x] Add an optional six-class STAR source-label mapping while retaining the default three-class metadata behavior.
+        *   [x] Make `SymmetricDrumTCN` output width configurable with legacy default `3`.
+        *   [x] Run one isolated STAR six-class smoke update, checkpoint reload, and shape/loss report under `validation_runs`; it passes with `[1,688,6]` output and finite loss.
+        *   [x] Re-run all accepted three-class verifier components individually: blind Raw/notation `5/5`, hard `4/4`, Round4 first five `30/30`, sixth clip `6/6`; the combined verifier process was desktop-timeout-limited before its final line.
+    *   [x] Build a six-class held-out event gate before any non-smoke six-class training; do not integrate the smoke candidate into `transcribe.py`.
+        *   [x] Select six deterministic STAR `split=test` physical windows by source labels only, covering KD/SD/HH/TOM/CRASH/RIDE.
+        *   [x] Compare six-class local-maxima events against labels with fixed 50ms matching and write a per-class gate report.
+        *   [x] Run the smoke candidate as the pre-training baseline: macro F1 `0.0332`, so it is rejected and cannot be promoted.
+    *   [x] Train one bounded six-class STAR candidate after the smoke baseline failure; it used exactly 24 deterministic `split=train` anchors per class, one head-only epoch, batch size 4, then failed the unchanged held-out gate at macro F1 `0.0056` and was rejected.
+    *   [x] Audit target alignment/window coverage: each sampled KD/SD/HH/TOM/CRASH/RIDE anchor maps to an active label frame, so physical-time alignment is not the v1 blocker.
+    *   [x] Train one distinct bounded full-model six-class candidate: 48 `split=train` anchors per class, batch size 8, 3 epochs, fixed discriminative learning rates; it still failed because target-frame probabilities collapsed below `0.50`.
+    *   [x] Train one loss-corrected full-model v3 candidate using the same v2 data/test schedule plus generic five-frame Gaussian onset targets and fixed positive-frame weighting; it is rejected after 3 epochs because train/test target probabilities remain sub-threshold while loss is still descending.
+    *   [x] Continue v3 for 15 fixed epochs with identical data/loss; it remains rejected because uniform positive weight `50` leaves all target classes below onset threshold.
+    *   [x] Train one class-balanced full-model v5 candidate: it still collapses on held-out events because small STAR updates altered BatchNorm running statistics.
+    *   [x] Train one BatchNorm-frozen class-balanced v6 candidate from the accepted three-class backbone; a one-window 100-step overfit check proves the model/loss path works, so v6 failure is insufficient schedule coverage rather than a code defect.
+    *   [ ] Train one coverage-sized v7 candidate: 96 deterministic anchors per class, batch 16, 30 epochs, frozen BatchNorm, schedule-derived weights and unchanged held-out gate.
     *   [ ] Retain only a brain-layer change that independently prevents measured virtual-HH over-completion.
     *   [ ] Run `verify_current_solution.py` before accepting any retained runtime or model change; do not run training unless a diagnosed failure warrants it.
 
@@ -431,6 +449,25 @@
 *   [x] Train one candidate from `processed_data/db_hard_subset_meta.json` and evaluate the first blind raw gate; reject because it under-recovers HH/SD.
 *   [x] Oversample user verified calibration relative to database hard subset; reject `raw_ai_db_user_calibrated_candidate.pth` because first blind raw gate still fails.
 *   [ ] Next: do not keep blind-tuning this same recipe; inspect selected DB subset audio/labels or redesign the training objective before another run.
+*   [x] Train the coverage-sized six-class v7 candidate: 96 deterministic STAR train anchors per class, batch 16, 30 epochs, frozen BatchNorm, schedule-derived weights, Gaussian targets, and no Round5/test-real-audio input.
+*   [x] Run the unchanged six-class STAR test event gate for v7; reject it because macro F1 is 0.0000 and every class has zero predicted events at the fixed 0.50 threshold.
+*   [ ] Blocker: before another six-class run, diagnose the training/output-scale mismatch and obtain explicit approval for a materially different objective or dataset-scale plan. Do not lower the gate, change test selection, route by filename, or integrate v7.
+*   [x] Diagnose the v7 boundary collapse: STAR is 48 kHz, while the six-class reader used a 44.1 kHz source sample count; schedule rows were also grouped by label and included clamped start-of-file anchors.
+*   [ ] Implement and self-check the six-class-only physical four-second source-rate reader plus centered, interleaved train schedule; then train one v8 candidate and run the unchanged held-out gate.
+*   [x] Implement and self-check the six-class-only physical four-second source-rate reader plus centered, interleaved train schedule; compile and schedule coverage checks pass.
+*   [ ] Train the documented v8 candidate and run the unchanged six-class STAR held-out event gate.
+*   [x] Train and reject v8: corrected source-rate slices and interleaving alone do not pass the fixed STAR gate; all six channels still peak at frame 0.
+*   [ ] Extend checkpoint transfer to preserve the accepted KD/SD/HH output heads and semantically initialize TOM/CRASH/RIDE; self-check it, then train one v9 candidate with the unchanged gate.
+*   [x] Extend checkpoint transfer to preserve the accepted KD/SD/HH output heads and semantically initialize TOM/CRASH/RIDE; compile and semantic-row self-check pass.
+*   [ ] Train the documented conservative warm-start v9 candidate and run the unchanged six-class STAR held-out event gate.
+*   [x] Train v9, then identify a six-class validation reload defect: the candidate uses `legacy_slot_proj` during training but the evaluator did not restore that model flag, so it inferred through an untrained branch.
+*   [ ] Add and self-check a shared six-class checkpoint reload helper, then re-run the unchanged v9 held-out gate without retraining.
+*   [x] Add and self-check a shared six-class checkpoint reload helper, then re-run the unchanged v9 gate: KD and HH pass, but macro F1 is 0.3345 because SD/TOM/CRASH/RIDE have excessive false positives.
+*   [ ] Replace raw inverse-density positive weights with their data-derived square root; train one v10 candidate and run the unchanged held-out STAR gate.
+*   [x] Train and reject v10: square-root weights reduce rare-class false positives but insufficient fixed-window diversity leaves macro F1 at 0.3147.
+*   [ ] Train the documented v11 coverage-diversity candidate (576 distinct centered anchors per class, 10 epochs) and run the unchanged STAR held-out event gate.
+*   [x] Train and reject v11: broader coverage improves macro F1 to 0.3856, and timing inspection proves remaining TOM/CRASH/RIDE errors are class confusion rather than time offsets.
+*   [ ] Add six-class candidate resume loading, then continue v11 as v12 at lower learning rates and run the unchanged held-out gate.
 
 ---
 
