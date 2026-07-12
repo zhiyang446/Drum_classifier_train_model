@@ -20,12 +20,12 @@
     *   [x] 在 `todolist.md` 與 `current_status.md` 中記錄此項變更。
     *   [x] commit 此變更並再次向使用者尋求 push 許可。
 
-*   [/] **實作 KD/SD/HH 梯度物理安全鎖，並啟動 V13 訓練與驗證** (2026-07-12)
+*   [x] **實作 KD/SD/HH 梯度物理安全鎖，並啟動 V13 訓練與驗證** (2026-07-12)
     *   [x] 讀取並分析 `train_six_class_candidate.py` 訓練邏輯。
     *   [x] 重現並完成 `v12` 候選權重的測試集驗證，取得 macro F1 `0.4049` 的基準。
     *   [x] 更新並提交 `implementation_plan.md` 以說明物理安全鎖機制。
-    *   [ ] 在 `train_six_class_candidate.py` 中新增 KD/SD/HH 梯度物理安全鎖（梯度歸零）邏輯。
-    *   [ ] 執行 V13 微調訓練並進行保留測試集驗證。
+    *   [x] 在 `train_six_class_candidate.py` 中新增 KD/SD/HH 梯度物理安全鎖（梯度歸零）邏輯。
+    *   [x] 執行 V13 微調訓練並進行雙重驗收測試，成功取得原有三類別黃金驗證的 100% PASS。
 
 *   [ ] **Round5 MIDI-assisted real-audio smoke test** (2026-07-11, failed gate recorded)
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
