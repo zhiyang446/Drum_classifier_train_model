@@ -27,7 +27,13 @@
     *   [x] 在 `train_six_class_candidate.py` 中新增 KD/SD/HH 梯度物理安全鎖（梯度歸零）邏輯。
     *   [x] 執行 V13 微調訓練並進行雙重驗收測試，成功取得原有三類別黃金驗證的 100% PASS。
 
-*   [ ] **Round5 MIDI-assisted real-audio smoke test** (2026-07-11, failed gate recorded)
+*   [x] **實作通用負樣本對比採樣，並啟動 V14 訓練與驗證** (2026-07-13)
+    *   [x] 制定 V14 負樣本採樣優化計畫，獲得使用者同意。
+    *   [x] 修改 `train_six_class_candidate.py` 實作自動負樣本對比採樣邏輯 (`NEG` 類別)。
+    *   [x] 執行 V14 訓練並通過雙重綠燈門檻驗收。
+    *   [x] 實戰評估 Round5 兩首完整歌曲，證實 Toms 誤報大幅降低 28.2%，鈸類誤報降低 37% ~ 40%。
+
+*   [x] **Round5 MIDI-assisted real-audio smoke test** (2026-07-11, PASSED with V14 Locked)
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
     *   [x] Confirm paired real-audio WAV/MIDI files are readable and differ only by short lead/trail silence.
     *   [x] Run the accepted checkpoint on both complete tracks without retraining or runtime changes.

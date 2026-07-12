@@ -15,7 +15,7 @@ from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
 
 
 def build_schedule(metadata, per_class):
-    """中文註解：只取可置中的 train 錨點，並以六類交錯順序建立固定排程。"""
+    """中文註解：只取可置中的 train 錨點，並以六類及負樣本交錯順序建立固定排程。"""
     selected_by_label = {}
     info_cache = {}
     half_window_seconds = TARGET_SAMPLES / float(SR) / 2.0
@@ -42,7 +42,37 @@ def build_schedule(metadata, per_class):
         for index in range(per_class):
             key, anchor = candidates[index * len(candidates) // per_class]
             selected_by_label[label].append({'label': label, 'key': key, 'anchor': anchor})
-    return [selected_by_label[label][index] for index in range(per_class) for label in LABELS]
+
+    # 中文註解：篩選無 TOM/CRASH/RIDE 但有 KD/SD/HH 的負樣本窗口，強迫 rare heads 學會安靜
+    neg_candidates = []
+    for key, item in metadata.items():
+        if item.get('split') != 'train':
+            continue
+        path = item.get('audio_path')
+        if path:
+            if path not in info_cache:
+                info_cache[path] = sf.info(path)
+            duration = info_cache[path].frames / float(info_cache[path].samplerate)
+        else:
+            duration = None
+        events = item.get('events', [])
+        has_pos_base = any(event.get('inst') in ('KD', 'SD', 'HH') for event in events)
+        has_neg_rare = any(event.get('inst') in ('TOM', 'CRASH', 'RIDE') for event in events)
+        if has_pos_base and not has_neg_rare:
+            for event in events:
+                anchor = float(event['time'])
+                if event.get('inst') in ('KD', 'SD', 'HH') and (duration is None or half_window_seconds <= anchor <= duration - half_window_seconds):
+                    neg_candidates.append((key, anchor))
+    neg_candidates.sort()
+    if len(neg_candidates) < per_class:
+        raise ValueError(f'Only {len(neg_candidates)} negative centered train events, need {per_class}.')
+    selected_by_label['NEG'] = []
+    for index in range(per_class):
+        key, anchor = neg_candidates[index * len(neg_candidates) // per_class]
+        selected_by_label['NEG'].append({'label': 'NEG', 'key': key, 'anchor': anchor})
+
+    ALL_TRAIN_CLASSES = list(LABELS) + ['NEG']
+    return [selected_by_label[cls][index] for index in range(per_class) for cls in ALL_TRAIN_CLASSES]
 
 
 def freeze_for_head_training(model):
