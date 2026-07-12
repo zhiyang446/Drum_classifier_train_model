@@ -117,8 +117,6 @@ def run_self_check():
     targets[0, 4, 5] = 1.0
     assert gaussian_smooth_targets(targets)[0, 4, 5].item() == 1.0
     print('Self-check passed.')
-
-
 def main():
     """中文註解：執行一個固定預算的六類 head-only 候選訓練。"""
     parser = argparse.ArgumentParser(description='Train one bounded six-class STAR candidate.')
@@ -138,7 +136,11 @@ def main():
     parser.add_argument('--log-every', type=int, default=1)
     parser.add_argument('--candidate-name', default='six_class_candidate.pth')
     parser.add_argument('--self-check', action='store_true')
+    parser.add_argument('--no-lock-three-class', action='store_true', help='停用 KD/SD/HH 物理梯度鎖定')
+    parser.add_argument('--max-positive-weight', type=float, default=None, help='限制稀有鼓件正樣本損失權重的最大值')
     args = parser.parse_args()
+    args.lock_three_class = not args.no_lock_three_class
+
     if args.self_check:
         run_self_check()
         return
@@ -160,6 +162,11 @@ def main():
     else:
         class_weights = {label: args.positive_weight for label in LABELS}
         class_event_counts = None
+    if args.max_positive_weight is not None:
+        for label in LABELS:
+            if class_weights[label] > args.max_positive_weight:
+                class_weights[label] = args.max_positive_weight
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
     transferred = load_compatible_weights(model, args.checkpoint, device)
@@ -198,6 +205,15 @@ def main():
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+            if args.lock_three_class:
+                if model.onset_head.weight.grad is not None:
+                    model.onset_head.weight.grad[:3].zero_()
+                if model.onset_head.bias.grad is not None:
+                    model.onset_head.bias.grad[:3].zero_()
+                if model.velocity_head.weight.grad is not None:
+                    model.velocity_head.weight.grad[:3].zero_()
+                if model.velocity_head.bias.grad is not None:
+                    model.velocity_head.bias.grad[:3].zero_()
             optimizer.step()
             losses.append(float(loss.item()))
             batch_number = start // args.batch_size + 1

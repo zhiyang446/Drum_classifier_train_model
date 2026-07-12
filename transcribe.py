@@ -918,15 +918,21 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
         
-    model = SymmetricDrumTCN().to(device)
     checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    
+    # 中文註解：自動偵測 checkpoint 的類別數，以支援六類模型載入並相容三類別推理。
+    num_classes = 3
+    if 'onset_head.weight' in checkpoint:
+        num_classes = checkpoint['onset_head.weight'].shape[0]
+        
+    model = SymmetricDrumTCN(num_classes=num_classes).to(device)
     if 'backbone.legacy_slot_proj.weight' in checkpoint:
         model.backbone.use_legacy_proj = True
     elif 'backbone.slot_proj.weight' in checkpoint and checkpoint['backbone.slot_proj.weight'].shape == torch.Size([64, 1024, 1, 1]):
         model.backbone.use_legacy_proj = True
         checkpoint['backbone.legacy_slot_proj.weight'] = checkpoint.pop('backbone.slot_proj.weight')
         checkpoint['backbone.legacy_slot_proj.bias'] = checkpoint.pop('backbone.slot_proj.bias')
-    model.load_state_dict(checkpoint, strict=False)
+    model.load_state_dict(checkpoint, strict=True)
     model.eval()
     print(f"Successfully loaded TCN model: {model_path}")
     
@@ -949,8 +955,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     print("Running Sequence TCN Inference...")
     with torch.no_grad():
         onset_logits, vel_logits = model(features_tensor)
-        onset_preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy() # [N_FRAMES, 3]
-        vel_preds = torch.sigmoid(vel_logits).squeeze(0).cpu().numpy() # [N_FRAMES, 3]
+        onset_preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy()[:, :3] # [N_FRAMES, 3]
+        vel_preds = torch.sigmoid(vel_logits).squeeze(0).cpu().numpy()[:, :3] # [N_FRAMES, 3]
         
     # Auto-calibrate thresholds using Maximum-Gap Peak Clustering (MGPC) or Percentile based
     def get_mgpc_thresh(prob, c_type):

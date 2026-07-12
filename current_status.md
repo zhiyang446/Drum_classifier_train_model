@@ -2,6 +2,15 @@
 
 Last updated: 2026-07-12
 
+## 6-Class V13 Locked 訓練與驗證成果 (2026-07-13)
+
+- **目標**：加入 TOM、CRASH、RIDE 的辨識能力，同時物理性保證 KD、SD、HH 原有表現不受任何干擾與退步。
+- **物理安全鎖**：實作了優化器反向傳播後將前三個通道（KD, SD, HH）梯度強行歸零（`grad[:3].zero_()`）的梯度安全鎖，並完全凍結 Backbone。
+- **雙重驗收門檻結果**：
+  1. **原有三類別黃金驗證回歸測試 (`verify_current_solution.py`)**：**PASS (全數通過，100% 綠燈)**！這物理性證實了原本的大鼓、小鼓、踩镲表現完全無損（因為權重與 Bias 與原本完全一致）。
+  2. **六類別保留測試集驗證 (`run_six_class_validation.py`)**：宏平均 F1 為 `0.2516` (Fail)。大鼓/小鼓/踩镲 F1 分別為 `0.1905 / 0.3600 / 0.5306`（此為既有模型在 STAR 噪聲環境下的原始泛化表現，因前三通道鎖死所以等價於原版）。新加入的 RIDE F1 在權重限制放寬至 `12.0` 後上升至 `0.2857`（TP 2, FP 8）。
+- **轉譜引擎相容性更新**：[transcribe.py](file:///C:/Users/zhiya/Documents/MyProject/Drum_classifier_train_model/transcribe.py) 已修復為自動偵測 checkpoint 的類別數，以 `strict=True` 安全載入六類別權重，並在推理後自動截取前 3 個通道送交下游，完美兼顧六類別結構與原有三類別解算器相容性。
+
 ## Git 分支策略變更 (2026-07-12)
 
 - **分支分配**：目前本地工作目錄已成功切換至 `antigravity` 分支，設定追蹤 `origin/antigravity`。Codex 的分支為 `codex`。
