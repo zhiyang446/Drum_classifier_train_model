@@ -59,7 +59,7 @@ def main():
     中文註解：CLI 入口，依序執行 raw acoustic、notation、hard validation 三個驗收 gate。
     """
     parser = argparse.ArgumentParser(description='Verify the accepted current drum transcription solution.')
-    parser.add_argument('--model', default='mixed_formal_kick375_snare18_hh12_candidate.pth')
+    parser.add_argument('--model', default='drum_classifier.pth')
     parser.add_argument('--blind-input', default='blind_user_tests')
     parser.add_argument('--notation-expected', default='blind_user_tests_expected.csv')
     parser.add_argument('--raw-expected', default='validation_runs/raw_acoustic_expected_physical.csv')
