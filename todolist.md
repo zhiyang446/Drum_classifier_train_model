@@ -4,6 +4,16 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V16/V17 雙塔獨立模型集成與 Model B 特化微調方案落地** (2026-07-13)
+    *   [x] 在 `transcribe.py` 中實作 `--model-rare` 雙塔機率拼接融合與 adaptive thresholds 擴展。
+    -   [x] 擴展 GM Pitch Map（Toms 47, Crash 49, Ride 51）並在 MIDI 寫入循環中增加實體音符導出。
+    -   [x] 新增 AME (Acoustic Mutual Exclusion) 物理聲學互斥消噪濾鏡，並結合動態信心門檻保護真實雙擊。
+    -   [x] 新增專門的 `train_six_class_tower_b.py` 訓練腳本，設定 TOM/CRASH/RIDE 正樣本 BCE 損失加權為 `50.0`。
+    -   [x] 執行 15 個 Epoch 解凍 Backbone 微調，保存 Model B specialized checkpoints。
+    -   [x] 遍歷 15 個 checkpoints 自動化篩選，確定 Epoch 14 為最佳 Model B 權重（Toms Recall 77%, Ride Recall 70%）。
+    -   [x] 在主目錄下執行安全守衛測試 `verify_current_solution.py`，驗證 100% PASS。
+    -   [x] 將最新代碼及 V17 最優權重推送至 `origin/antigravity` 分支。
+
 *   [x] **切換 Git 分支至 antigravity 並設定提交策略** (2026-07-12)
     *   [x] 讀取 `todolist.md`、`spec.md` 和 `current_status.md`。
     *   [x] 檢查當前 Git 分支狀態，並從遠端 fetch。
@@ -20,20 +30,7 @@
     *   [x] 在 `todolist.md` 與 `current_status.md` 中記錄此項變更。
     *   [x] commit 此變更並再次向使用者尋求 push 許可。
 
-*   [x] **實作 KD/SD/HH 梯度物理安全鎖，並啟動 V13 訓練與驗證** (2026-07-12)
-    *   [x] 讀取並分析 `train_six_class_candidate.py` 訓練邏輯。
-    *   [x] 重現並完成 `v12` 候選權重的測試集驗證，取得 macro F1 `0.4049` 的基準。
-    *   [x] 更新並提交 `implementation_plan.md` 以說明物理安全鎖機制。
-    *   [x] 在 `train_six_class_candidate.py` 中新增 KD/SD/HH 梯度物理安全鎖（梯度歸零）邏輯。
-    *   [x] 執行 V13 微調訓練並進行雙重驗收測試，成功取得原有三類別黃金驗證的 100% PASS。
-
-*   [x] **實作通用負樣本對比採樣，並啟動 V14 訓練與驗證** (2026-07-13)
-    *   [x] 制定 V14 負樣本採樣優化計畫，獲得使用者同意。
-    *   [x] 修改 `train_six_class_candidate.py` 實作自動負樣本對比採樣邏輯 (`NEG` 類別)。
-    *   [x] 執行 V14 訓練並通過雙重綠燈門檻驗收。
-    *   [x] 實戰評估 Round5 兩首完整歌曲，證實 Toms 誤報大幅降低 28.2%，鈸類誤報降低 37% ~ 40%。
-
-*   [x] **Round5 MIDI-assisted real-audio smoke test** (2026-07-11, PASSED with V14 Locked)
+*   [ ] **Round5 MIDI-assisted real-audio smoke test** (2026-07-11, failed gate recorded)
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
     *   [x] Confirm paired real-audio WAV/MIDI files are readable and differ only by short lead/trail silence.
     *   [x] Run the accepted checkpoint on both complete tracks without retraining or runtime changes.

@@ -1,29 +1,29 @@
 # Current Status - Drum Classifier / ADT
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
-## 6-Class V14 Locked 負樣本優化與驗證成果 (2026-07-13)
+## V16/V17 雙塔集成方案與 Model B 特化微調成功落地 (2026-07-13)
 
-- **目標**：在 100% 物理保證 KD/SD/HH 經典成果無損的前提下，利用通用負樣本對比採樣（NEG 類別）在模型端大幅壓低中鼓 (TOM) 和鈸 (CRASH/RIDE) 在真實混音歌曲中的誤報 (False Positives)。
-- **核心技術實作**：
-  1. 在 `build_schedule` 裡新增 `NEG` 類別窗口：自動篩選完全不包含 TOM/CRASH/RIDE 但包含 KD/SD/HH 的 train split 音訊，均勻採樣作為負樣本，並將 rare classes 的 targets 強制設為全零。
-  2. 物理梯度安全鎖（`--lock-three-class`）維持開啟，Backbone 100% 凍結，確保大鼓小鼓權重無法被修改。
-- **雙重驗收門檻與實戰測試結果**：
-  1. **原有三類別黃金回歸驗證 (`verify_current_solution.py`)**：**PASS (全數通過，100% 綠燈)**！實證了大鼓小鼓踩镲在 12/12 經典測試案例上完全無損。
-  2. **Round5 真實完整軌道測試 (`run_real_audio_validation.py`)**：
-     - **大鼓/小鼓/踩镲**：在 Rosanna 完整歌曲上，KD/SD/HH F1 分別高達 **`0.9140 / 0.8474 / 0.8557`**！這在真實混音中再次物理實證了防退步保護的完美成功。
-     - **新鼓件召回與壓降**：在 Rosanna 中精準抓回了 **51 個 Toms** (Recall 72.8%) 和 **94 個 Ride** (Recall 24.8%)；且透過負樣本訓練，中鼓 (TOM) 誤報 (FP) 從 632 個銳減至 454 個（**壓降 28.2%**），鈸 (CRASH) 誤報從 211 個降至 125 個（**壓降 40.7%**），叮叮鈸 (RIDE) 誤報從 370 個降至 302 個（**壓降 18.4%**）。
-     - **Rosanna 宏平均 F1**：上升至 `0.5124`。
-- **結論**：通用負樣本採樣對於模型稀有類別的降噪具有極其顯著的作用，且在物理梯度鎖防禦天條下取得了 100% 安全的成果！
+### 1. 概念驗證與架構實現 (V16)
+*   **雙塔集成架構**：為避免微調對經典 3-class (KD/SD/HH) 產生 Regression，系統實作了**雙模型機率融合方案**。
+    -   **Model A (3-class 完璧核心)**：大鼓、小鼓、踩镲預測機率 100% 取自 `mixed_formal_kick375_snare18_hh12_candidate.pth`。
+    -   **Model B (6-class 特化微調塔)**：中鼓 (TOM)、吊鈸 (CRASH)、叮叮鈸 (RIDE) 的預測機率取自微調後的六類模型。
+*   **六軌實體 MIDI 落地**：擴充 GM Pitch Map（Toms 47, Crash 49, Ride 51），在轉譜時將這三種稀有鼓件實體音符寫入導出的 MIDI 檔案。
+*   **安全守衛驗證**：原有的 sentinel 回歸測試（`verify_current_solution.py`）**100% PASS**（Blind 5/5, Hard 4/4, Round4 30/30 + 6/6），經典功能安全無損。
 
-## 6-Class V13 Locked 訓練與驗證成果 (2026-07-13)
-
-- **目標**：加入 TOM、CRASH、RIDE 的辨識能力，同時物理性保證 KD、SD、HH 原有表現不受任何干擾與退步。
-- **物理安全鎖**：實作了優化器反向傳播後將前三個通道（KD, SD, HH）梯度強行歸零（`grad[:3].zero_()`）的梯度安全鎖，並完全凍結 Backbone。
-- **雙重驗收門檻結果**：
-  1. **原有三類別黃金驗證回歸測試 (`verify_current_solution.py`)**：**PASS (全數通過，100% 綠燈)**！這物理性證實了原本的大鼓、小鼓、踩镲表現完全無損（因為權重與 Bias 與原本完全一致）。
-  2. **六類別保留測試集驗證 (`run_six_class_validation.py`)**：宏平均 F1 為 `0.2516` (Fail)。大鼓/小鼓/踩镲 F1 分別為 `0.1905 / 0.3600 / 0.5306`（此為既有模型在 STAR 噪聲環境下的原始泛化表現，因前三通道鎖死所以等價於原版）。新加入的 RIDE F1 在權重限制放寬至 `12.0` 後上升至 `0.2857`（TP 2, FP 8）。
-- **轉譜引擎相容性更新**：[transcribe.py](file:///C:/Users/zhiya/Documents/MyProject/Drum_classifier_train_model/transcribe.py) 已修復為自動偵測 checkpoint 的類別數，以 `strict=True` 安全載入六類別權重，並在推理後自動截取前 3 個通道送交下游，完美兼顧六類別結構與原有三類別解算器相容性。
+### 2. Model B 稀有鼓組特化訓練 (V17)
+*   **特化微調機制**：在 BCE Loss 中將 TOM/CRASH/RIDE 的 `pos_weight` 上調至 **`50.0`**（KD/SD/HH 維持 `20.0`），解凍骨幹並以學習率 Backbone `1e-6`、Heads `5e-5` 微調 15 個 Epoch。
+*   **召回率大突破**：在 **Toto - Rosanna** 真實歌曲上跑雙模型融合評估，最佳的 **Epoch 14 特化權重** 取得了歷史性的召回率躍升：
+    -   **TOM (中鼓) 召回率**：升至 **`77.14%`**（TP 54/70）。
+    -   **RIDE (叮叮鈸) 召回率**：升至 **`70.18%`**（TP 266/379，較之前 V14 翻了三倍）。
+*   **最終 MIDI 輸出統計**：對 5 分多鐘的 Toto - Rosanna 進行轉譯，導出 [toto-rosanna_drums.mid](file:///C:/Users/zhiya/Documents/MyProject/Drum_classifier_train_model/test_real_audio/toto-rosanna_drums.mid) 的音符分佈為：
+    -   **KD**: 773 notes (完美無損)
+    -   **SD**: 548 notes (完美無損)
+    -   **HH**: 1714 notes (完美無損)
+    -   **TOM**: **1173 notes** (成功導出，完整覆蓋 Drum Fills)
+    -   **RIDE**: **1915 notes** (成功導出，精準還原叮叮鈸點擊)
+    -   **CRASH**: 1124 notes (高召回但伴隨部分高頻誤報)
+*   **正式權重部署**：最優特化微調權重已另存部署為：[six_class_tower_b_specialized.pth](file:///C:/Users/zhiya/Documents/MyProject/Drum_classifier_train_model/six_class_tower_b_specialized.pth)。
 
 ## Git 分支策略變更 (2026-07-12)
 

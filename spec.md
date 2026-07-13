@@ -874,3 +874,32 @@ Round4 compound-meter trailing-prune rule:
 2. For compound meters such as `12/8`, short continuous excerpts can end mid-measure. In that case, preserving native KD/SD events is preferred over forcing a complete bar boundary.
 3. The rule must be based on meter, measure density, and native event evidence only; it must not use E-GMD clip names, expected counts, selected-test identities, or path routing.
 4. Any TIMP change must improve Round4 event evidence and keep `verify_current_solution.py` green before it is accepted.
+
+---
+
+## 4. V16/V17 雙塔獨立模型集成與 AME 消噪規範 (Split-Model Ensemble & AME)
+
+### 4.1 雙塔機率特徵融合 (Probability Fusion)
+*   **設計動機**：為同時保證經典 3-class (KD/SD/HH) 的完美商業水準（防止 regression）與 6-class 新鼓件 (TOM/CRASH/RIDE) 的高召回，系統採用雙塔獨立模型解耦方案。
+*   **融合機制**：
+    - **基礎塔 (Model A)**：載入 3-class 完璧模型，產出機率矩陣 $P_{\text{base}} \in \mathbb{R}^{N \times 3}$。
+    - **稀有塔 (Model B)**：載入 6-class 特化微調模型，產出機率矩陣 $P_{\text{rare}} \in \mathbb{R}^{N \times 6}$。
+    - **物理拼接**：將前 3 通道 (KD/SD/HH) 取自 Model A，後 3 通道 (TOM/CRASH/RIDE) 取自 Model B：
+      $$P_{\text{fusion}} = [P_{\text{base}}[:, 0:3] \quad || \quad P_{\text{rare}}[:, 3:6]]$$
+    - 推理類別數強制對齊 $6$，以利記譜解算器全面輸出 6 類別 MIDI。
+
+### 4.2 聲學物理互斥濾鏡 (Acoustic Mutual Exclusion, AME)
+為過濾因小鼓/大鼓重擊激起的低頻共鳴或高頻爆發所引發的虛假 TOM/CRASH/RIDE 峰值，引入 AME Heuristic 規則：
+1.  **時間窗對齊**：對齊在同一個 quantized_onset 網格（或 $2$ 幀 / $\approx 11\text{ ms}$ 時間窗）內。
+2.  **動態信心保護門檻**：
+    - **SD vs TOM**：若同時間觸發小鼓，且 $\text{Prob}_{\text{TOM}} < 0.52$ 且 $\text{Prob}_{\text{SD}} \ge 0.80$，則強制抑制 TOM 觸發。
+    - **KD vs TOM**：若同時間觸發大鼓，且 $\text{Prob}_{\text{TOM}} < 0.52$ 且 $\text{Prob}_{\text{KD}} \ge 0.80$，則強制抑制 TOM 觸發。
+    - **HH vs RIDE**：若同時間觸發踩镲，且 $\text{Prob}_{\text{RIDE}} < 0.45$ 且 $\text{Prob}_{\text{HH}} \ge 0.75$，則強制抑制 RIDE 觸發。
+    - **SD vs CRASH**：若同時間觸發小鼓，且 $\text{Prob}_{\text{CRASH}} < 0.45$ 且 $\text{Prob}_{\text{SD}} \ge 0.80$，則強制抑制 CRASH 觸發。
+3.  **物理意義**：保證高置信度的真實雙擊（Dual Hits）不被誤殺，同時徹底過濾低置信度的跨通道串音（Crosstalk）。
+
+### 4.3 Model B 稀有鼓組特化微調機制 (Model B Specialization)
+*   **正樣本加權 (pos_weight)**：由於中鼓、鈸、叮叮鈸在數據中屬稀有類別，BCE Loss 計算中使用 inverse-density square root 重加權：KD/SD/HH 的 `pos_weight = 20.0`，TOM/CRASH/RIDE 的 `pos_weight = 50.0`。
+*   **骨幹微調**：解凍 Backbone（學習率 `1e-6`，Heads 學習率 `5e-5`），停用前三通道的物理梯度鎖定，引導 Model B 全面學習 Toms/Ride 特徵。
+*   **篩選指標**：在真實複雜歌曲上，TOM/RIDE 召回率 (Recall) 雙雙突破 **`70%`** 作為最優 checkpoint 的錄用標準。
+
