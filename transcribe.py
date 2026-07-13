@@ -909,6 +909,62 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
     cleaned.sort(key=lambda row: row.get('quantized_onset', 0.0))
     return cleaned
 
+def apply_cymbals_adc_hygiene(onset_decisions):
+    """
+    對 Toms/Crash/Ride 進行時間密度約束 (ADC) 與鈸類互斥消噪。
+    """
+    # 1. 先處理 Crash 密度與去抖
+    last_crash_time = -999.0
+    for idx, d in enumerate(onset_decisions):
+        if not d.get('crash_triggered', False):
+            continue
+        t_curr = d['quantized_onset']
+        
+        # Debounce Guard (400ms)
+        if t_curr - last_crash_time < 0.40:
+            if d['probs'][4] < 0.68:
+                d['crash_triggered'] = False
+                continue
+                
+        # Density Guard
+        # 統計前後 1.2 秒內的 Crash 原始觸發數
+        win_crashes = []
+        for other in onset_decisions:
+            if other.get('crash_originally_triggered', False) and abs(other['quantized_onset'] - t_curr) <= 1.2:
+                win_crashes.append(other)
+        if len(win_crashes) >= 3:
+            # 密集區，只保留置信度 >= 0.70 的強擊
+            if d['probs'][4] < 0.70:
+                d['crash_triggered'] = False
+                continue
+                
+        last_crash_time = t_curr
+
+    # 2. 處理 Ride 互斥與 KD/SD crosstalk
+    for d in onset_decisions:
+        if not d.get('ride_triggered', False):
+            continue
+        t_curr = d['quantized_onset']
+        
+        # Cymbal Mutex Guard (HH 密集時，Ride 需 >= 0.65)
+        win_hhs = [other for other in onset_decisions if other.get('hh_triggered', False) and abs(other['quantized_onset'] - t_curr) <= 0.8]
+        if len(win_hhs) >= 4:
+            if d['probs'][5] < 0.65:
+                d['ride_triggered'] = False
+                continue
+                
+        # KD/SD Crosstalk Guard
+        has_strong_backbeat = False
+        if d.get('kick_triggered', False) and d['probs'][0] >= 0.80:
+            has_strong_backbeat = True
+        if d.get('snare_triggered', False) and d['probs'][1] >= 0.80:
+            has_strong_backbeat = True
+            
+        if has_strong_backbeat and d['probs'][5] < 0.52:
+            d['ride_triggered'] = False
+
+    return onset_decisions
+
 def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
@@ -2492,6 +2548,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             else:
                 intervals = int(round(d['quantized_onset'] / (beat_duration / 4.0))) if beat_duration > 0 else 0
                 d['step_16th'] = intervals
+        
+    # Apply Cymbal Acoustic Density Constraints (ADC) & Mutex Filters
+    if num_classes == 6:
+        onset_decisions = apply_cymbals_adc_hygiene(onset_decisions)
         
     # --- MIDI Generation and Debug Logging ---
     for d in onset_decisions:

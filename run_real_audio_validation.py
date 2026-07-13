@@ -127,6 +127,46 @@ def local_maxima(probabilities, threshold=0.50, sr=44100, hop_length=256, y=None
                 cleaned_crash.append(c_f)
         events['CRASH'] = cleaned_crash
         
+        # 3. Crash Density & Debounce Guard (ADC)
+        cleaned_crash = []
+        last_crash_frame = -9999
+        for c_f in events['CRASH']:
+            # Debounce Guard (400ms = 68 frames)
+            if c_f - last_crash_frame < 68:
+                if probabilities[c_f, 4] < 0.68:
+                    continue
+            # Density Guard (1.2s = 206 frames)
+            win_crashes = [other_f for other_f in events['CRASH'] if abs(other_f - c_f) <= 206]
+            if len(win_crashes) >= 3:
+                if probabilities[c_f, 4] < 0.70:
+                    continue
+            cleaned_crash.append(c_f)
+            last_crash_frame = c_f
+        events['CRASH'] = cleaned_crash
+
+        # 4. Ride Cymbal Mutex Guard & KD/SD Crosstalk Guard (ADC)
+        cleaned_ride = []
+        for r_f in events['RIDE']:
+            # Cymbal Mutex Guard (0.8s = 137 frames)
+            win_hhs = [other_f for other_f in events['HH'] if abs(other_f - r_f) <= 137]
+            if len(win_hhs) >= 4:
+                if probabilities[r_f, 5] < 0.65:
+                    continue
+            # KD/SD Crosstalk Guard
+            has_strong_backbeat = False
+            for k_f in events['KD']:
+                if abs(k_f - r_f) <= 2 and probabilities[k_f, 0] >= 0.80:
+                    has_strong_backbeat = True
+                    break
+            for s_f in events['SD']:
+                if abs(s_f - r_f) <= 2 and probabilities[s_f, 1] >= 0.80:
+                    has_strong_backbeat = True
+                    break
+            if has_strong_backbeat and probabilities[r_f, 5] < 0.52:
+                continue
+            cleaned_ride.append(r_f)
+        events['RIDE'] = cleaned_ride
+        
     time_events = {label: [] for label in LABELS}
     for label in LABELS:
         time_events[label] = [f * hop_length / float(sr) for f in events[label]]
