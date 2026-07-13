@@ -963,6 +963,27 @@ def apply_cymbals_adc_hygiene(onset_decisions):
         if has_strong_backbeat and d['probs'][5] < 0.52:
             d['ride_triggered'] = False
 
+    # 3. 處理 Toms 餘音共振 (Toms Decay Gate)
+    for d in onset_decisions:
+        if not d.get('tom_triggered', False):
+            continue
+        t_curr = d['quantized_onset']
+        
+        # 尋找前 150ms 內是否有 KD/SD 重擊
+        has_recent_strong_hit = False
+        for other in onset_decisions:
+            t_other = other['quantized_onset']
+            if 0.0 < t_curr - t_other <= 0.15:
+                if other.get('kick_triggered', False) and other['probs'][0] >= 0.80:
+                    has_recent_strong_hit = True
+                    break
+                if other.get('snare_triggered', False) and other['probs'][1] >= 0.80:
+                    has_recent_strong_hit = True
+                    break
+                    
+        if has_recent_strong_hit and d['probs'][3] < 0.65:
+            d['tom_triggered'] = False
+
     return onset_decisions
 
 def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False):
@@ -1669,6 +1690,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         
     # Apply grid quantization
     time_offset = 0.0
+    aligned_first_onset = 0.0
     first_onset = onset_times[0] if len(onset_times) > 0 else 0.0
     if len(onset_times) > 0:
         for idx, t in enumerate(onset_frames):
@@ -1698,35 +1720,98 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         # Calculate minimum raw gap between onsets to detect rapid consecutive hits (like rolls/flams/32nd notes)
         min_raw_gap = np.min(np.diff(onset_times)) if len(onset_times) > 1 else float('inf')
         
-        if active_grid == 'triplet':
-            triplet_dur = beat_duration / 3.0
-            if min_raw_gap < 0.65 * triplet_dur:
-                grid_duration = beat_duration / 6.0 # 24th notes (triplet 16ths)
-                print(f"Applying Triplet 16th-note grid quantization (rapid notes detected, grid spacing: {grid_duration:.4f}s).")
-            else:
-                grid_duration = triplet_dur
-                print(f"Applying Triplet grid quantization (grid spacing: {grid_duration:.4f}s).")
-        elif active_grid == 'swung_16th':
-            grid_duration = beat_duration / 6.0
-            print(f"Applying Swung 16th grid quantization (grid spacing: {grid_duration:.4f}s).")
-        else: # '16th'
-            sixteenth_dur = beat_duration / 4.0
-            if min_raw_gap < 0.65 * sixteenth_dur:
-                grid_duration = beat_duration / 8.0 # 32nd notes
-                print(f"Applying Straight 32nd-note grid quantization (rapid notes detected, grid spacing: {grid_duration:.4f}s).")
-            else:
-                grid_duration = sixteenth_dur
-                print(f"Applying Straight 16th-note grid quantization (grid spacing: {grid_duration:.4f}s).")
+        if model_rare_path is not None:
+            # --- Local Time-Varying Grid Quantization (ADC) ---
+            t_meas = 4.0 * beat_duration
+            quantized_times = []
             
-        first_onset_beat = 0
-        aligned_first_onset = 0.0
-        
-        quantized_times = []
-        for t in onset_times:
-            intervals = round((t - first_onset) / grid_duration)
-            quantized_t = aligned_first_onset + intervals * grid_duration
-            quantized_times.append(quantized_t)
-        quantized_times = np.array(quantized_times)
+            # Pre-calculate dominant quantization grid style per measure window
+            measure_grids = {}
+            max_t = max(onset_times) if len(onset_times) > 0 else 100.0
+            num_measures = int(np.ceil((max_t - first_onset) / t_meas)) + 1
+            
+            for m in range(num_measures):
+                m_start = first_onset + m * t_meas
+                m_end = m_start + t_meas
+                m_onsets = [t for t in onset_times if m_start <= t < m_end]
+                
+                if len(m_onsets) >= 3:
+                    dist_trip = []
+                    dist_straight = []
+                    for t in m_onsets:
+                        beat_val = (t - first_onset) / beat_duration
+                        phase_t = beat_val % 1.0
+                        p_trip = phase_t * 3
+                        dist_trip.append(abs(p_trip - round(p_trip)))
+                        p_straight = phase_t * 4
+                        dist_straight.append(abs(p_straight - round(p_straight)))
+                        
+                    avg_trip = np.mean(dist_trip)
+                    avg_straight = np.mean(dist_straight)
+                    
+                    # If triplet grid has significantly lower quantization distance
+                    if avg_trip < 0.08 and avg_trip < avg_straight:
+                        measure_grids[m] = 'triplet'
+                    else:
+                        measure_grids[m] = '16th'
+                else:
+                    measure_grids[m] = measure_grids.get(m - 1, active_grid if active_grid in ['16th', 'triplet'] else '16th')
+
+            # Quantize each onset based on its local measure grid duration
+            for t in onset_times:
+                m = int(np.floor((t - first_onset) / t_meas))
+                m = max(0, m)
+                grid_style = measure_grids.get(m, '16th')
+                
+                m_start = first_onset + m * t_meas
+                m_end = m_start + t_meas
+                m_onsets = [other for other in onset_times if m_start <= other < m_end]
+                m_min_gap = np.min(np.diff(m_onsets)) if len(m_onsets) > 1 else float('inf')
+                
+                if grid_style == 'triplet':
+                    triplet_dur = beat_duration / 3.0
+                    if m_min_gap < 0.65 * triplet_dur:
+                        local_grid_duration = beat_duration / 6.0
+                    else:
+                        local_grid_duration = triplet_dur
+                else: # '16th'
+                    sixteenth_dur = beat_duration / 4.0
+                    if m_min_gap < 0.65 * sixteenth_dur:
+                        local_grid_duration = beat_duration / 8.0
+                    else:
+                        local_grid_duration = sixteenth_dur
+                        
+                intervals = round((t - first_onset) / local_grid_duration)
+                quantized_t = aligned_first_onset + intervals * local_grid_duration
+                quantized_times.append(quantized_t)
+                
+            quantized_times = np.array(quantized_times)
+            grid_duration = beat_duration / 4.0
+        else:
+            # --- Classic Static Quantization ---
+            if active_grid == 'triplet':
+                triplet_dur = beat_duration / 3.0
+                if min_raw_gap < 0.65 * triplet_dur:
+                    grid_duration = beat_duration / 6.0
+                else:
+                    grid_duration = triplet_dur
+            elif active_grid == 'swung_16th':
+                grid_duration = beat_duration / 6.0
+            else: # '16th'
+                sixteenth_dur = beat_duration / 4.0
+                if min_raw_gap < 0.65 * sixteenth_dur:
+                    grid_duration = beat_duration / 8.0
+                else:
+                    grid_duration = sixteenth_dur
+                
+            first_onset_beat = 0
+            
+            quantized_times = []
+            for t in onset_times:
+                intervals = round((t - first_onset) / grid_duration)
+                quantized_t = aligned_first_onset + intervals * grid_duration
+                quantized_times.append(quantized_t)
+            quantized_times = np.array(quantized_times)
         
     # 5. Initialize MIDI with tempo and time signature metadata
     pm = pretty_midi.PrettyMIDI(initial_tempo=estimated_tempo)
@@ -2458,7 +2543,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 print("[Ghost Snare Recovery] Restored one low-level offbeat snare candidate.")
 
     # --- Acoustic Mutual Exclusion (AME) Heuristics ---
-    if num_classes == 6:
+    if model_rare_path is not None:
         suppressed_toms = 0
         suppressed_rides = 0
         suppressed_crashes = 0
@@ -2550,7 +2635,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 d['step_16th'] = intervals
         
     # Apply Cymbal Acoustic Density Constraints (ADC) & Mutex Filters
-    if num_classes == 6:
+    if model_rare_path is not None:
         onset_decisions = apply_cymbals_adc_hygiene(onset_decisions)
         
     # --- MIDI Generation and Debug Logging ---
@@ -2589,7 +2674,18 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             event_triggered = True
             
         if d['hh_triggered']:
-            hh_pitch = 44 if enable_snare_roll else pitch_map[2]
+            if enable_snare_roll:
+                hh_pitch = 44
+            elif model_rare_path is not None:
+                t = d['frame']
+                t_energy = np.mean(features[0, 154:256, t])
+                decay_frame = min(n_frames - 1, t + 30)
+                decay_energy = np.mean(features[0, 154:256, decay_frame])
+                is_open = (decay_energy - t_energy >= -16.0)
+                hh_pitch = 46 if is_open else 42
+            else:
+                hh_pitch = pitch_map[2]
+                
             note = pretty_midi.Note(
                 velocity=d.get('vel_hihat', int(d['probs'][2] * 127)),
                 pitch=hh_pitch,
@@ -2601,7 +2697,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             total_notes_count += 1
             event_triggered = True
             
-        if num_classes == 6:
+        if model_rare_path is not None:
             if d.get('tom_triggered', False):
                 note = pretty_midi.Note(
                     velocity=d.get('vel_tom', int(d['probs'][3] * 127)),

@@ -167,6 +167,24 @@ def local_maxima(probabilities, threshold=0.50, sr=44100, hop_length=256, y=None
             cleaned_ride.append(r_f)
         events['RIDE'] = cleaned_ride
         
+        # 5. Toms Decay Gate (ADC)
+        cleaned_tom = []
+        for t_f in events['TOM']:
+            has_recent_strong_hit = False
+            for k_f in events['KD']:
+                if 0 < t_f - k_f <= 26 and probabilities[k_f, 0] >= 0.80:
+                    has_recent_strong_hit = True
+                    break
+            if not has_recent_strong_hit:
+                for s_f in events['SD']:
+                    if 0 < t_f - s_f <= 26 and probabilities[s_f, 1] >= 0.80:
+                        has_recent_strong_hit = True
+                        break
+            if has_recent_strong_hit and probabilities[t_f, 3] < 0.65:
+                continue
+            cleaned_tom.append(t_f)
+        events['TOM'] = cleaned_tom
+        
     time_events = {label: [] for label in LABELS}
     for label in LABELS:
         time_events[label] = [f * hop_length / float(sr) for f in events[label]]
