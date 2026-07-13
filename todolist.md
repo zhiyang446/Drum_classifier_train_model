@@ -4,6 +4,14 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V20 鈸類時間密度約束 (ADC) 與互斥消噪濾鏡方案落地** (2026-07-13)
+    *   [x] 在 `transcribe.py` 中實作時間級 `apply_cymbals_adc_hygiene` 鈸類消噪濾鏡。
+    -   [x] 在 `run_real_audio_validation.py` 中實作 frame 級 cymbals ADC 濾波器以保持評估器大腦同步。
+    -   [x] 引入 Crash 去抖防護與 1.2s 局部密度防護，強勢抹除密集區 Hi-Hat 串音 FP。
+    -   [x] 引入 Hi-Hat / Ride 專屬互斥 Cymbal Mutex 規則，過濾踩镲亮泛音激發的 Ride 雜訊。
+    -   [x] 執行安全守衛測試 `verify_current_solution.py` 獲得 100% 綠燈，確認完璧核心零 Regression。
+    -   [x] 將最新代碼推送至遠端 `antigravity` 分支。
+
 *   [x] **V18/V19 自動對齊評估與自適應小鼓動態感知方案落地** (2026-07-13)
     *   [x] 實作 `run_batch_real_audio_validation.py` 中的自動互相關對齊器 (Auto-Aligner)。
     -   [x] 執行 5 首歌曲的批量自動對齊評估，成功修正 `Blue` 等真實歌曲的數據失真。

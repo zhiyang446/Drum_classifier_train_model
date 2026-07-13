@@ -927,3 +927,17 @@ Round4 compound-meter trailing-prune rule:
     - 預設 (False) 時完全套用經典正向自適應公式，保證原有安全守衛哨兵回歸測試 **100% PASS (零 Regression)**。
     - 開啟 (True) 時激活新動態反轉曲線，提升真實複雜歌曲的小鼓召回與泛化度。
 
+---
+
+## 6. V20 鈸類時間密度約束與互斥消噪 (Cymbal ADC & Mutex Filters)
+
+### 6.1 Crash 時間密度與去抖約束 (Crash Density & Debounce Guard)
+*   **去抖防護 (Debounce)**：限制吊鈸 (Crash) 的物理擊打間隔不得小於 $400\text{ ms}$。低置信度（$\text{Prob}_{\text{CRASH}} < 0.68$）的過快觸發將被強制抹除。
+*   **密度防護 (Density)**：當檢測到 $1.2\text{ s}$ 內有多個 Crash 觸發（$\ge 3$ 次）的密集區時，系統自動將門檻上調至 $0.70$，僅保留高強度的真吊鈸擊打，抹除 HH 高頻引發的虛警。
+
+### 6.2 Hi-Hat / Ride 鈸類專屬互斥防護 (Cymbal Mutex Guard)
+*   **互斥機制**：當檢測到前後 $0.8\text{ s}$ 內有密集的踩镲擊打（$\ge 4$ 次）時，說明鼓手處於 Hi-Hat 律動型中，此時 Ride 觸發的置信度門檻強制調升至 $0.65$，徹底切除由踩镲亮泛音激發的 Ride FP。
+
+### 6.3 大鼓 / 小鼓重擊後共振抑制 (KD/SD Crosstalk Guard for Ride)
+*   **共振抑制**：若 Ride 觸發與強大鼓（$\text{Prob}_{\text{KD}} \ge 0.80$）或強小鼓（$\text{Prob}_{\text{SD}} \ge 0.80$）在 50ms 內重合，且 Ride 的置信度偏低（$\text{Prob}_{\text{RIDE}} < 0.52$），則強制抹除該 Ride。防止鼓皮重擊共鳴引發的高頻虛假共鳴。
+
