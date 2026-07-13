@@ -941,3 +941,26 @@ Round4 compound-meter trailing-prune rule:
 ### 6.3 大鼓 / 小鼓重擊後共振抑制 (KD/SD Crosstalk Guard for Ride)
 *   **共振抑制**：若 Ride 觸發與強大鼓（$\text{Prob}_{\text{KD}} \ge 0.80$）或強小鼓（$\text{Prob}_{\text{SD}} \ge 0.80$）在 50ms 內重合，且 Ride 的置信度偏低（$\text{Prob}_{\text{RIDE}} < 0.52$），則強制抹除該 Ride。防止鼓皮重擊共鳴引發的高頻虛假共鳴。
 
+---
+
+## 7. V21 商業級三大核心死角攻堅 (The Three Commercial Upgrades)
+
+### 7.1 Toms 餘音門檻去噪器 (Toms Decay Gate)
+*   **物理邏輯**：大/小鼓重擊時，強烈的鼓皮物理共振會二次激發中鼓 (Tom) 通道。
+*   **去噪規則**：大鼓（$\text{Prob}_{\text{KD}} \ge 0.80$）或小鼓（$\text{Prob}_{\text{SD}} \ge 0.80$）擊打後的 $150\text{ ms}$（約 26 幀）窗口內，若 Tom 觸發置信度低於 $0.65$，則視為假共振並予以物理抹除。
+
+### 7.2 Hi-Hat 開合狀態檢測器 (HH Open/Closed Detector)
+*   **高頻衰減**：踩镲觸發點 $t$，計算 $5\text{kHz}$ 以上高頻在 $170\text{ ms}$（30 幀）內的衰減特徵：
+    $$\text{Decay} = E_{\text{high}}(t+30) - E_{\text{high}}(t)$$
+*   **狀態分類**：若 $\text{Decay} \ge -16\text{ dB}$（衰減緩慢，金屬餘音仍在），輸出 **Open HH (GM 46)**，否則輸出 **Closed HH (GM 42)**。
+
+### 7.3 時變局部網格感知器 (Local Adaptive Grid)
+*   **小節感知**：將整首歌按小節分割（每小節為 $4 \times \text{beat\_duration}$ 秒）。
+*   **動態判定**：對每個小節，根據 Onset 擊點相對於拍點的直拍 16th 與三連音 triplet 判定距離之均值比較，動態選取優勢網格，解決混合拍子（Swinging/Straight 切換）的量化歪斜。
+
+### 7.4 model_rare_path 物理隔離安全屏障
+*   **Feature Toggle 物理隔離**：為了徹底杜絕新增功能破壞 3-class 完璧核心的 expected 比對數據：
+    - 只有當 CLI 傳入 `--model-rare`（雙塔模式，`model_rare_path is not None`）時，才激活**時變局部網格、踩镲開合檢測、AME Heuristics 與鈸類 ADC 濾波器**。
+    - 預設 (3-class) 模式下，上述新後處理組件全數退出，維持最精純的 3-class 回歸基準。
+
+

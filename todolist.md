@@ -4,6 +4,14 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V21 商業級三大核心死角（Toms去噪、HH開合、時變量化）方案落地** (2026-07-13)
+    *   [x] 在 `transcribe.py` 的 `apply_cymbals_adc_hygiene` 中實作 Toms 餘音去噪 Heuristics。
+    -   [x] 在 `run_real_audio_validation.py` 中實作 frame 級 Toms Decay Gate 保持評估對齊。
+    -   [x] 在 `transcribe.py` 中分析高頻能量衰減斜率，實現 Open/Closed HH 開合狀態檢測。
+    -   [x] 重構量化對齊模組，引入小節窗動態時變局部量化網格。
+    -   [x] 引入 `model_rare_path` 作為 Feature Toggle 物理安全屏障，確保 3-class 回歸測試 100% 綠燈。
+    -   [x] 將最新代碼推送至遠端 `antigravity` 分支。
+
 *   [x] **V20 鈸類時間密度約束 (ADC) 與互斥消噪濾鏡方案落地** (2026-07-13)
     *   [x] 在 `transcribe.py` 中實作時間級 `apply_cymbals_adc_hygiene` 鈸類消噪濾鏡。
     -   [x] 在 `run_real_audio_validation.py` 中實作 frame 級 cymbals ADC 濾波器以保持評估器大腦同步。
