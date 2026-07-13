@@ -4,6 +4,14 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V18/V19 自動對齊評估與自適應小鼓動態感知方案落地** (2026-07-13)
+    *   [x] 實作 `run_batch_real_audio_validation.py` 中的自動互相關對齊器 (Auto-Aligner)。
+    -   [x] 執行 5 首歌曲的批量自動對齊評估，成功修正 `Blue` 等真實歌曲的數據失真。
+    -   [x] 分析大音量段落漏檢原因，將小鼓門檻調整為溫和動態翻轉曲線 `threshold - 0.12 + 0.16 * rms_db_norm`。
+    -   [x] 引入 `--adaptive-snare` CLI 參數 Feature Toggle，完美實現動態消噪與經典完璧核心的安全隔離。
+    -   [x] 執行安全守衛測試 `verify_current_solution.py` 獲得 100% 綠燈，確認零 Regression。
+    -   [x] 將最新代碼推送至遠端 `antigravity` 分支。
+
 *   [x] **V16/V17 雙塔獨立模型集成與 Model B 特化微調方案落地** (2026-07-13)
     *   [x] 在 `transcribe.py` 中實作 `--model-rare` 雙塔機率拼接融合與 adaptive thresholds 擴展。
     -   [x] 擴展 GM Pitch Map（Toms 47, Crash 49, Ride 51）並在 MIDI 寫入循環中增加實體音符導出。

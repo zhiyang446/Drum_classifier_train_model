@@ -903,3 +903,27 @@ Round4 compound-meter trailing-prune rule:
 *   **骨幹微調**：解凍 Backbone（學習率 `1e-6`，Heads 學習率 `5e-5`），停用前三通道的物理梯度鎖定，引導 Model B 全面學習 Toms/Ride 特徵。
 *   **篩選指標**：在真實複雜歌曲上，TOM/RIDE 召回率 (Recall) 雙雙突破 **`70%`** 作為最優 checkpoint 的錄用標準。
 
+---
+
+## 5. V18/V19 自動對齊評估與小鼓自適應動態門檻 (Auto-Aligner & Adaptive Snare)
+
+### 5.1 First-Kick 互相關自動對齊 (Auto-Aligner)
+*   **設計動機**：為排除真實歌曲 MIDI 與音訊前綴空白不一致導致的「對齊偏移失真（假零分）」。
+*   **演算法流程**：
+    1. **粗對齊 (First-Kick Coarse)**：獲取預測大鼓序列與真值大鼓序列的前三個擊點，計算其平均差值作為 coarse offset。
+    2. **細搜尋 (Local Fine Grid Search)**：在 coarse offset 附近 $\pm 300\text{ ms}$ 的時間窗口內，以 $5\text{ ms}$ 步長滑動搜尋。
+    3. **黃金偏移判定**：計算 50ms 容差內大鼓 TP 數最大的那個 offset，作為該首真實歌曲的最優評估對齊 Offset。
+
+### 5.2 小鼓自適應動態門檻反轉 (Adaptive Snare Thresholding)
+*   **設計動機**：高壓縮流行樂中，RMS 能量始終偏高。舊公式在大音量時降低小鼓門檻會引入大量 FP 噪音，安靜時調高門檻則會漏檢 Ghost notes。
+*   **反轉自適應公式**：
+    $$\text{Thresh}_{\text{Snare}} = \text{clip}(\text{Thresh}_{\text{base}} - 0.12 + 0.16 \times \text{RMS}_{\text{norm}}, \quad 0.26, \quad 0.45)$$
+    - **安靜段落 (Low RMS)**：門檻自動拉低至 $0.26$，極大捕獲弱音裝飾音 (Ghost Notes)。
+    - **嘈雜段落 (High RMS)**：門檻安全調升至 $0.45$，穩健過濾 crosstalk 跨通道噪音。
+
+### 5.3 CLI Feature Toggle 隔離設計
+*   **CLI 參數**：`--adaptive-snare`（布林開關，預設關閉）。
+*   **安全隔離**：
+    - 預設 (False) 時完全套用經典正向自適應公式，保證原有安全守衛哨兵回歸測試 **100% PASS (零 Regression)**。
+    - 開啟 (True) 時激活新動態反轉曲線，提升真實複雜歌曲的小鼓召回與泛化度。
+
