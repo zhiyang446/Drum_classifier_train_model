@@ -909,32 +909,38 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
     cleaned.sort(key=lambda row: row.get('quantized_onset', 0.0))
     return cleaned
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     
     # 1. Load exactly the checkpoint requested by the caller.
     # 中文註解：不依音檔路徑切換模型，避免 regression/user blind 特判掩蓋真實能力。
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}")
-        
-    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    def init_and_load_model(ckpt_path):
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError(f"Model file not found: {ckpt_path}")
+        checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+        n_classes = 3
+        if 'onset_head.weight' in checkpoint:
+            n_classes = checkpoint['onset_head.weight'].shape[0]
+        net = SymmetricDrumTCN(num_classes=n_classes).to(device)
+        if 'backbone.legacy_slot_proj.weight' in checkpoint:
+            net.backbone.use_legacy_proj = True
+        elif 'backbone.slot_proj.weight' in checkpoint and checkpoint['backbone.slot_proj.weight'].shape == torch.Size([64, 1024, 1, 1]):
+            net.backbone.use_legacy_proj = True
+            checkpoint['backbone.legacy_slot_proj.weight'] = checkpoint.pop('backbone.slot_proj.weight')
+            checkpoint['backbone.legacy_slot_proj.bias'] = checkpoint.pop('backbone.slot_proj.bias')
+        net.load_state_dict(checkpoint, strict=True)
+        net.eval()
+        return net, n_classes
+
+    model, num_classes = init_and_load_model(model_path)
+    print(f"Successfully loaded TCN model: {model_path} (classes={num_classes})")
     
-    # 中文註解：自動偵測 checkpoint 的類別數，以支援六類模型載入並相容三類別推理。
-    num_classes = 3
-    if 'onset_head.weight' in checkpoint:
-        num_classes = checkpoint['onset_head.weight'].shape[0]
-        
-    model = SymmetricDrumTCN(num_classes=num_classes).to(device)
-    if 'backbone.legacy_slot_proj.weight' in checkpoint:
-        model.backbone.use_legacy_proj = True
-    elif 'backbone.slot_proj.weight' in checkpoint and checkpoint['backbone.slot_proj.weight'].shape == torch.Size([64, 1024, 1, 1]):
-        model.backbone.use_legacy_proj = True
-        checkpoint['backbone.legacy_slot_proj.weight'] = checkpoint.pop('backbone.slot_proj.weight')
-        checkpoint['backbone.legacy_slot_proj.bias'] = checkpoint.pop('backbone.slot_proj.bias')
-    model.load_state_dict(checkpoint, strict=True)
-    model.eval()
-    print(f"Successfully loaded TCN model: {model_path}")
+    model_rare = None
+    num_classes_rare = 0
+    if model_rare_path:
+        model_rare, num_classes_rare = init_and_load_model(model_rare_path)
+        print(f"Successfully loaded rare TCN model: {model_rare_path} (classes={num_classes_rare})")
     
     beats_per_measure = 4.0 # Temporary default, will be auto-detected or updated below
     
@@ -954,9 +960,34 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     
     print("Running Sequence TCN Inference...")
     with torch.no_grad():
-        onset_logits, vel_logits = model(features_tensor)
-        onset_preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy()[:, :3] # [N_FRAMES, 3]
-        vel_preds = torch.sigmoid(vel_logits).squeeze(0).cpu().numpy()[:, :3] # [N_FRAMES, 3]
+        if model_rare is not None:
+            onset_logits_base, vel_logits_base = model(features_tensor)
+            onset_logits_rare, vel_logits_rare = model_rare(features_tensor)
+            
+            base_p = torch.sigmoid(onset_logits_base).squeeze(0).cpu().numpy()
+            rare_p = torch.sigmoid(onset_logits_rare).squeeze(0).cpu().numpy()
+            base_v = torch.sigmoid(vel_logits_base).squeeze(0).cpu().numpy()
+            rare_v = torch.sigmoid(vel_logits_rare).squeeze(0).cpu().numpy()
+            
+            # 中文註解：雙塔機率特徵融合 (Probability Fusion)
+            onset_preds = np.zeros((base_p.shape[0], 6), dtype=np.float32)
+            onset_preds[:, :3] = base_p[:, :3]
+            onset_preds[:, 3:6] = rare_p[:, 3:6]
+            
+            vel_preds = np.zeros((base_v.shape[0], 6), dtype=np.float32)
+            vel_preds[:, :3] = base_v[:, :3]
+            vel_preds[:, 3:6] = rare_v[:, 3:6]
+            
+            # 強制將推理類別數設為 6，以利啟用後續六類別解算器
+            num_classes = 6
+        else:
+            onset_logits, vel_logits = model(features_tensor)
+            if num_classes == 6:
+                onset_preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy()
+                vel_preds = torch.sigmoid(vel_logits).squeeze(0).cpu().numpy()
+            else:
+                onset_preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy()[:, :3]
+                vel_preds = torch.sigmoid(vel_logits).squeeze(0).cpu().numpy()[:, :3]
         
     # Auto-calibrate thresholds using Maximum-Gap Peak Clustering (MGPC) or Percentile based
     def get_mgpc_thresh(prob, c_type):
@@ -1007,18 +1038,24 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 peaks.append(p_chan[t])
         return np.array(peaks)
 
-    calibrated_thresholds = [0.50, 0.50, 0.50]
-    for c in range(3):
-        calibrated_thresholds[c] = get_mgpc_thresh(onset_preds[:, c], c)
+    calibrated_thresholds = [0.50] * num_classes
+    for c in range(num_classes):
+        calibrated_thresholds[c] = get_mgpc_thresh(onset_preds[:, c], min(2, c))
 
     t_k = thresh_kick if thresh_kick is not None else calibrated_thresholds[0]
     t_s = thresh_snare if thresh_snare is not None else calibrated_thresholds[1]
     t_h = thresh_hihat if thresh_hihat is not None else calibrated_thresholds[2]
 
+    thresholds = {}
     if threshold is not None:
-        thresholds = {0: threshold, 1: threshold, 2: threshold}
+        for c in range(num_classes):
+            thresholds[c] = threshold
     else:
-        thresholds = {0: t_k, 1: t_s, 2: t_h}
+        thresholds[0] = t_k
+        thresholds[1] = t_s
+        thresholds[2] = t_h
+        for c in range(3, num_classes):
+            thresholds[c] = calibrated_thresholds[c]
         
     # Calculate local RMS energy for adaptive dynamic thresholding
     n_frames = len(onset_preds)
@@ -1040,6 +1077,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     thresh_array_s = np.clip(thresholds[1] + (0.08 - 0.16 * rms_db_norm), 0.25, 0.75)
     thresh_array_h = np.clip(thresholds[2] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
     
+    if num_classes == 6:
+        thresh_array_tom = np.clip(thresholds[3] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
+        thresh_array_crash = np.clip(thresholds[4] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
+        thresh_array_ride = np.clip(thresholds[5] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
+        
     print(f"[Adaptive Thresholds] Dynamic range (KD): {np.min(thresh_array_k):.2f} to {np.max(thresh_array_k):.2f}")
     print(f"[Adaptive Thresholds] Dynamic range (SD): {np.min(thresh_array_s):.2f} to {np.max(thresh_array_s):.2f}")
     print(f"[Adaptive Thresholds] Dynamic range (HH): {np.min(thresh_array_h):.2f} to {np.max(thresh_array_h):.2f}")
@@ -1074,8 +1116,16 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     snare_peaks = get_peaks(onset_preds[:, 1], thresh_array_s)
     hh_peaks = get_peaks(onset_preds[:, 2], thresh_array_h)
     
+    tom_peaks = []
+    crash_peaks = []
+    ride_peaks = []
+    if num_classes == 6:
+        tom_peaks = get_peaks(onset_preds[:, 3], thresh_array_tom)
+        crash_peaks = get_peaks(onset_preds[:, 4], thresh_array_crash)
+        ride_peaks = get_peaks(onset_preds[:, 5], thresh_array_ride)
+    
     # Union of all peak frames is our candidate list
-    onset_frames = sorted(list(set(kick_peaks + snare_peaks + hh_peaks)))
+    onset_frames = sorted(list(set(kick_peaks + snare_peaks + hh_peaks + tom_peaks + crash_peaks + ride_peaks)))
     
     # Apply sub-frame parabolic interpolation to find precise onset_times
     onset_times = []
@@ -1084,6 +1134,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         if t in kick_peaks: active_channels.append(0)
         if t in snare_peaks: active_channels.append(1)
         if t in hh_peaks: active_channels.append(2)
+        if num_classes == 6:
+            if t in tom_peaks: active_channels.append(3)
+            if t in crash_peaks: active_channels.append(4)
+            if t in ride_peaks: active_channels.append(5)
         
         if not active_channels:
             active_channels = [np.argmax(onset_preds[t, :])]
@@ -1625,7 +1679,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     pitch_map = {
         0: 36, # Kick
         1: 38, # Snare
-        2: 42  # Hi-Hat
+        2: 42, # Hi-Hat
+        3: 47, # Tom
+        4: 49, # Crash
+        5: 51  # Ride
     }
     
     transcribed_events_count = 0
@@ -1649,6 +1706,17 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         vel_snare = int(np.clip(np.max(vel_pool_s) * 127.0, 1, 127))
         vel_hihat = int(np.clip(np.max(vel_pool_h) * 127.0, 1, 127))
         
+        vel_tom = 0
+        vel_crash = 0
+        vel_ride = 0
+        if num_classes == 6:
+            vel_pool_tom = vel_preds[max(0, t-2):min(len(vel_preds), t+3), 3]
+            vel_pool_crash = vel_preds[max(0, t-2):min(len(vel_preds), t+3), 4]
+            vel_pool_ride = vel_preds[max(0, t-2):min(len(vel_preds), t+3), 5]
+            vel_tom = int(np.clip(np.max(vel_pool_tom) * 127.0, 1, 127))
+            vel_crash = int(np.clip(np.max(vel_pool_crash) * 127.0, 1, 127))
+            vel_ride = int(np.clip(np.max(vel_pool_ride) * 127.0, 1, 127))
+        
         # Heuristics map low_rise and mid_rise to the regression velocities
         low_rise = vel_preds[t, 0] * 127.0
         mid_rise = vel_preds[t, 1] * 127.0
@@ -1656,9 +1724,18 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         kick_triggered = t in kick_peaks
         snare_triggered = t in snare_peaks
         hh_triggered = t in hh_peaks
+        
+        tom_triggered = t in tom_peaks if num_classes == 6 else False
+        crash_triggered = t in crash_peaks if num_classes == 6 else False
+        ride_triggered = t in ride_peaks if num_classes == 6 else False
+        
         kick_threshold = thresh_array_k[t]
         snare_threshold = thresh_array_s[t]
         hh_threshold = thresh_array_h[t]
+        
+        tom_threshold = thresh_array_tom[t] if num_classes == 6 else 0.50
+        crash_threshold = thresh_array_crash[t] if num_classes == 6 else 0.50
+        ride_threshold = thresh_array_ride[t] if num_classes == 6 else 0.50
         
         # High frequency energy slices from Channel 1 (Log-Mel spectrogram)
         # Custom hybrid scale: 40% of 256 filters above 5kHz = indices 154 to 255.
@@ -1677,12 +1754,21 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             'vel_kick': vel_kick,
             'vel_snare': vel_snare,
             'vel_hihat': vel_hihat,
+            'vel_tom': vel_tom,
+            'vel_crash': vel_crash,
+            'vel_ride': vel_ride,
             'kick_triggered': kick_triggered,
             'snare_triggered': snare_triggered,
             'hh_triggered': hh_triggered,
+            'tom_triggered': tom_triggered,
+            'crash_triggered': crash_triggered,
+            'ride_triggered': ride_triggered,
             'kick_thresh': kick_threshold,
             'snare_thresh': snare_threshold,
             'hh_thresh': hh_threshold,
+            'tom_thresh': tom_threshold,
+            'crash_thresh': crash_threshold,
+            'ride_thresh': ride_threshold,
             'hf_energy': hf_energy,
             'global_hf_energy': global_hf_energy,
             'is_virtual_kd': False,
@@ -1690,7 +1776,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             'is_virtual_hh': False,
             'kick_originally_triggered': kick_triggered,
             'snare_originally_triggered': snare_triggered,
-            'hh_originally_triggered': hh_triggered
+            'hh_originally_triggered': hh_triggered,
+            'tom_originally_triggered': tom_triggered,
+            'crash_originally_triggered': crash_triggered,
+            'ride_originally_triggered': ride_triggered
         })
 
     # Deduplicate and merge onset decisions that share the same quantized_onset (grid point)
@@ -1708,14 +1797,23 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             existing['vel_kick'] = max(existing.get('vel_kick', 0), d.get('vel_kick', 0))
             existing['vel_snare'] = max(existing.get('vel_snare', 0), d.get('vel_snare', 0))
             existing['vel_hihat'] = max(existing.get('vel_hihat', 0), d.get('vel_hihat', 0))
+            existing['vel_tom'] = max(existing.get('vel_tom', 0), d.get('vel_tom', 0))
+            existing['vel_crash'] = max(existing.get('vel_crash', 0), d.get('vel_crash', 0))
+            existing['vel_ride'] = max(existing.get('vel_ride', 0), d.get('vel_ride', 0))
             existing['kick_triggered'] = existing['kick_triggered'] or d['kick_triggered']
             existing['snare_triggered'] = existing['snare_triggered'] or d['snare_triggered']
             existing['hh_triggered'] = existing['hh_triggered'] or d['hh_triggered']
+            existing['tom_triggered'] = existing.get('tom_triggered', False) or d.get('tom_triggered', False)
+            existing['crash_triggered'] = existing.get('crash_triggered', False) or d.get('crash_triggered', False)
+            existing['ride_triggered'] = existing.get('ride_triggered', False) or d.get('ride_triggered', False)
             existing['frames'] = sorted(set(existing.get('frames', []) + d.get('frames', [])))
             existing['frame'] = existing.get('frame', d.get('frame'))
             existing['kick_thresh'] = min(existing.get('kick_thresh', d.get('kick_thresh', 0.0)), d.get('kick_thresh', 0.0))
             existing['snare_thresh'] = min(existing.get('snare_thresh', d.get('snare_thresh', 0.0)), d.get('snare_thresh', 0.0))
             existing['hh_thresh'] = min(existing.get('hh_thresh', d.get('hh_thresh', 0.0)), d.get('hh_thresh', 0.0))
+            existing['tom_thresh'] = min(existing.get('tom_thresh', d.get('tom_thresh', 0.0)), d.get('tom_thresh', 0.0))
+            existing['crash_thresh'] = min(existing.get('crash_thresh', d.get('crash_thresh', 0.0)), d.get('crash_thresh', 0.0))
+            existing['ride_thresh'] = min(existing.get('ride_thresh', d.get('ride_thresh', 0.0)), d.get('ride_thresh', 0.0))
             existing['hf_energy'] = max(existing.get('hf_energy', -80.0), d.get('hf_energy', -80.0))
             existing['global_hf_energy'] = max(existing.get('global_hf_energy', -80.0), d.get('global_hf_energy', -80.0))
             existing['is_virtual_kd'] = existing.get('is_virtual_kd', False) or d.get('is_virtual_kd', False)
@@ -1724,6 +1822,9 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             existing['kick_originally_triggered'] = existing.get('kick_originally_triggered', False) or d.get('kick_originally_triggered', False)
             existing['snare_originally_triggered'] = existing.get('snare_originally_triggered', False) or d.get('snare_originally_triggered', False)
             existing['hh_originally_triggered'] = existing.get('hh_originally_triggered', False) or d.get('hh_originally_triggered', False)
+            existing['tom_originally_triggered'] = existing.get('tom_originally_triggered', False) or d.get('tom_originally_triggered', False)
+            existing['crash_originally_triggered'] = existing.get('crash_originally_triggered', False) or d.get('crash_originally_triggered', False)
+            existing['ride_originally_triggered'] = existing.get('ride_originally_triggered', False) or d.get('ride_originally_triggered', False)
     
     # Sort merged decisions by quantized_onset
     onset_decisions = sorted(merged_decisions.values(), key=lambda x: x['quantized_onset'])
@@ -1749,6 +1850,9 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         raw_d['kick_triggered'] = bool(d.get('kick_originally_triggered', False))
         raw_d['snare_triggered'] = bool(d.get('snare_originally_triggered', False))
         raw_d['hh_triggered'] = bool(d.get('hh_originally_triggered', False))
+        raw_d['tom_triggered'] = bool(d.get('tom_originally_triggered', False))
+        raw_d['crash_triggered'] = bool(d.get('crash_originally_triggered', False))
+        raw_d['ride_triggered'] = bool(d.get('ride_originally_triggered', False))
         raw_d['is_virtual_kd'] = False
         raw_d['is_virtual_sd'] = False
         raw_d['is_virtual_hh'] = False
@@ -2294,6 +2398,35 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 best_ghost['is_virtual_sd'] = not best_ghost.get('snare_originally_triggered', False)
                 print("[Ghost Snare Recovery] Restored one low-level offbeat snare candidate.")
 
+    # --- Acoustic Mutual Exclusion (AME) Heuristics ---
+    if num_classes == 6:
+        suppressed_toms = 0
+        suppressed_rides = 0
+        suppressed_crashes = 0
+        for d in onset_decisions:
+            # 1. SD vs TOM: SD has broad energy, suppress TOM if SD is stronger and TOM is low confidence
+            if d['snare_triggered'] and d.get('tom_triggered', False):
+                if d['probs'][3] < 0.52 and d['probs'][1] >= 0.80:
+                    d['tom_triggered'] = False
+                    suppressed_toms += 1
+            # 2. KD vs TOM: Bass drum boom triggers TOM, suppress TOM if KD is dominant and TOM is low confidence
+            if d['kick_triggered'] and d.get('tom_triggered', False):
+                if d['probs'][3] < 0.52 and d['probs'][0] >= 0.80:
+                    d['tom_triggered'] = False
+                    suppressed_toms += 1
+            # 3. HH vs RIDE: HH and Ride overlap high frequencies
+            if d['hh_triggered'] and d.get('ride_triggered', False):
+                if d['probs'][5] < 0.45 and d['probs'][2] >= 0.75:
+                    d['ride_triggered'] = False
+                    suppressed_rides += 1
+            # 4. SD vs CRASH: Snare crack triggers false Crash
+            if d['snare_triggered'] and d.get('crash_triggered', False):
+                if d['probs'][4] < 0.45 and d['probs'][1] >= 0.80:
+                    d['crash_triggered'] = False
+                    suppressed_crashes += 1
+        if suppressed_toms or suppressed_rides or suppressed_crashes:
+            print(f"[AME Heuristics] Suppressed crosstalk: Toms={suppressed_toms}, Rides={suppressed_rides}, Crashes={suppressed_crashes}")
+
     if shuffle_completion_measures > 0:
         # 中文註解：GPAR/連續 HH 後處理可能清掉 sparse shuffle 的 offbeat HH，最後再補一次。
         for measure_idx in range(shuffle_completion_measures):
@@ -2404,6 +2537,40 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             hihat_times.append(midi_onset)
             total_notes_count += 1
             event_triggered = True
+            
+        if num_classes == 6:
+            if d.get('tom_triggered', False):
+                note = pretty_midi.Note(
+                    velocity=d.get('vel_tom', int(d['probs'][3] * 127)),
+                    pitch=pitch_map[3],
+                    start=midi_onset,
+                    end=midi_onset + note_len
+                )
+                drum_inst.notes.append(note)
+                total_notes_count += 1
+                event_triggered = True
+                
+            if d.get('crash_triggered', False):
+                note = pretty_midi.Note(
+                    velocity=d.get('vel_crash', int(d['probs'][4] * 127)),
+                    pitch=pitch_map[4],
+                    start=midi_onset,
+                    end=midi_onset + note_len
+                )
+                drum_inst.notes.append(note)
+                total_notes_count += 1
+                event_triggered = True
+                
+            if d.get('ride_triggered', False):
+                note = pretty_midi.Note(
+                    velocity=d.get('vel_ride', int(d['probs'][5] * 127)),
+                    pitch=pitch_map[5],
+                    start=midi_onset,
+                    end=midi_onset + note_len
+                )
+                drum_inst.notes.append(note)
+                total_notes_count += 1
+                event_triggered = True
             
         if event_triggered:
             transcribed_events_count += 1
@@ -2808,6 +2975,7 @@ def main():
     parser.add_argument('--event-debug', nargs='?', const='auto', default=None, help="Export AI raw event diagnostics to CSV. Omit value to auto-name beside the input WAV.")
     parser.add_argument('--raw-ai-events', nargs='?', const='auto', default=None, help="Export model-native AI events to CSV before notation completion. Omit value to auto-name beside the input WAV.")
     parser.add_argument('--notation-events', nargs='?', const='auto', default=None, help="Export final notation-layer events to CSV. Omit value to auto-name beside the input WAV.")
+    parser.add_argument('--model-rare', type=str, default=None, help="Optional rare drum classes extension model")
     
     args = parser.parse_args()
     
@@ -2864,7 +3032,8 @@ def main():
         sync_audio=args.sync_audio,
         event_debug_path=event_debug_path,
         raw_ai_events_path=raw_ai_events_path,
-        notation_events_path=notation_events_path
+        notation_events_path=notation_events_path,
+        model_rare_path=args.model_rare
     )
 
 if __name__ == '__main__':

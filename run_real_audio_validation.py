@@ -40,8 +40,70 @@ def local_maxima(probabilities, threshold=0.50, sr=44100, hop_length=256):
                 values[frame] > values[frame + 1] and 
                 values[frame] >= values[frame - 2] and 
                 values[frame] > values[frame + 2]):
-                events[label].append(frame * hop_length / float(sr))
-    return events
+                events[label].append(frame)
+                
+    # 執行 AME 互斥過濾
+    if probabilities.shape[1] == 6:
+        # AME Snare vs Tom
+        cleaned_tom = []
+        for t_f in events['TOM']:
+            is_crosstalk = False
+            # 只有當 TOM 的機率小於 0.48 且與強 SD 重合時，才視為串音
+            if probabilities[t_f, 3] < 0.48:
+                for s_f in events['SD']:
+                    if abs(t_f - s_f) <= 2 and probabilities[s_f, 1] >= 0.80:
+                        is_crosstalk = True
+                        break
+            if not is_crosstalk:
+                cleaned_tom.append(t_f)
+        events['TOM'] = cleaned_tom
+        
+        # AME Kick vs Tom
+        cleaned_tom = []
+        for t_f in events['TOM']:
+            is_crosstalk = False
+            # 只有當 TOM 的機率小於 0.48 且與強 KD 重合時，才視為串音
+            if probabilities[t_f, 3] < 0.48:
+                for k_f in events['KD']:
+                    if abs(t_f - k_f) <= 2 and probabilities[k_f, 0] >= 0.80:
+                        is_crosstalk = True
+                        break
+            if not is_crosstalk:
+                cleaned_tom.append(t_f)
+        events['TOM'] = cleaned_tom
+        
+        # AME HH vs Ride
+        cleaned_ride = []
+        for r_f in events['RIDE']:
+            is_crosstalk = False
+            # 只有當 RIDE 機率小於 0.45 且與強 HH 重合時，才視為串音
+            if probabilities[r_f, 5] < 0.45:
+                for h_f in events['HH']:
+                    if abs(r_f - h_f) <= 2 and probabilities[h_f, 2] >= 0.75:
+                        is_crosstalk = True
+                        break
+            if not is_crosstalk:
+                cleaned_ride.append(r_f)
+        events['RIDE'] = cleaned_ride
+        
+        # AME Snare vs Crash
+        cleaned_crash = []
+        for c_f in events['CRASH']:
+            is_crosstalk = False
+            # 只有當 CRASH 機率小於 0.45 且與強 SD 重合時，才視為串音
+            if probabilities[c_f, 4] < 0.45:
+                for s_f in events['SD']:
+                    if abs(c_f - s_f) <= 2 and probabilities[s_f, 1] >= 0.80:
+                        is_crosstalk = True
+                        break
+            if not is_crosstalk:
+                cleaned_crash.append(c_f)
+        events['CRASH'] = cleaned_crash
+        
+    time_events = {label: [] for label in LABELS}
+    for label in LABELS:
+        time_events[label] = [f * hop_length / float(sr) for f in events[label]]
+    return time_events
 
 def load_midi_reference(midi_path, offset=0.020):
     """
@@ -66,6 +128,7 @@ def main():
     parser.add_argument('--audio', type=str, required=True, help="Path to complete track WAV")
     parser.add_argument('--midi', type=str, required=True, help="Path to reference MIDI file")
     parser.add_argument('--model', type=str, required=True, help="Path to six-class candidate checkpoint")
+    parser.add_argument('--model-rare', type=str, default=None, help="Path to optional rare drum classes extension model")
     parser.add_argument('--threshold', type=float, default=0.50, help="Onset activation threshold (default: 0.50)")
     parser.add_argument('--offset', type=float, default=0.020, help="Alignment offset added to MIDI reference (default: +0.020s)")
     args = parser.parse_args()
@@ -74,18 +137,32 @@ def main():
     print(f"Device: {device}")
 
     # 1. 載入模型
-    model = SymmetricDrumTCN(num_classes=6).to(device)
-    state = torch.load(args.model, map_location=device, weights_only=False)
-    if 'backbone.legacy_slot_proj.weight' in state:
-        model.backbone.use_legacy_proj = True
-    elif 'backbone.slot_proj.weight' in state and state['backbone.slot_proj.weight'].shape == torch.Size([64, 1024, 1, 1]):
-        model.backbone.use_legacy_proj = True
-        state = dict(state)
-        state['backbone.legacy_slot_proj.weight'] = state.pop('backbone.slot_proj.weight')
-        state['backbone.legacy_slot_proj.bias'] = state.pop('backbone.slot_proj.bias')
-    model.load_state_dict(state, strict=True)
-    model.eval()
-    print(f"Loaded candidate model successfully: {args.model}")
+    def init_and_load_model(ckpt_path):
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError(f"Model file not found: {ckpt_path}")
+        checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+        n_classes = 3
+        if 'onset_head.weight' in checkpoint:
+            n_classes = checkpoint['onset_head.weight'].shape[0]
+        net = SymmetricDrumTCN(num_classes=n_classes).to(device)
+        if 'backbone.legacy_slot_proj.weight' in checkpoint:
+            net.backbone.use_legacy_proj = True
+        elif 'backbone.slot_proj.weight' in checkpoint and checkpoint['backbone.slot_proj.weight'].shape == torch.Size([64, 1024, 1, 1]):
+            net.backbone.use_legacy_proj = True
+            checkpoint['backbone.legacy_slot_proj.weight'] = checkpoint.pop('backbone.slot_proj.weight')
+            checkpoint['backbone.legacy_slot_proj.bias'] = checkpoint.pop('backbone.slot_proj.bias')
+        net.load_state_dict(checkpoint, strict=True)
+        net.eval()
+        return net, n_classes
+
+    model, num_classes = init_and_load_model(args.model)
+    print(f"Loaded base model successfully: {args.model} (classes={num_classes})")
+    
+    model_rare = None
+    num_classes_rare = 0
+    if args.model_rare:
+        model_rare, num_classes_rare = init_and_load_model(args.model_rare)
+        print(f"Loaded rare model successfully: {args.model_rare} (classes={num_classes_rare})")
 
     # 2. 載入音訊與特徵提取
     print(f"Loading audio: {args.audio}")
@@ -93,11 +170,27 @@ def main():
     features = extract_features(y, sr=sr, hop_length=256, n_mels=256)
     features_tensor = torch.from_numpy(features).float().unsqueeze(0).to(device)
 
-    # 3. 前向推理
+    # 3. 前向推理與機率融合
     print("Running sequence TCN inference...")
     with torch.no_grad():
-        onset_logits, _ = model(features_tensor)
-        onset_preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy()
+        if model_rare is not None:
+            onset_logits_base, _ = model(features_tensor)
+            onset_logits_rare, _ = model_rare(features_tensor)
+            
+            base_p = torch.sigmoid(onset_logits_base).squeeze(0).cpu().numpy()
+            rare_p = torch.sigmoid(onset_logits_rare).squeeze(0).cpu().numpy()
+            
+            onset_preds = np.zeros((base_p.shape[0], 6), dtype=np.float32)
+            onset_preds[:, :3] = base_p[:, :3]
+            onset_preds[:, 3:6] = rare_p[:, 3:6]
+        else:
+            onset_logits, _ = model(features_tensor)
+            preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy()
+            if num_classes == 6:
+                onset_preds = preds
+            else:
+                onset_preds = np.zeros((preds.shape[0], 6), dtype=np.float32)
+                onset_preds[:, :3] = preds[:, :3]
 
     # 4. 偵測 onsets
     predicted_events = local_maxima(onset_preds, threshold=args.threshold, sr=sr, hop_length=256)
