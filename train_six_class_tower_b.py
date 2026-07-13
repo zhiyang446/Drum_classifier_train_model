@@ -31,6 +31,7 @@ def main():
     parser.add_argument('--gaussian-targets', action='store_true', default=True)
     parser.add_argument('--positive-weight', type=float, default=20.0, help='Base positive weight for KD/SD/HH')
     parser.add_argument('--rare-positive-weight', type=float, default=50.0, help='Enhanced positive weight for TOM/CRASH/RIDE')
+    parser.add_argument('--adversarial-weight', type=float, default=40.0, help='Adversarial negative loss multiplier for rare classes')
     parser.add_argument('--freeze-bn', action='store_true', default=True)
     parser.add_argument('--log-every', type=int, default=1)
     parser.add_argument('--candidate-name', default='six_class_tower_b_candidate.pth')
@@ -94,6 +95,14 @@ def main():
             onset_for_loss = gaussian_smooth_targets(onset_target) if args.gaussian_targets else onset_target
             bce = F.binary_cross_entropy(torch.sigmoid(onset_logits), onset_for_loss, reduction='none')
             onset_weight = torch.where(onset_for_loss > 0.0, positive_weight.expand_as(onset_for_loss), torch.ones_like(onset_for_loss))
+            
+            # --- Adversarial Negative Sampling (V22) ---
+            # Gate rare class (TOM/CRASH/RIDE) false positives at backbeat (KD/SD/HH) hit frames
+            has_main_hit = (onset_target[:, :, 0] > 0.0) | (onset_target[:, :, 1] > 0.0) | (onset_target[:, :, 2] > 0.0)
+            for c_rare in (3, 4, 5):
+                is_neg_rare = has_main_hit & (onset_target[:, :, c_rare] == 0.0)
+                onset_weight[:, :, c_rare] = torch.where(is_neg_rare, torch.tensor(args.adversarial_weight, device=device), onset_weight[:, :, c_rare])
+                
             onset_loss = (bce * onset_weight).mean()
             
             active = onset_target.sum().clamp_min(1.0)
