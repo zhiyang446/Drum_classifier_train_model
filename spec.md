@@ -963,4 +963,19 @@ Round4 compound-meter trailing-prune rule:
     - 只有當 CLI 傳入 `--model-rare`（雙塔模式，`model_rare_path is not None`）時，才激活**時變局部網格、踩镲開合檢測、AME Heuristics 與鈸類 ADC 濾波器**。
     - 預設 (3-class) 模式下，上述新後處理組件全數退出，維持最精純的 3-class 回歸基準。
 
+---
+
+## 8. V22 Model B 負樣本對抗微調訓練 (Model B Adversarial Fine-Tuning)
+
+### 8.1 鼓組通道間對抗損失函數 (Adversarial Negative Loss Function)
+*   **對抗遮罩 (Adversarial Mask)**：針對主通道（KD/SD/HH）與擴展通道（TOM/CRASH/RIDE）在物理聲學能量上的單向串音壓迫，引入動態對抗遮罩 $M_{\text{adv}}$。
+*   **損失懲罰 (Loss Penalty)**：在每一幀 $t$ 中，若主通道有擊打，但擴展稀有通道 $c'$ 無擊打（即負樣本）：
+    $$Y_{\text{neg\_rare}, c'} = (Y_{\text{KD}} > 0 \lor Y_{\text{SD}} > 0 \lor Y_{\text{HH}} > 0) \land Y_{c'} == 0$$
+*   **權重放大**：將該負樣本位置的 BCE Onset Loss 權重乘以 **`40.0` 倍對抗乘子**，勒令模型分類頭不要對主通道的共振和串音起任何反應，實現模型底層特徵解耦。
+
+### 8.2 對抗微調數據抽樣與 Epoch 設置 (Adversarial Sampling & Epochs)
+*   **微調數據源**：使用完美的 6 類架子鼓標記數據庫 `processed_data/star_meta.json` 進行抽樣。
+*   **訓練設置**：解凍 Backbone（學習率 `1e-6`，Heads 學習率 `5e-5`），利用 Adam 優化器進行 10 個 Epoch 的快速對抗微調。微調後的 checkpoint 保存為 `six_class_tower_b_adversarial.pth` 並正式部署覆蓋為系統 Model B 實體。
+
+
 

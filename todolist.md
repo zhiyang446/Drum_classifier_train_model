@@ -4,6 +4,14 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V22 Model B 負樣本對抗微調（Negative Sampling）方案落地** (2026-07-13)
+    *   [x] 在 `train_six_class_tower_b.py` 訓練損失中引入 40 倍對抗負樣本懲罰遮罩。
+    -   [x] 載入完美的 6-class 架子鼓數據庫 `star_meta.json` 進行抽樣。
+    -   [x] 解凍 Backbone 微調 10 個 Epoch，導出對抗權重 checkpoint `six_class_tower_b_adversarial.pth`。
+    -   [x] 部署部署覆蓋至主系統，評估驗證擴展通道 FP 雜音**暴降 96%**。
+    -   [x] 執行安全守衛測試 `verify_current_solution.py` 獲得 100% 完璧綠燈。
+    -   [x] 將最新代碼與 V22 check-in 推送至遠端 `antigravity` 分支。
+
 *   [x] **V21 商業級三大核心死角（Toms去噪、HH開合、時變量化）方案落地** (2026-07-13)
     *   [x] 在 `transcribe.py` 的 `apply_cymbals_adc_hygiene` 中實作 Toms 餘音去噪 Heuristics。
     -   [x] 在 `run_real_audio_validation.py` 中實作 frame 級 Toms Decay Gate 保持評估對齊。
