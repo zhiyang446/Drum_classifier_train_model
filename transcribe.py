@@ -909,7 +909,7 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
     cleaned.sort(key=lambda row: row.get('quantized_onset', 0.0))
     return cleaned
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     
@@ -1074,7 +1074,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     # Hi-Hat: base threshold modified by [-0.15, +0.10]
     # Kick & Snare: base threshold modified by [-0.08, +0.08]
     thresh_array_k = np.clip(thresholds[0] + (0.08 - 0.16 * rms_db_norm), 0.25, 0.75)
-    thresh_array_s = np.clip(thresholds[1] + (0.08 - 0.16 * rms_db_norm), 0.25, 0.75)
+    if adaptive_snare:
+        thresh_array_s = np.clip(thresholds[1] - 0.12 + 0.16 * rms_db_norm, 0.26, 0.45)
+    else:
+        thresh_array_s = np.clip(thresholds[1] + (0.08 - 0.16 * rms_db_norm), 0.25, 0.75)
     thresh_array_h = np.clip(thresholds[2] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
     
     if num_classes == 6:
@@ -2976,6 +2979,7 @@ def main():
     parser.add_argument('--raw-ai-events', nargs='?', const='auto', default=None, help="Export model-native AI events to CSV before notation completion. Omit value to auto-name beside the input WAV.")
     parser.add_argument('--notation-events', nargs='?', const='auto', default=None, help="Export final notation-layer events to CSV. Omit value to auto-name beside the input WAV.")
     parser.add_argument('--model-rare', type=str, default=None, help="Optional rare drum classes extension model")
+    parser.add_argument('--adaptive-snare', action='store_true', help="Enable dynamic Snare thresholding")
     
     args = parser.parse_args()
     
@@ -3033,7 +3037,8 @@ def main():
         event_debug_path=event_debug_path,
         raw_ai_events_path=raw_ai_events_path,
         notation_events_path=notation_events_path,
-        model_rare_path=args.model_rare
+        model_rare_path=args.model_rare,
+        adaptive_snare=args.adaptive_snare
     )
 
 if __name__ == '__main__':

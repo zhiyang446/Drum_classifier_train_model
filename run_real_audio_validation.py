@@ -27,15 +27,42 @@ PITCH_TO_LABEL_IDX = {
     51: 5, 53: 5, 59: 5                  # RIDE: Ride 1, Ride Bell, Ride 2
 }
 
-def local_maxima(probabilities, threshold=0.50, sr=44100, hop_length=256):
+def local_maxima(probabilities, threshold=0.50, sr=44100, hop_length=256, y=None, adaptive_snare=False):
     """
     中文註解：使用局部峰值與設定門檻擷取 onset 時間點。
     """
     events = {label: [] for label in LABELS}
+    n_frames = len(probabilities)
+    thresh_arrays = {}
+    
+    if y is not None and adaptive_snare:
+        rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=hop_length)[0]
+        if len(rms) < n_frames:
+            rms = np.pad(rms, (0, n_frames - len(rms)), mode='edge')
+        elif len(rms) > n_frames:
+            rms = rms[:n_frames]
+        rms_db = 20 * np.log10(rms + 1e-5)
+        max_db = np.max(rms_db)
+        min_db = np.max([np.min(rms_db), max_db - 40.0])
+        rms_db_norm = np.clip((rms_db - min_db) / (max_db - min_db + 1e-6), 0.0, 1.0)
+        
+        thresh_arrays[0] = np.clip(threshold + (0.08 - 0.16 * rms_db_norm), 0.25, 0.75)  # KD
+        thresh_arrays[1] = np.clip(threshold - 0.12 + 0.16 * rms_db_norm, 0.26, 0.45)  # SD (動態翻轉)
+        thresh_arrays[2] = np.clip(threshold + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)  # HH
+        
+        if probabilities.shape[1] == 6:
+            thresh_arrays[3] = np.clip(0.50 + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)  # TOM
+            thresh_arrays[4] = np.clip(0.50 + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)  # CRASH
+            thresh_arrays[5] = np.clip(0.50 + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)  # RIDE
+    else:
+        for c in range(probabilities.shape[1]):
+            thresh_arrays[c] = np.ones(n_frames) * (threshold if c < 3 else 0.50)
+            
     for label, index in LABEL_INDEX.items():
         values = probabilities[:, index]
+        thresh_t = thresh_arrays[index]
         for frame in range(2, len(values) - 2):
-            if (values[frame] >= threshold and 
+            if (values[frame] >= thresh_t[frame] and 
                 values[frame] >= values[frame - 1] and 
                 values[frame] > values[frame + 1] and 
                 values[frame] >= values[frame - 2] and 
@@ -123,6 +150,26 @@ def load_midi_reference(midi_path, offset=0.020):
         events[label].sort()
     return events
 
+def init_and_load_model(ckpt_path, device=None):
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError(f"Model file not found: {ckpt_path}")
+    checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+    n_classes = 3
+    if 'onset_head.weight' in checkpoint:
+        n_classes = checkpoint['onset_head.weight'].shape[0]
+    net = SymmetricDrumTCN(num_classes=n_classes).to(device)
+    if 'backbone.legacy_slot_proj.weight' in checkpoint:
+        net.backbone.use_legacy_proj = True
+    elif 'backbone.slot_proj.weight' in checkpoint and checkpoint['backbone.slot_proj.weight'].shape == torch.Size([64, 1024, 1, 1]):
+        net.backbone.use_legacy_proj = True
+        checkpoint['backbone.legacy_slot_proj.weight'] = checkpoint.pop('backbone.slot_proj.weight')
+        checkpoint['backbone.legacy_slot_proj.bias'] = checkpoint.pop('backbone.slot_proj.bias')
+    net.load_state_dict(checkpoint, strict=True)
+    net.eval()
+    return net, n_classes
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate a six-class ADT checkpoint on complete real audio tracks.")
     parser.add_argument('--audio', type=str, required=True, help="Path to complete track WAV")
@@ -131,37 +178,20 @@ def main():
     parser.add_argument('--model-rare', type=str, default=None, help="Path to optional rare drum classes extension model")
     parser.add_argument('--threshold', type=float, default=0.50, help="Onset activation threshold (default: 0.50)")
     parser.add_argument('--offset', type=float, default=0.020, help="Alignment offset added to MIDI reference (default: +0.020s)")
+    parser.add_argument('--adaptive-snare', action='store_true', help="Enable dynamic Snare thresholding")
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
     # 1. 載入模型
-    def init_and_load_model(ckpt_path):
-        if not os.path.exists(ckpt_path):
-            raise FileNotFoundError(f"Model file not found: {ckpt_path}")
-        checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
-        n_classes = 3
-        if 'onset_head.weight' in checkpoint:
-            n_classes = checkpoint['onset_head.weight'].shape[0]
-        net = SymmetricDrumTCN(num_classes=n_classes).to(device)
-        if 'backbone.legacy_slot_proj.weight' in checkpoint:
-            net.backbone.use_legacy_proj = True
-        elif 'backbone.slot_proj.weight' in checkpoint and checkpoint['backbone.slot_proj.weight'].shape == torch.Size([64, 1024, 1, 1]):
-            net.backbone.use_legacy_proj = True
-            checkpoint['backbone.legacy_slot_proj.weight'] = checkpoint.pop('backbone.slot_proj.weight')
-            checkpoint['backbone.legacy_slot_proj.bias'] = checkpoint.pop('backbone.slot_proj.bias')
-        net.load_state_dict(checkpoint, strict=True)
-        net.eval()
-        return net, n_classes
-
-    model, num_classes = init_and_load_model(args.model)
+    model, num_classes = init_and_load_model(args.model, device)
     print(f"Loaded base model successfully: {args.model} (classes={num_classes})")
     
     model_rare = None
     num_classes_rare = 0
     if args.model_rare:
-        model_rare, num_classes_rare = init_and_load_model(args.model_rare)
+        model_rare, num_classes_rare = init_and_load_model(args.model_rare, device)
         print(f"Loaded rare model successfully: {args.model_rare} (classes={num_classes_rare})")
 
     # 2. 載入音訊與特徵提取
@@ -193,7 +223,7 @@ def main():
                 onset_preds[:, :3] = preds[:, :3]
 
     # 4. 偵測 onsets
-    predicted_events = local_maxima(onset_preds, threshold=args.threshold, sr=sr, hop_length=256)
+    predicted_events = local_maxima(onset_preds, threshold=args.threshold, sr=sr, hop_length=256, y=y, adaptive_snare=args.adaptive_snare)
 
     # 5. 載入 Reference MIDI
     print(f"Loading reference MIDI: {args.midi} (offset={args.offset}s)")
