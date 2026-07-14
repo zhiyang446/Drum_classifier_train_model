@@ -4,6 +4,14 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V22 Model B 對抗權重超參數調優方案落地** (2026-07-13)
+    *   [x] 啟動 12x 對抗強度微調並導出 `six_class_tower_b_adv12.pth`。
+    -   [x] 啟動 8x 對抗強度微調並導出 `six_class_tower_b_adv8.pth`。
+    -   [x] 對比評估，證實 12x 下 Toms/Ride/Crash 召回率均大回升，同時保持極優消噪。
+    -   [x] 將最佳 12x checkpoint 部署覆蓋為系統 Model B Specialized 權重。
+    -   [x] 執行安全守衛測試 `verify_current_solution.py` 獲得 100% 完璧綠燈。
+    -   [x] 將最新最優權重與 docs 合併推送至遠端 `main` 分支。
+
 *   [x] **V22 Model B 負樣本對抗微調（Negative Sampling）方案落地** (2026-07-13)
     *   [x] 在 `train_six_class_tower_b.py` 訓練損失中引入 40 倍對抗負樣本懲罰遮罩。
     -   [x] 載入完美的 6-class 架子鼓數據庫 `star_meta.json` 進行抽樣。

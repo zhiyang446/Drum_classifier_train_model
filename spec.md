@@ -971,11 +971,9 @@ Round4 compound-meter trailing-prune rule:
 *   **對抗遮罩 (Adversarial Mask)**：針對主通道（KD/SD/HH）與擴展通道（TOM/CRASH/RIDE）在物理聲學能量上的單向串音壓迫，引入動態對抗遮罩 $M_{\text{adv}}$。
 *   **損失懲罰 (Loss Penalty)**：在每一幀 $t$ 中，若主通道有擊打，但擴展稀有通道 $c'$ 無擊打（即負樣本）：
     $$Y_{\text{neg\_rare}, c'} = (Y_{\text{KD}} > 0 \lor Y_{\text{SD}} > 0 \lor Y_{\text{HH}} > 0) \land Y_{c'} == 0$$
-*   **權重放大**：將該負樣本位置的 BCE Onset Loss 權重乘以 **`40.0` 倍對抗乘子**，勒令模型分類頭不要對主通道的共振和串音起任何反應，實現模型底層特徵解耦。
+*   **權重放大**：將該負樣本位置的 BCE Onset Loss 權重乘以對抗乘子（經 V22 網格搜索，確定 **`12.0` 倍** 為最佳黃金甜蜜點，相較於最保守的 40.0x 顯著放寬了 Recall，且相較於 8.0x 控制了 FP 的激增）。
 
 ### 8.2 對抗微調數據抽樣與 Epoch 設置 (Adversarial Sampling & Epochs)
 *   **微調數據源**：使用完美的 6 類架子鼓標記數據庫 `processed_data/star_meta.json` 進行抽樣。
-*   **訓練設置**：解凍 Backbone（學習率 `1e-6`，Heads 學習率 `5e-5`），利用 Adam 優化器進行 10 個 Epoch 的快速對抗微調。微調後的 checkpoint 保存為 `six_class_tower_b_adversarial.pth` 並正式部署覆蓋為系統 Model B 實體。
-
-
+*   **訓練設置**：解凍 Backbone（學習率 `1e-6`，Heads 學習率 `5e-5`），利用 Adam 優化器進行 10 個 Epoch 的對抗微調。網格對照後將 `adv12` checkpoint 部署覆蓋為系統 `six_class_tower_b_specialized.pth` 模型權重。
 
