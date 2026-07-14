@@ -85,6 +85,28 @@ def evaluate_transcription(transcribed_times, xml_path, tolerance=0.050):
         }
     return metrics
 
+def map_velocity(prob, c_type='generic'):
+    """
+    對模型預測的激發機率進行客製化的非線性冪律映射，還原真實力度動態。
+    """
+    p = np.clip(prob, 0.0, 1.0)
+    
+    if c_type == 'kick':
+        gamma = 1.2
+        v_min, v_max = 40, 127
+    elif c_type == 'snare':
+        gamma = 1.8
+        v_min, v_max = 25, 127
+    elif c_type == 'hihat':
+        gamma = 1.5
+        v_min, v_max = 30, 120
+    else:  # cymbals / toms
+        gamma = 1.4
+        v_min, v_max = 35, 125
+        
+    scaled_val = v_min + (v_max - v_min) * (p ** gamma)
+    return int(np.round(scaled_val))
+
 def detect_grid_type(onset_times, estimated_tempo):
     """
     Detect whether the onset times closer match a straight 16th-note grid or a triplet-based grid.
@@ -2651,7 +2673,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         
         if d['kick_triggered']:
             note = pretty_midi.Note(
-                velocity=d.get('vel_kick', int(d['probs'][0] * 127)),
+                velocity=d.get('vel_kick', map_velocity(d['probs'][0], 'kick')),
                 pitch=pitch_map[0],
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2663,7 +2685,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             
         if d['snare_triggered']:
             note = pretty_midi.Note(
-                velocity=d.get('vel_snare', 110 if d.get('snare_accent', False) else 45),
+                velocity=d.get('vel_snare', map_velocity(d['probs'][1], 'snare')),
                 pitch=pitch_map[1],
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2687,7 +2709,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 hh_pitch = pitch_map[2]
                 
             note = pretty_midi.Note(
-                velocity=d.get('vel_hihat', int(d['probs'][2] * 127)),
+                velocity=d.get('vel_hihat', map_velocity(d['probs'][2], 'hihat')),
                 pitch=hh_pitch,
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2700,7 +2722,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         if model_rare_path is not None:
             if d.get('tom_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_tom', int(d['probs'][3] * 127)),
+                    velocity=d.get('vel_tom', map_velocity(d['probs'][3], 'tom')),
                     pitch=pitch_map[3],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -2711,7 +2733,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 
             if d.get('crash_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_crash', int(d['probs'][4] * 127)),
+                    velocity=d.get('vel_crash', map_velocity(d['probs'][4], 'cymbal')),
                     pitch=pitch_map[4],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -2722,7 +2744,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 
             if d.get('ride_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_ride', int(d['probs'][5] * 127)),
+                    velocity=d.get('vel_ride', map_velocity(d['probs'][5], 'cymbal')),
                     pitch=pitch_map[5],
                     start=midi_onset,
                     end=midi_onset + note_len
