@@ -4,6 +4,13 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V26 體驗優化與併發重構方案落地** (2026-07-13)
+    *   [x] 在 `transcribe.py` 中寫入 `--config` JSON 配置覆蓋字典。
+    -   [x] 實作自適應鈸高頻能量衰減中位數檢測，解決開合判定噪聲。
+    -   [x] 實作 `ThreadPoolExecutor` 多任務並行與多 GPU 動態負載均衡。
+    -   [x] 執行安全守衛測試 `verify_current_solution.py` 獲得 100% 完璧綠燈。
+    -   [x] 提交代碼與文檔並封存於本地 `antigravity` 開發分支。
+
 *   [x] **V25 速度軌與音符時間軸相位補正方案落地** (2026-07-13)
     *   [x] 修正 Notation 模式下量化音符的 `quantized_times` 減法平移。
     -   [x] 修正 MIDI 寫入時 `tempo_times` 速度軌時間戳平移。

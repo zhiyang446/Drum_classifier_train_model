@@ -1013,6 +1013,21 @@ Round4 compound-meter trailing-prune rule:
 ### 10.5 V25 速度軌與音符時間軸相位補正 (Tempo-Note Phase Synchronization)
 *   **平移補正**：在 Score Notation Mode 下（`sync_audio = False`），為了將第一個音符移至 `0.0s` 起點，吸附後的 `quantized_times` 統一減去 `first_onset`；同時，寫入 MIDI 的時變 `tempo_changes` 事件時間戳也統一減去 `first_onset`（並限制在 `0.0s` 邊界），保證速度與音符位置 100% 絕對對齊。
 
+---
+
+## 11. V26 轉譯體驗與高併發重構 (User Config, Adaptive HH, & Batch Mode)
+
+### 11.1 客製設定檔 JSON (User Post-Processing Configurations)
+*   **參數抽離**：將所有後處理寫死閾值（如通道 $\gamma$ 力度、鈸類消噪、Toms Decay Gate 門限時間等）抽離至自訂 JSON，透過 `--config` 參數載入覆蓋。
+
+### 11.2 自適應開合鈸能量衰減估算 (Adaptive Hi-Hat Open Thresholding)
+*   **衰減統計**：統計整首歌 Detected HH 幀的高頻能量衰減中位數，動態計算自適應閾值 `hh_thresh`（限制於 $[-25.0, -10.0]$ 區間內），極大提升不同歌質下的開合判定。
+
+### 11.3 批量多線程與多 GPU 卡負載分流 (ThreadPool Batch Processing & Multi-GPU Balance)
+*   **多任務並行**：支援 `--input` 目錄或 glob 匹配，採用 `ThreadPoolExecutor` 進行批量並發。
+*   **多卡負載均衡**：利用 `torch.cuda.device_count()`，動態將不同的 Wav 任務分流綁定至不同的 CUDA 卡上，充分發揮多 GPU 算力。
+
+
 
 
 
