@@ -1830,6 +1830,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 quantized_times.append(quantized_t)
                 
             quantized_times = np.array(quantized_times)
+            if not sync_audio:
+                quantized_times = quantized_times - first_onset
             grid_duration = beat_duration / 4.0
         elif model_rare_path is not None:
             # --- Local Time-Varying Grid Quantization (ADC) ---
@@ -1929,14 +1931,16 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     if beat_times is not None:
         tempos = []
         tempo_times = []
+        shift_offset = first_onset if not sync_audio else 0.0
         for i in range(len(beat_times) - 1):
             dur = beat_times[i+1] - beat_times[i]
             if dur > 0:
                 tempos.append(float(60.0 / dur))
-                tempo_times.append(float(beat_times[i]))
+                t_val = float(beat_times[i] - shift_offset)
+                tempo_times.append(max(0.0, t_val))
         if tempos:
             pm.tempo_changes = (tempo_times, tempos)
-            print(f"[Tempo Map] Exported {len(tempos)} tempo change events to MIDI.")
+            print(f"[Tempo Map] Exported {len(tempos)} tempo change events to MIDI (shifted by {shift_offset:.3f}s).")
         else:
             pm.tempo_changes = ([0.0], [estimated_tempo])
     else:
