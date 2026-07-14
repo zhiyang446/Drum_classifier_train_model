@@ -1010,5 +1010,9 @@ Round4 compound-meter trailing-prune rule:
 ### 10.4 --floating-bpm 物理隔離 Feature Toggle
 *   **安全隔離**：新增 `--floating-bpm` 布林開關，預設關閉（False）。在安全回歸測試中完全退出，維持 3-class 完璧基線，保障零 Regression 綠燈。
 
+### 10.5 V25 速度軌與音符時間軸相位補正 (Tempo-Note Phase Synchronization)
+*   **平移補正**：在 Score Notation Mode 下（`sync_audio = False`），為了將第一個音符移至 `0.0s` 起點，吸附後的 `quantized_times` 統一減去 `first_onset`；同時，寫入 MIDI 的時變 `tempo_changes` 事件時間戳也統一減去 `first_onset`（並限制在 `0.0s` 邊界），保證速度與音符位置 100% 絕對對齊。
+
+
 
 

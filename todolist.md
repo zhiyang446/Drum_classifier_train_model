@@ -4,6 +4,12 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V25 速度軌與音符時間軸相位補正方案落地** (2026-07-13)
+    *   [x] 修正 Notation 模式下量化音符的 `quantized_times` 減法平移。
+    -   [x] 修正 MIDI 寫入時 `tempo_times` 速度軌時間戳平移。
+    -   [x] 執行安全守衛測試 `verify_current_solution.py` 獲得 100% 完璧綠燈。
+    -   [x] 將最新代碼與 docs 合併推送至遠端 `antigravity` 與 `main` 分支。
+
 *   [x] **V24 時變 BPM 追蹤與時變網格對齊方案落地** (2026-07-13)
     *   [x] 導入 `librosa.beat.beat_track` 動態提取拍點時間戳 `beat_times`。
     -   [x] 實作 `Floating Grid Aligner` 動態時域小節網格吸附演算法。

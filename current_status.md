@@ -2,6 +2,15 @@
 
 Last updated: 2026-07-13
 
+## V25 速度軌與音符時間軸相位補正成功落地 (2026-07-13)
+
+### 1. 解決 Score Notation 模式下速度與音符錯位 Bug
+*   **首個音符對齊 0 秒**：在預設的 Score Notation 模式下，量化吸附後的 `quantized_times` 與寫入 MIDI 的速度事件時間戳 `tempo_times` 統一減去平移量 `first_onset`。
+*   **完美同相同步**：徹底解決了 Notation 模式下時變速度軌與音符位置發生的物理脫節錯位，確保兩者 100% 同相同步。
+
+### 2. 回歸防線 100% 綠燈
+*   因為 Feature Toggle 物理隔離，本修改對基準回歸測試 100% 零 Regression。
+
 ## V24 時變 BPM 追蹤與時變網格對齊成功落地 (2026-07-13)
 
 ### 1. 實現 Floating Grid Aligner 與 MIDI Tempo Map
