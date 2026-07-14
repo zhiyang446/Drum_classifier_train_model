@@ -1008,7 +1008,7 @@ def apply_cymbals_adc_hygiene(onset_decisions):
 
     return onset_decisions
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     
@@ -1698,6 +1698,22 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         active_no_crosstalk = no_crosstalk
         print(f"[Adaptive Settings] Using user-specified no_crosstalk: {active_no_crosstalk}")
     
+    # --- Floating BPM Dynamic Beat Tracking (V22 Step 4) ---
+    beat_times = None
+    if floating_bpm and len(onset_times) > 0:
+        try:
+            _, clicks_frames = librosa.beat.beat_track(
+                y=y, sr=sr, hop_length=hop_length, start_bpm=estimated_tempo
+            )
+            beat_times = librosa.frames_to_time(clicks_frames, sr=sr, hop_length=hop_length)
+            if len(beat_times) < 2:
+                beat_times = None
+            else:
+                print(f"[Floating BPM] Tracked {len(beat_times)} dynamic tempo beats using librosa.")
+        except Exception as e:
+            print(f"[Floating BPM Warning] Dynamic beat tracking failed: {e}. Falling back to static BPM.")
+            beat_times = None
+
     # Quantize onset times to grid if requested
     beat_duration = 60.0 / estimated_tempo
     
@@ -1742,7 +1758,80 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         # Calculate minimum raw gap between onsets to detect rapid consecutive hits (like rolls/flams/32nd notes)
         min_raw_gap = np.min(np.diff(onset_times)) if len(onset_times) > 1 else float('inf')
         
-        if model_rare_path is not None:
+        if beat_times is not None:
+            # --- Floating BPM Dynamic Grid Quantization (V22 Step 4) ---
+            # 依時變 beat_times 對每一個 Onset 進行小節與拍點內的動態吸附
+            t_meas_beats = 4.0
+            num_beats = len(beat_times)
+            num_measures = int(np.ceil(num_beats / t_meas_beats))
+            
+            measure_grids = {}
+            for m in range(num_measures):
+                b_start_idx = int(m * t_meas_beats)
+                b_end_idx = min(num_beats - 1, int((m + 1) * t_meas_beats))
+                if b_end_idx <= b_start_idx:
+                    measure_grids[m] = '16th'
+                    continue
+                
+                m_start = beat_times[b_start_idx]
+                m_end = beat_times[b_end_idx]
+                m_onsets = [t for t in onset_times if m_start <= t < m_end]
+                
+                if len(m_onsets) >= 3:
+                    dist_trip = []
+                    dist_straight = []
+                    for t in m_onsets:
+                        idx = np.searchsorted(beat_times, t) - 1
+                        idx = max(0, min(idx, num_beats - 2))
+                        p_beat_dur = beat_times[idx+1] - beat_times[idx]
+                        phase_t = (t - beat_times[idx]) / p_beat_dur if p_beat_dur > 0 else 0.0
+                        
+                        p_trip = phase_t * 3
+                        dist_trip.append(abs(p_trip - round(p_trip)))
+                        p_straight = phase_t * 4
+                        dist_straight.append(abs(p_straight - round(p_straight)))
+                        
+                    avg_trip = np.mean(dist_trip) if dist_trip else 0.5
+                    avg_straight = np.mean(dist_straight) if dist_straight else 0.5
+                    
+                    if avg_trip < 0.08 and avg_trip < avg_straight:
+                        measure_grids[m] = 'triplet'
+                    else:
+                        measure_grids[m] = '16th'
+                else:
+                    measure_grids[m] = measure_grids.get(m - 1, '16th')
+            
+            quantized_times = []
+            for t in onset_times:
+                idx = np.searchsorted(beat_times, t) - 1
+                idx = max(0, min(idx, num_beats - 2))
+                p_beat_dur = beat_times[idx+1] - beat_times[idx]
+                phase_t = (t - beat_times[idx]) / p_beat_dur if p_beat_dur > 0 else 0.0
+                
+                m = int(idx // t_meas_beats)
+                grid_style = measure_grids.get(m, '16th')
+                
+                b_start_idx = int(m * t_meas_beats)
+                b_end_idx = min(num_beats - 1, int((m + 1) * t_meas_beats))
+                m_start = beat_times[b_start_idx]
+                m_end = beat_times[b_end_idx]
+                m_onsets = [other for other in onset_times if m_start <= other < m_end]
+                m_min_gap = np.min(np.diff(m_onsets)) if len(m_onsets) > 1 else float('inf')
+                
+                if grid_style == 'triplet':
+                    trip_dur = p_beat_dur / 3.0
+                    sub_divs = 6 if m_min_gap < 0.65 * trip_dur else 3
+                else:
+                    sixteenth_dur = p_beat_dur / 4.0
+                    sub_divs = 8 if m_min_gap < 0.65 * sixteenth_dur else 4
+                    
+                sub_idx = round(phase_t * sub_divs)
+                quantized_t = beat_times[idx] + (sub_idx / float(sub_divs)) * p_beat_dur
+                quantized_times.append(quantized_t)
+                
+            quantized_times = np.array(quantized_times)
+            grid_duration = beat_duration / 4.0
+        elif model_rare_path is not None:
             # --- Local Time-Varying Grid Quantization (ADC) ---
             t_meas = 4.0 * beat_duration
             quantized_times = []
@@ -1837,7 +1926,21 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         
     # 5. Initialize MIDI with tempo and time signature metadata
     pm = pretty_midi.PrettyMIDI(initial_tempo=estimated_tempo)
-    pm.tempo_changes = ([0.0], [estimated_tempo])
+    if beat_times is not None:
+        tempos = []
+        tempo_times = []
+        for i in range(len(beat_times) - 1):
+            dur = beat_times[i+1] - beat_times[i]
+            if dur > 0:
+                tempos.append(float(60.0 / dur))
+                tempo_times.append(float(beat_times[i]))
+        if tempos:
+            pm.tempo_changes = (tempo_times, tempos)
+            print(f"[Tempo Map] Exported {len(tempos)} tempo change events to MIDI.")
+        else:
+            pm.tempo_changes = ([0.0], [estimated_tempo])
+    else:
+        pm.tempo_changes = ([0.0], [estimated_tempo])
     pm.time_signature_changes.append(pretty_midi.TimeSignature(ts_num, ts_den, 0.0))
     drum_inst = pretty_midi.Instrument(program=0, is_drum=True)
     
@@ -3158,6 +3261,7 @@ def main():
     parser.add_argument('--notation-events', nargs='?', const='auto', default=None, help="Export final notation-layer events to CSV. Omit value to auto-name beside the input WAV.")
     parser.add_argument('--model-rare', type=str, default=None, help="Optional rare drum classes extension model")
     parser.add_argument('--adaptive-snare', action='store_true', help="Enable dynamic Snare thresholding")
+    parser.add_argument('--floating-bpm', action='store_true', help="Enable dynamic time-varying BPM beat tracking and tempo mapping")
     
     args = parser.parse_args()
     
@@ -3216,7 +3320,8 @@ def main():
         raw_ai_events_path=raw_ai_events_path,
         notation_events_path=notation_events_path,
         model_rare_path=args.model_rare,
-        adaptive_snare=args.adaptive_snare
+        adaptive_snare=args.adaptive_snare,
+        floating_bpm=args.floating_bpm
     )
 
 if __name__ == '__main__':
