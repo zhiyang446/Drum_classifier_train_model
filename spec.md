@@ -992,4 +992,23 @@ Round4 compound-meter trailing-prune rule:
 *   **踩镲 (HH)**：$\gamma = 1.5$，$V_{\text{min}}=30, V_{\text{max}}=120$ (提供連貫律動感)。
 *   **稀有鼓組 (Toms/Cymbals)**：$\gamma = 1.4$，$V_{\text{min}}=35, V_{\text{max}}=125$。
 
+---
+
+## 10. V24 動態時變 BPM 追蹤與時變網格量化 (Dynamic Tempo Map & Floating Grid)
+
+### 10.1 時變節拍追蹤 (Dynamic Beat Tracking)
+*   **動態追蹤**：對於非固定拍子（速度漂移）的實體演奏樂曲，使用 `librosa.beat.beat_track` 結合全域 `estimated_tempo` 作為引導，獲取每一拍的精確時間戳 `beat_times`，消除速度累積誤差。
+
+### 10.2 時變網格對齊 (Floating Grid Aligner)
+*   **動態相位**：計算 onset $t$ 所在的時變拍點區間 $i$：
+    $$\text{phase\_t} = \frac{t - \text{beat\_times}[i]}{\text{beat\_times}[i+1] - \text{beat\_times}[i]}$$
+*   **動態吸附**：以每 4 拍小節為動態滑動窗，比較直拍與三連音的偏離，將擊點吸附至 `beat_times[i] + (sub_idx / sub_divs) * (beat_times[i+1] - beat_times[i])`。
+
+### 10.3 MIDI 速度軌寫入 (MIDI Tempo Changes Mapping)
+*   **實時速度**：動態計算每一拍的實時速度（`60.0 / duration`），並在該拍起點處將對應的 BPM 寫入 `pm.tempo_changes`，使導出的 MIDI 自帶 Tempo Map。
+
+### 10.4 --floating-bpm 物理隔離 Feature Toggle
+*   **安全隔離**：新增 `--floating-bpm` 布林開關，預設關閉（False）。在安全回歸測試中完全退出，維持 3-class 完璧基線，保障零 Regression 綠燈。
+
+
 

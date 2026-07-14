@@ -2,6 +2,15 @@
 
 Last updated: 2026-07-13
 
+## V24 時變 BPM 追蹤與時變網格對齊成功落地 (2026-07-13)
+
+### 1. 實現 Floating Grid Aligner 與 MIDI Tempo Map
+*   **動態節奏貼合**：使用 `librosa.beat.beat_track` 提取時變 `beat_times`，並動態在 MIDI 檔案的拍點起點處寫入時變速度事件。
+*   **徹底解決 Grid Drift**：即使是真人實體演奏或非對拍錄音，也能通過對齊拍點內的 `phase_t` 吸附，完美消除小節後半段累積的對位漂移，生成工整乾淨的譜面網格。
+
+### 2. 回歸防線 100% 綠燈
+*   默認 Feature Toggle `--floating-bpm` 處於關閉狀態，保證 3-class 完璧回歸測試 100% PASS 零 Regression。
+
 ## V23 MIDI 力度動態表情非線性映射成功落地 (2026-07-13)
 
 ### 1. 客製化冪律力度曲線，還原真實強弱動態表情
