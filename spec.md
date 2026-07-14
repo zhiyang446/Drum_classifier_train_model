@@ -977,3 +977,19 @@ Round4 compound-meter trailing-prune rule:
 *   **微調數據源**：使用完美的 6 類架子鼓標記數據庫 `processed_data/star_meta.json` 進行抽樣。
 *   **訓練設置**：解凍 Backbone（學習率 `1e-6`，Heads 學習率 `5e-5`），利用 Adam 優化器進行 10 個 Epoch 的對抗微調。網格對照後將 `adv12` checkpoint 部署覆蓋為系統 `six_class_tower_b_specialized.pth` 模型權重。
 
+---
+
+## 9. V23 MIDI 力度動態表情非線性映射 (MIDI Velocity Non-Linear Mapping)
+
+### 9.1 冪律映射公式 (Power-Law Mapping Formula)
+*   **非線性映射**：為了拉開強重音與極輕裝飾音的動態對比，不再將機率線性映射至力度，而是採用冪律對數複合映射：
+    $$V = V_{\text{min}} + (V_{\text{max}} - V_{\text{min}}) \cdot P^{\gamma}$$
+*   **物理合理性**：當預測機率 $P$ 偏低時，其力度會被 $\gamma$ 冪次強力壓低，產生極弱裝飾音聽感；當 $P$ 高於 $0.90$ 時，力度迅速拉升，產生強重音衝擊。
+
+### 9.2 各通道物理特徵參數矩陣 (Per-Channel Velocity Configuration)
+*   **大鼓 (KD)**：$\gamma = 1.2$，$V_{\text{min}}=40, V_{\text{max}}=127$ (力度平穩且高衝擊)。
+*   **小鼓 (SD)**：$\gamma = 1.8$，$V_{\text{min}}=25, V_{\text{max}}=127$ (小鼓動態範圍極大，極限拉開強弱表情)。
+*   **踩镲 (HH)**：$\gamma = 1.5$，$V_{\text{min}}=30, V_{\text{max}}=120$ (提供連貫律動感)。
+*   **稀有鼓組 (Toms/Cymbals)**：$\gamma = 1.4$，$V_{\text{min}}=35, V_{\text{max}}=125$。
+
+

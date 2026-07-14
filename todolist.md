@@ -4,6 +4,13 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **V23 MIDI 力度動態表情非線性映射方案落地** (2026-07-13)
+    *   [x] 在 `transcribe.py` 中寫入全域 `map_velocity` 冪律力度曲線。
+    -   [x] 客製化大鼓（1.2）、小鼓（1.8）、踩镲（1.5）與其餘通道（1.4）的 $\gamma$ 物理參數。
+    -   [x] 替換六類別 MIDI Note 寫入 velocity 邏輯為客製化非線性曲線。
+    -   [x] 執行安全守衛測試 `verify_current_solution.py` 獲得 100% 完璧綠燈。
+    -   [x] 將最新代碼與 docs 合併推送至遠端 `antigravity` 與 `main` 分支。
+
 *   [x] **V22 Model B 對抗權重超參數調優方案落地** (2026-07-13)
     *   [x] 啟動 12x 對抗強度微調並導出 `six_class_tower_b_adv12.pth`。
     -   [x] 啟動 8x 對抗強度微調並導出 `six_class_tower_b_adv8.pth`。
