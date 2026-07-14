@@ -85,24 +85,31 @@ def evaluate_transcription(transcribed_times, xml_path, tolerance=0.050):
         }
     return metrics
 
-def map_velocity(prob, c_type='generic'):
+def map_velocity(prob, c_type='generic', config=None):
     """
     對模型預測的激發機率進行客製化的非線性冪律映射，還原真實力度動態。
     """
     p = np.clip(prob, 0.0, 1.0)
     
+    # 讀取配置字典
+    v_conf = config.get("velocity", {}) if config else {}
+    
     if c_type == 'kick':
-        gamma = 1.2
-        v_min, v_max = 40, 127
+        gamma = v_conf.get("kick_gamma", 1.2)
+        v_min = v_conf.get("kick_min", 40)
+        v_max = v_conf.get("kick_max", 127)
     elif c_type == 'snare':
-        gamma = 1.8
-        v_min, v_max = 25, 127
+        gamma = v_conf.get("snare_gamma", 1.8)
+        v_min = v_conf.get("snare_min", 25)
+        v_max = v_conf.get("snare_max", 127)
     elif c_type == 'hihat':
-        gamma = 1.5
-        v_min, v_max = 30, 120
+        gamma = v_conf.get("hihat_gamma", 1.5)
+        v_min = v_conf.get("hihat_min", 30)
+        v_max = v_conf.get("hihat_max", 120)
     else:  # cymbals / toms
-        gamma = 1.4
-        v_min, v_max = 35, 125
+        gamma = v_conf.get("rare_gamma", 1.4)
+        v_min = v_conf.get("rare_min", 35)
+        v_max = v_conf.get("rare_max", 125)
         
     scaled_val = v_min + (v_max - v_min) * (p ** gamma)
     return int(np.round(scaled_val))
@@ -931,7 +938,7 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
     cleaned.sort(key=lambda row: row.get('quantized_onset', 0.0))
     return cleaned
 
-def apply_cymbals_adc_hygiene(onset_decisions):
+def apply_cymbals_adc_hygiene(onset_decisions, config=None):
     """
     對 Toms/Crash/Ride 進行時間密度約束 (ADC) 與鈸類互斥消噪。
     """
@@ -986,31 +993,75 @@ def apply_cymbals_adc_hygiene(onset_decisions):
             d['ride_triggered'] = False
 
     # 3. 處理 Toms 餘音共振 (Toms Decay Gate)
+    toms_conf = config.get("toms_decay_gate", {}) if config else {}
+    gate_dur = toms_conf.get("gate_duration_sec", 0.15) if toms_conf.get("enabled", True) else 0.0
+
     for d in onset_decisions:
         if not d.get('tom_triggered', False):
             continue
         t_curr = d['quantized_onset']
         
-        # 尋找前 150ms 內是否有 KD/SD 重擊
+        # 尋找前 gate_dur 秒內是否有 KD/SD 重擊
         has_recent_strong_hit = False
-        for other in onset_decisions:
-            t_other = other['quantized_onset']
-            if 0.0 < t_curr - t_other <= 0.15:
-                if other.get('kick_triggered', False) and other['probs'][0] >= 0.80:
-                    has_recent_strong_hit = True
-                    break
-                if other.get('snare_triggered', False) and other['probs'][1] >= 0.80:
-                    has_recent_strong_hit = True
-                    break
+        if gate_dur > 0:
+            for other in onset_decisions:
+                t_other = other['quantized_onset']
+                if 0.0 < t_curr - t_other <= gate_dur:
+                    if other.get('kick_triggered', False) and other['probs'][0] >= 0.80:
+                        has_recent_strong_hit = True
+                        break
+                    if other.get('snare_triggered', False) and other['probs'][1] >= 0.80:
+                        has_recent_strong_hit = True
+                        break
                     
         if has_recent_strong_hit and d['probs'][3] < 0.65:
             d['tom_triggered'] = False
 
     return onset_decisions
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
+    
+    # 載入預設與客製化配置
+    DEFAULT_CONFIG = {
+        "velocity": {
+            "kick_gamma": 1.2,
+            "kick_min": 40,
+            "kick_max": 127,
+            "snare_gamma": 1.8,
+            "snare_min": 25,
+            "snare_max": 127,
+            "hihat_gamma": 1.5,
+            "hihat_min": 30,
+            "hihat_max": 120,
+            "rare_gamma": 1.4,
+            "rare_min": 35,
+            "rare_max": 125
+        },
+        "hihat_open_adaptive": {
+            "enabled": True,
+            "base_offset": -16.0
+        },
+        "toms_decay_gate": {
+            "enabled": True,
+            "gate_duration_sec": 0.15
+        }
+    }
+    config = DEFAULT_CONFIG.copy()
+    if config_path and os.path.exists(config_path):
+        try:
+            import json
+            with open(config_path, "r", encoding="utf-8") as f:
+                user_conf = json.load(f)
+            for k, v in user_conf.items():
+                if isinstance(v, dict) and k in config:
+                    config[k].update(v)
+                else:
+                    config[k] = v
+            print(f"[Config] Loaded user config from {config_path}.")
+        except Exception as e:
+            print(f"[Config Warning] Failed to parse config JSON: {e}. Using default configs.")
     
     # 1. Load exactly the checkpoint requested by the caller.
     # 中文註解：不依音檔路徑切換模型，避免 regression/user blind 特判掩蓋真實能力。
@@ -2765,7 +2816,30 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         
     # Apply Cymbal Acoustic Density Constraints (ADC) & Mutex Filters
     if model_rare_path is not None:
-        onset_decisions = apply_cymbals_adc_hygiene(onset_decisions)
+        onset_decisions = apply_cymbals_adc_hygiene(onset_decisions, config=config)
+
+    # 預先計算自適應 Hi-Hat 開合閾值
+    hh_open_conf = config.get("hihat_open_adaptive", {}) if config else {}
+    base_hh_offset = hh_open_conf.get("base_offset", -16.0)
+    adaptive_hh_enabled = hh_open_conf.get("enabled", True)
+    hh_thresh = base_hh_offset
+    
+    if adaptive_hh_enabled and len(onset_times) > 0:
+        diff_list = []
+        for d in onset_decisions:
+            if d.get('hh_triggered', False):
+                t = d['frame']
+                t_energy = np.mean(features[0, 154:256, t])
+                decay_frame = min(n_frames - 1, t + 30)
+                decay_energy = np.mean(features[0, 154:256, decay_frame])
+                diff_list.append(decay_energy - t_energy)
+        if len(diff_list) >= 5:
+            median_decay = np.median(diff_list)
+            hh_thresh = median_decay + 2.5
+            hh_thresh = max(-25.0, min(-10.0, hh_thresh))
+            print(f"[Adaptive Hi-Hat] Median HH decay: {median_decay:.2f} dB, dynamic threshold set to {hh_thresh:.2f} dB.")
+        else:
+            print(f"[Adaptive Hi-Hat] Not enough HH samples. Falling back to static threshold: {hh_thresh:.2f} dB.")
         
     # --- MIDI Generation and Debug Logging ---
     for d in onset_decisions:
@@ -2780,7 +2854,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         
         if d['kick_triggered']:
             note = pretty_midi.Note(
-                velocity=d.get('vel_kick', map_velocity(d['probs'][0], 'kick')),
+                velocity=d.get('vel_kick', map_velocity(d['probs'][0], 'kick', config)),
                 pitch=pitch_map[0],
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2792,7 +2866,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             
         if d['snare_triggered']:
             note = pretty_midi.Note(
-                velocity=d.get('vel_snare', map_velocity(d['probs'][1], 'snare')),
+                velocity=d.get('vel_snare', map_velocity(d['probs'][1], 'snare', config)),
                 pitch=pitch_map[1],
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2810,13 +2884,13 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 t_energy = np.mean(features[0, 154:256, t])
                 decay_frame = min(n_frames - 1, t + 30)
                 decay_energy = np.mean(features[0, 154:256, decay_frame])
-                is_open = (decay_energy - t_energy >= -16.0)
+                is_open = (decay_energy - t_energy >= hh_thresh)
                 hh_pitch = 46 if is_open else 42
             else:
                 hh_pitch = pitch_map[2]
                 
             note = pretty_midi.Note(
-                velocity=d.get('vel_hihat', map_velocity(d['probs'][2], 'hihat')),
+                velocity=d.get('vel_hihat', map_velocity(d['probs'][2], 'hihat', config)),
                 pitch=hh_pitch,
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2829,7 +2903,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         if model_rare_path is not None:
             if d.get('tom_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_tom', map_velocity(d['probs'][3], 'tom')),
+                    velocity=d.get('vel_tom', map_velocity(d['probs'][3], 'tom', config)),
                     pitch=pitch_map[3],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -2840,7 +2914,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 
             if d.get('crash_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_crash', map_velocity(d['probs'][4], 'cymbal')),
+                    velocity=d.get('vel_crash', map_velocity(d['probs'][4], 'cymbal', config)),
                     pitch=pitch_map[4],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -2851,7 +2925,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 
             if d.get('ride_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_ride', map_velocity(d['probs'][5], 'cymbal')),
+                    velocity=d.get('vel_ride', map_velocity(d['probs'][5], 'cymbal', config)),
                     pitch=pitch_map[5],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -3266,67 +3340,152 @@ def main():
     parser.add_argument('--model-rare', type=str, default=None, help="Optional rare drum classes extension model")
     parser.add_argument('--adaptive-snare', action='store_true', help="Enable dynamic Snare thresholding")
     parser.add_argument('--floating-bpm', action='store_true', help="Enable dynamic time-varying BPM beat tracking and tempo mapping")
+    parser.add_argument('--config', type=str, default=None, help="Path to custom post-processing config JSON file")
     
     args = parser.parse_args()
     
-    if args.output is None:
-        base, _ = os.path.splitext(args.input)
-        output_path = f"{base}_drums.mid"
+    import glob
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    input_pattern = args.input
+    wav_files = []
+    
+    if os.path.isdir(input_pattern):
+        wav_files = glob.glob(os.path.join(input_pattern, "*.wav"))
+    elif "*" in input_pattern:
+        wav_files = glob.glob(input_pattern)
+    elif "," in input_pattern:
+        wav_files = [f.strip() for f in input_pattern.split(",") if f.strip()]
     else:
-        output_path = args.output
-
-    if args.event_debug == 'auto':
-        input_base, _ = os.path.splitext(args.input)
-        event_debug_path = f"{input_base}_event_debug.csv"
-    else:
-        event_debug_path = args.event_debug
-
-    if args.raw_ai_events == 'auto':
-        input_base, _ = os.path.splitext(args.input)
-        raw_ai_events_path = f"{input_base}_raw_ai_events.csv"
-    else:
-        raw_ai_events_path = args.raw_ai_events
-
-    if args.notation_events == 'auto':
-        input_base, _ = os.path.splitext(args.input)
-        notation_events_path = f"{input_base}_notation_events.csv"
-    else:
-        notation_events_path = args.notation_events
+        wav_files = [input_pattern]
         
-    if args.no_quantize:
-        grid_mode = 'none'
-    else:
-        grid_mode = args.grid
+    wav_files = [f for f in wav_files if os.path.exists(f)]
+    
+    if not wav_files:
+        print(f"[Error] No valid input wav files found matching pattern: {input_pattern}")
+        return
         
-    if args.crosstalk == 'auto':
-        no_crosstalk_val = None
-    elif args.crosstalk == 'on':
-        no_crosstalk_val = False  # Enable suppression
+    if len(wav_files) == 1:
+        single_input = wav_files[0]
+        if args.output is None:
+            base, _ = os.path.splitext(single_input)
+            output_path = f"{base}_drums.mid"
+        else:
+            output_path = args.output
+
+        if args.event_debug == 'auto':
+            input_base, _ = os.path.splitext(single_input)
+            event_debug_path = f"{input_base}_event_debug.csv"
+        else:
+            event_debug_path = args.event_debug
+
+        if args.raw_ai_events == 'auto':
+            input_base, _ = os.path.splitext(single_input)
+            raw_ai_events_path = f"{input_base}_raw_ai_events.csv"
+        else:
+            raw_ai_events_path = args.raw_ai_events
+
+        if args.notation_events == 'auto':
+            input_base, _ = os.path.splitext(single_input)
+            notation_events_path = f"{input_base}_notation_events.csv"
+        else:
+            notation_events_path = args.notation_events
+            
+        if args.no_quantize:
+            grid_mode = 'none'
+        else:
+            grid_mode = args.grid
+            
+        if args.crosstalk == 'auto':
+            no_crosstalk_val = None
+        elif args.crosstalk == 'on':
+            no_crosstalk_val = False  # Enable suppression
+        else:
+            no_crosstalk_val = True   # Disable suppression (no crosstalk)
+
+        return transcribe(
+            audio_path=single_input,
+            model_path=args.model,
+            output_midi_path=output_path,
+            thresh_kick=args.thresh_kick,
+            thresh_snare=args.thresh_snare,
+            thresh_hihat=args.thresh_hihat,
+            threshold=args.threshold,
+            tempo=args.tempo,
+            grid=grid_mode,
+            onset_delta=args.onset_delta,
+            no_crosstalk=no_crosstalk_val,
+            fill_hihat=args.fill_hihat,
+            time_signature=args.time_signature,
+            sync_audio=args.sync_audio,
+            event_debug_path=event_debug_path,
+            raw_ai_events_path=raw_ai_events_path,
+            notation_events_path=notation_events_path,
+            model_rare_path=args.model_rare,
+            adaptive_snare=args.adaptive_snare,
+            floating_bpm=args.floating_bpm,
+            config_path=args.config
+        )
     else:
-        no_crosstalk_val = True   # Disable suppression (no crosstalk)
+        print(f"[Batch Mode] Found {len(wav_files)} WAV files to process in parallel.")
+        gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        max_workers = min(len(wav_files), max(1, gpu_count * 2) if gpu_count > 0 else 4)
+        print(f"[Batch Mode] GPUs available: {gpu_count}. Spawning {max_workers} thread workers.")
         
-    return transcribe(
-        audio_path=args.input,
-        model_path=args.model,
-        output_midi_path=output_path,
-        thresh_kick=args.thresh_kick,
-        thresh_snare=args.thresh_snare,
-        thresh_hihat=args.thresh_hihat,
-        threshold=args.threshold,
-        tempo=args.tempo,
-        grid=grid_mode,
-        onset_delta=args.onset_delta,
-        no_crosstalk=no_crosstalk_val,
-        fill_hihat=args.fill_hihat,
-        time_signature=args.time_signature,
-        sync_audio=args.sync_audio,
-        event_debug_path=event_debug_path,
-        raw_ai_events_path=raw_ai_events_path,
-        notation_events_path=notation_events_path,
-        model_rare_path=args.model_rare,
-        adaptive_snare=args.adaptive_snare,
-        floating_bpm=args.floating_bpm
-    )
+        def process_single_wav(idx, wav_path):
+            try:
+                base, _ = os.path.splitext(wav_path)
+                out_midi = f"{base}_drums.mid"
+                
+                if gpu_count > 0:
+                    device_id = idx % gpu_count
+                    torch.cuda.set_device(device_id)
+                    dev_name = f"cuda:{device_id}"
+                else:
+                    dev_name = "cpu"
+                    
+                print(f"[Worker-{idx}] Processing {os.path.basename(wav_path)} on {dev_name}...")
+                grid_mode = 'none' if args.no_quantize else args.grid
+                no_crosstalk_val = None if args.crosstalk == 'auto' else (False if args.crosstalk == 'on' else True)
+                
+                transcribe(
+                    audio_path=wav_path,
+                    model_path=args.model,
+                    output_midi_path=out_midi,
+                    thresh_kick=args.thresh_kick,
+                    thresh_snare=args.thresh_snare,
+                    thresh_hihat=args.thresh_hihat,
+                    threshold=args.threshold,
+                    tempo=args.tempo,
+                    grid=grid_mode,
+                    onset_delta=args.onset_delta,
+                    no_crosstalk=no_crosstalk_val,
+                    fill_hihat=args.fill_hihat,
+                    time_signature=args.time_signature,
+                    sync_audio=args.sync_audio,
+                    event_debug_path=None,
+                    raw_ai_events_path=None,
+                    notation_events_path=None,
+                    model_rare_path=args.model_rare,
+                    adaptive_snare=args.adaptive_snare,
+                    floating_bpm=args.floating_bpm,
+                    config_path=args.config
+                )
+                print(f"[Worker-{idx}] Finished {os.path.basename(wav_path)} -> {out_midi}")
+                return wav_path, True
+            except Exception as e:
+                print(f"[Worker-{idx} Error] Failed to process {wav_path}: {e}")
+                return wav_path, False
+                
+        success_count = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_single_wav, i, path) for i, path in enumerate(wav_files)]
+            for fut in as_completed(futures):
+                path, ok = fut.result()
+                if ok:
+                    success_count += 1
+                    
+        print(f"[Batch Mode] Pipeline finished. Successfully transcribed {success_count}/{len(wav_files)} files.")
 
 if __name__ == '__main__':
     main()
