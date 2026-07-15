@@ -20,6 +20,34 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-15T01:00:00+08:00",
+  "pattern": "manual-validation",
+  "duration_s": 360,
+  "items_found": 1,
+  "actions_taken": 0,
+  "escalations": 1,
+  "tokens_estimate": 14000,
+  "outcome": "escalated",
+  "notes": "Rare-class threshold and core-competition sweeps proved TOM/CRASH/RIDE are model class-confusion errors. Existing v15 failed unchanged STAR held-out gate at macro F1 0.3551, so no product code, five-song run, training, checkpoint replacement, push, or deployment followed."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T00:00:00+08:00",
+  "pattern": "manual-validation",
+  "duration_s": 420,
+  "items_found": 1,
+  "actions_taken": 1,
+  "escalations": 1,
+  "tokens_estimate": 18000,
+  "outcome": "fix-proposed",
+  "notes": "Removed duplicate floating sync prefix offset and added one shared 67ms output-latency correction. Existing verifier passed; unchanged five-song gate improved to macro F1 0.4710 but remains below 0.70, so no deployment or further runtime fix was attempted."
+}
+```
+
+```json
+{
   "run_id": "2026-07-06T00:00:00+08:00",
   "pattern": "daily-triage",
   "level": "L1",

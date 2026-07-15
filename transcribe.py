@@ -107,6 +107,95 @@ def map_velocity(prob, c_type='generic'):
     scaled_val = v_min + (v_max - v_min) * (p ** gamma)
     return int(np.round(scaled_val))
 
+
+HIHAT_OPEN_DECAY_DB = -9.5
+
+# 中文註解：模型與特徵鏈的固定輸出延遲；實體音訊時間需扣除此校正值。
+SYNC_OUTPUT_LATENCY_SEC = 0.067
+
+
+def calculate_sync_time_offset(first_onset, sync_audio, quantized_is_absolute):
+    """計算 MIDI 音訊同步偏移，避免絕對網格重複加前奏並補償固定推論延遲。"""
+    if not sync_audio:
+        return 0.0
+    base_offset = 0.0 if quantized_is_absolute else float(first_onset)
+    return base_offset - SYNC_OUTPUT_LATENCY_SEC
+
+
+def compute_hihat_hf_power(y, sr=44100, hop_length=256, cutoff_hz=5000.0, chunk_frames=2048):
+    """
+    以分塊 STFT 計算 Hi-Hat 高頻功率包絡，避免長曲建立巨大頻譜矩陣。
+
+    :param y: numpy array，單聲道原始音訊。
+    :param sr: int，取樣率。
+    :param hop_length: int，與模型特徵相同的 hop size。
+    :param cutoff_hz: float，高頻頻帶下限。
+    :param chunk_frames: int，每批 FFT frame 數。
+    :return: numpy array，每個 frame 的平均高頻功率。
+    """
+    n_fft = 2048
+    if len(y) == 0:
+        return np.zeros(0, dtype=np.float32)
+
+    # 中心補零與 librosa.stft(center=True) 一致，使 frame 可直接對齊模型 onset。
+    padded = np.pad(np.asarray(y, dtype=np.float32), (n_fft // 2, n_fft // 2))
+    frames = librosa.util.frame(padded, frame_length=n_fft, hop_length=hop_length)
+    window = librosa.filters.get_window('hann', n_fft, fftbins=True).astype(np.float32)
+    frequencies = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+    high_frequency_mask = frequencies >= cutoff_hz
+    power_envelope = np.empty(frames.shape[1], dtype=np.float32)
+
+    for start in range(0, frames.shape[1], chunk_frames):
+        end = min(frames.shape[1], start + chunk_frames)
+        spectrum = np.fft.rfft(frames[:, start:end] * window[:, None], axis=0)
+        power_envelope[start:end] = np.mean(np.abs(spectrum[high_frequency_mask]) ** 2, axis=0)
+
+    return power_envelope
+
+
+def classify_hihat_articulation(hf_power, onset_frame, next_hihat_frame, sr=44100, hop_length=256):
+    """
+    依原始高頻功率的 attack-to-sustain 衰減判定閉合或開放 Hi-Hat。
+
+    :param hf_power: numpy array，`compute_hihat_hf_power` 產生的功率包絡。
+    :param onset_frame: int，當前 Hi-Hat onset frame。
+    :param next_hihat_frame: int|None，下一個 Hi-Hat frame，用於排除後續打擊汙染。
+    :param sr: int，取樣率。
+    :param hop_length: int，frame hop size。
+    :return: tuple(int, float|None)，MIDI pitch 42/46 與衰減 dB。
+    """
+    if len(hf_power) == 0:
+        return 42, None
+
+    def ms_to_frames(milliseconds):
+        """將毫秒轉換為至少一個的特徵 frame 數。"""
+        return max(1, int(round((milliseconds / 1000.0) * sr / hop_length)))
+
+    onset_frame = int(np.clip(onset_frame, 0, len(hf_power) - 1))
+    alignment_radius = ms_to_frames(80)
+    search_start = max(0, onset_frame - alignment_radius)
+    search_end = min(len(hf_power), onset_frame + alignment_radius + 1)
+    peak_frame = search_start + int(np.argmax(hf_power[search_start:search_end]))
+
+    attack_start = max(0, peak_frame - ms_to_frames(10))
+    attack_end = min(len(hf_power), peak_frame + ms_to_frames(20) + 1)
+    sustain_start = peak_frame + ms_to_frames(40)
+    sustain_end = min(len(hf_power), peak_frame + ms_to_frames(160) + 1)
+    if next_hihat_frame is not None:
+        sustain_end = min(sustain_end, int(next_hihat_frame) - ms_to_frames(15))
+
+    # 密集事件沒有可信 sustain window 時保守輸出閉合，不猜開放音。
+    if sustain_end <= sustain_start or attack_end <= attack_start:
+        return 42, None
+
+    epsilon = 1e-12
+    attack_power = max(float(np.max(hf_power[attack_start:attack_end])), epsilon)
+    sustain_power = max(float(np.mean(hf_power[sustain_start:sustain_end])), epsilon)
+    decay_db = 10.0 * np.log10(sustain_power / attack_power)
+    pitch = 46 if decay_db >= HIHAT_OPEN_DECAY_DB else 42
+    return pitch, float(decay_db)
+
+
 def detect_grid_type(onset_times, estimated_tempo):
     """
     Detect whether the onset times closer match a straight 16th-note grid or a triplet-based grid.
@@ -439,7 +528,7 @@ def export_layer_events_csv(output_path, decisions, layer_name, estimated_tempo,
                 'frames': ';'.join(str(frame) for frame in d.get('frames', [])),
                 'raw_time': float(d.get('raw_onset', quantized_time)),
                 'quantized_time': quantized_time,
-                'midi_time': quantized_time + time_offset,
+                'midi_time': max(0.0, quantized_time + time_offset),
                 'beat': quantized_time * (estimated_tempo / 60.0),
                 'step_16th': d.get('step_16th', ''),
                 'prob_kick': float(probs[0]),
@@ -1739,8 +1828,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     if active_grid == 'none':
         if sync_audio:
             quantized_times = onset_times
-            time_offset = 0.0
-            print("Grid Quantization disabled. Audio Sync enabled (retaining raw onset times).")
+            time_offset = calculate_sync_time_offset(first_onset, True, True)
+            print(f"Grid Quantization disabled. Audio Sync enabled (latency correction: {SYNC_OUTPUT_LATENCY_SEC:.3f}s).")
         else:
             quantized_times = onset_times - first_onset
             time_offset = 0.0
@@ -1749,8 +1838,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     else:
         print(f"[Grid Alignment] Grid start aligned to first triggered note at {first_onset:.4f}s")
         if sync_audio:
-            time_offset = first_onset
-            print(f"[Audio Sync Mode] Retaining prefix silence of {time_offset:.4f}s in MIDI.")
+            time_offset = calculate_sync_time_offset(first_onset, True, beat_times is not None)
+            print(f"[Audio Sync Mode] MIDI time offset: {time_offset:.4f}s (latency correction: {SYNC_OUTPUT_LATENCY_SEC:.3f}s).")
         else:
             time_offset = 0.0
             print("[Score Notation Mode] Shifting first note to 0.0s for clean score layout.")
@@ -1931,7 +2020,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     if beat_times is not None:
         tempos = []
         tempo_times = []
-        shift_offset = first_onset if not sync_audio else 0.0
+        shift_offset = first_onset if not sync_audio else SYNC_OUTPUT_LATENCY_SEC
         for i in range(len(beat_times) - 1):
             dur = beat_times[i+1] - beat_times[i]
             if dur > 0:
@@ -2767,6 +2856,16 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     if model_rare_path is not None:
         onset_decisions = apply_cymbals_adc_hygiene(onset_decisions)
         
+    # 六類路徑需輸出 Hi-Hat articulation；高頻包絡只計算一次。
+    final_hihat_decisions = [d for d in onset_decisions if d.get('hh_triggered', False)]
+    next_hihat_frame_by_id = {
+        id(decision): final_hihat_decisions[index + 1]['frame']
+        for index, decision in enumerate(final_hihat_decisions[:-1])
+    }
+    hihat_hf_power = None
+    if model_rare_path is not None and final_hihat_decisions and not enable_snare_roll:
+        hihat_hf_power = compute_hihat_hf_power(y, sr=sr, hop_length=hop_length)
+
     # --- MIDI Generation and Debug Logging ---
     for d in onset_decisions:
         quantized_onset = d['quantized_onset']
@@ -2775,8 +2874,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         # Note length is slightly longer than grid spacing (1.8x) to look clean in notation software
         note_len = grid_duration * 1.8 if active_grid != 'none' else 0.2
         
-        # Shift notes by time_offset to align perfectly with the original audio physical timing
-        midi_onset = quantized_onset + time_offset
+        # 中文註解：套用共用實體時間校正，並避免 MIDI 出現負時間。
+        midi_onset = max(0.0, quantized_onset + time_offset)
         
         if d['kick_triggered']:
             note = pretty_midi.Note(
@@ -2806,14 +2905,17 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             if enable_snare_roll:
                 hh_pitch = 44
             elif model_rare_path is not None:
-                t = d['frame']
-                t_energy = np.mean(features[0, 154:256, t])
-                decay_frame = min(n_frames - 1, t + 30)
-                decay_energy = np.mean(features[0, 154:256, decay_frame])
-                is_open = (decay_energy - t_energy >= -16.0)
-                hh_pitch = 46 if is_open else 42
+                hh_pitch, hh_decay_db = classify_hihat_articulation(
+                    hihat_hf_power,
+                    d['frame'],
+                    next_hihat_frame_by_id.get(id(d)),
+                    sr=sr,
+                    hop_length=hop_length,
+                )
+                d['hh_decay_db'] = hh_decay_db
             else:
                 hh_pitch = pitch_map[2]
+            d['hh_pitch'] = hh_pitch
                 
             note = pretty_midi.Note(
                 velocity=d.get('vel_hihat', map_velocity(d['probs'][2], 'hihat')),

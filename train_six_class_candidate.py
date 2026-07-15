@@ -9,7 +9,7 @@ import soundfile as sf
 import torch
 import torch.nn.functional as F
 
-from run_six_class_smoke import CHUNK_FRAMES, LABELS, SR, TARGET_SAMPLES, build_window, load_compatible_weights
+from run_six_class_smoke import CHUNK_FRAMES, LABELS, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_compatible_weights
 from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
 
@@ -81,12 +81,22 @@ def freeze_for_head_training(model):
         parameter.requires_grad = name.startswith('onset_head') or name.startswith('velocity_head')
 
 
-def batch_from_schedule(schedule, metadata, start, batch_size):
+def batch_from_schedule(schedule, metadata, start, batch_size, accompaniment_pool=None, gain_range=(0.10, 0.30)):
     """中文註解：依固定 schedule 建立一個不含測試資料的訓練 batch。"""
     features, onsets, velocities = [], [], []
     for row in schedule[start:start + batch_size]:
         item = metadata[row['key']]
-        feature, onset, velocity, _ = build_window(item, row['anchor'])
+        accompaniment = None
+        gain = 0.0
+        offset = 0
+        if accompaniment_pool:
+            accompaniment = accompaniment_pool[np.random.randint(len(accompaniment_pool))]
+            gain = float(np.random.uniform(*gain_range))
+            offset = int(np.random.randint(max(1, len(accompaniment) - TARGET_SAMPLES + 1)))
+        feature, onset, velocity, _ = build_window(
+            item, row['anchor'], accompaniment=accompaniment,
+            accompaniment_gain=gain, accompaniment_offset=offset,
+        )
         features.append(feature)
         onsets.append(onset)
         velocities.append(velocity)
@@ -139,9 +149,10 @@ def run_self_check():
             'events': [{'inst': label, 'time': float(time)} for time in range(3)],
         }
     schedule = build_schedule(metadata, 2)
-    assert len(schedule) == len(LABELS) * 2
-    assert {row['label'] for row in schedule} == set(LABELS)
-    assert [row['label'] for row in schedule[:len(LABELS)]] == list(LABELS)
+    expected_labels = set(LABELS) | {'NEG'}
+    assert len(schedule) == len(expected_labels) * 2
+    assert {row['label'] for row in schedule} == expected_labels
+    assert [row['label'] for row in schedule[:len(expected_labels)]] == list(LABELS) + ['NEG']
     assert balanced_positive_weight(1, 1) == float(np.sqrt(CHUNK_FRAMES))
     targets = torch.zeros(1, 8, len(LABELS))
     targets[0, 4, 5] = 1.0
@@ -168,6 +179,9 @@ def main():
     parser.add_argument('--self-check', action='store_true')
     parser.add_argument('--no-lock-three-class', action='store_true', help='停用 KD/SD/HH 物理梯度鎖定')
     parser.add_argument('--max-positive-weight', type=float, default=None, help='限制稀有鼓件正樣本損失權重的最大值')
+    parser.add_argument('--accompaniment', help='Optional non-gate no-drums WAV for online domain mixing')
+    parser.add_argument('--accompaniment-gain-min', type=float, default=0.10)
+    parser.add_argument('--accompaniment-gain-max', type=float, default=0.30)
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
 
@@ -178,10 +192,14 @@ def main():
         parser.error('--meta is required unless --self-check is used')
     if args.per_class <= 0 or args.batch_size <= 0 or args.epochs <= 0 or args.log_every <= 0:
         parser.error('--per-class, --batch-size, --epochs, and --log-every must be positive')
+    if not 0.0 <= args.accompaniment_gain_min <= args.accompaniment_gain_max:
+        parser.error('accompaniment gain range is invalid')
     torch.manual_seed(1337)
+    np.random.seed(1337)
     with open(args.meta, encoding='utf-8') as handle:
         metadata = json.load(handle)
     schedule = build_schedule(metadata, args.per_class)
+    accompaniment_pool = [load_accompaniment(args.accompaniment)] if args.accompaniment else None
     if len(schedule) % args.batch_size:
         raise ValueError('Schedule length must divide evenly by batch size.')
     os.makedirs(args.output_dir, exist_ok=True)
@@ -219,7 +237,11 @@ def main():
         if args.freeze_bn:
             freeze_batchnorm_stats(model)
         for start in range(0, len(schedule), args.batch_size):
-            feature, onset, velocity = batch_from_schedule(schedule, metadata, start, args.batch_size)
+            feature, onset, velocity = batch_from_schedule(
+                schedule, metadata, start, args.batch_size,
+                accompaniment_pool=accompaniment_pool,
+                gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
+            )
             x = torch.from_numpy(feature).float().to(device)
             onset_target = torch.from_numpy(onset).float().to(device)
             velocity_target = torch.from_numpy(velocity).float().to(device)
@@ -261,6 +283,8 @@ def main():
         'full_model': args.full_model, 'gaussian_targets': args.gaussian_targets,
         'class_positive_weights': class_weights, 'class_event_counts': class_event_counts, 'freeze_batchnorm': args.freeze_bn,
         'first_loss': losses[0], 'last_loss': losses[-1],
+        'accompaniment': os.path.abspath(args.accompaniment) if args.accompaniment else None,
+        'accompaniment_gain_range': [args.accompaniment_gain_min, args.accompaniment_gain_max],
         'transferred_compatible_tensors': transferred, 'candidate': os.path.abspath(candidate_path),
     }
     with open(os.path.join(args.output_dir, 'train_report.json'), 'w', encoding='utf-8') as handle:

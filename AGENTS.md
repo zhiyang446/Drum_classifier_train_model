@@ -72,3 +72,11 @@ loop-cost.cmd --pattern daily-triage --level L1
   - 檢查 `origin/codex` 是否有更新的進度。若有，須經由使用者確認後，將 `origin/codex` 合併（merge）或拉取至本地的 `antigravity` 分支，再繼續開發。
   - 任何在 `antigravity` 分支上的修改 commits，在 `git push` 前皆必須取得人工確認。
 
+## DCNN + Conformer 強制接力規則
+
+- 本輪模型路線固定為「真正 SuperFlux → 雙分支 DCNN → DCNN+TCN 隔離對照 → 小型 Conformer」。禁止改為純 Transformer。
+- 其他 AI 修改程式或啟動訓練前，必須先 `git fetch origin`，讀取 `origin/codex` 最新進度及 `spec.md`、`todolist.md`、`current_status.md`，不得沿用未驗證假設。
+- 不得使用 `test_real_audio` 固定五首做訓練、選 epoch、選 threshold、特徵參數或架構選擇；只有 STAR validation/test promotion 通過後才可執行五首商業 gate。
+- 不得覆蓋既有 `.pth` 或產品模型；每輪使用全新 candidate 路徑並保留 train/validation 報告。
+- Codex 每個 Phase 必須完成文件更新與規定測試後，才可 commit 並 push 至 `origin/codex`；失敗 Phase 也要提交失敗證據與 blocker，但不得標記為完成。
+- 其他 AI 不得自行改變架構順序、資料隔離、訓練配方或驗收門檻。若有 materially different 提案，先寫入規格與證據並取得使用者明確確認。

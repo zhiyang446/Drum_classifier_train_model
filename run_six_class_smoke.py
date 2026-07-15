@@ -87,7 +87,30 @@ def select_train_item(metadata):
     return max(candidates, key=lambda row: (row[0], row[1]))
 
 
-def build_window(item, anchor=None):
+def load_accompaniment(path):
+    """中文註解：以模型採樣率載入單聲道伴奏，供六類域增強重用。"""
+    waveform, _ = librosa.load(path, sr=SR, mono=True)
+    return np.asarray(waveform, dtype=np.float32)
+
+
+def mix_accompaniment(waveform, accompaniment, gain, offset=0):
+    """中文註解：沿用 Phase 3 peak-relative 公式，把固定長度伴奏片段混入鼓聲。"""
+    if gain < 0.0:
+        raise ValueError('accompaniment gain must be non-negative')
+    start = min(max(0, int(offset)), max(0, len(accompaniment) - len(waveform)))
+    segment = accompaniment[start:start + len(waveform)]
+    if len(segment) < len(waveform):
+        segment = np.pad(segment, (0, len(waveform) - len(segment)))
+    drum_peak = float(np.max(np.abs(waveform))) + 1e-6
+    accompaniment_peak = float(np.max(np.abs(segment))) + 1e-6
+    mixed = waveform + (segment / accompaniment_peak) * drum_peak * gain
+    mixed_peak = float(np.max(np.abs(mixed))) + 1e-6
+    if mixed_peak > 1.0:
+        mixed = mixed / mixed_peak
+    return np.asarray(mixed, dtype=np.float32)
+
+
+def build_window(item, anchor=None, accompaniment=None, accompaniment_gain=0.17, accompaniment_offset=0):
     """中文註解：讀取一個實體四秒音訊窗口，並建立六類 onset/velocity target。"""
     events = item['events']
     if anchor is None:
@@ -105,6 +128,8 @@ def build_window(item, anchor=None):
     if source_sr != SR:
         waveform = librosa.resample(waveform, orig_sr=source_sr, target_sr=SR)
     waveform = np.pad(waveform[:TARGET_SAMPLES], (0, max(0, TARGET_SAMPLES - len(waveform))))
+    if accompaniment is not None:
+        waveform = mix_accompaniment(waveform, accompaniment, accompaniment_gain, accompaniment_offset)
     start_sec = start_sample / float(source_sr)
     onset = np.zeros((CHUNK_FRAMES, len(LABELS)), dtype=np.float32)
     velocity = np.zeros_like(onset)
@@ -137,6 +162,8 @@ def run_self_check():
     assert transfer_semantic_head_rows(target, source) == 24
     assert target['onset_head.weight'][:, 0, 0].tolist() == [0.0, 1.0, 2.0, 1.0, 2.0, 2.0]
     assert target['velocity_head.bias'].tolist() == [0.0, 1.0, 2.0, 1.0, 2.0, 2.0]
+    mixed = mix_accompaniment(np.ones(8, dtype=np.float32) * 0.2, np.arange(16, dtype=np.float32), 0.2, 4)
+    assert mixed.shape == (8,) and np.isfinite(mixed).all()
     model = SymmetricDrumTCN(num_classes=6)
     configure_legacy_projection(model, {'backbone.legacy_slot_proj.weight': torch.zeros(64, 1024, 1, 1)})
     assert model.backbone.use_legacy_proj
