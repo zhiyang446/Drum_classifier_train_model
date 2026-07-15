@@ -20,6 +20,21 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-15T20:30:00+08:00",
+  "pattern": "manual-data-audit",
+  "level": "L1",
+  "duration_s": 180,
+  "items_found": 2,
+  "actions_taken": 0,
+  "escalations": 0,
+  "tokens_estimate": 7000,
+  "outcome": "report-only",
+  "notes": "Confirmed STAR train already contains TOM/CRASH/RIDE; raw E-GMD MIDI also contains those pitches, but current egmd_meta preprocessing keeps only KD/SD/HH. No code, data, checkpoint, or gate changes."
+}
+```
+
+```json
+{
   "run_id": "2026-07-15T01:00:00+08:00",
   "pattern": "manual-validation",
   "duration_s": 360,
@@ -147,5 +162,20 @@ Append one entry per loop run. Keep entries concise.
     "loop-cost.cmd --pattern daily-triage --level L1"
   ],
   "notes": "Confirmed E-GMD pitch 22 and 26 are already in the shared HH mapping; no model or runtime change."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T21:15:00+08:00",
+  "pattern": "manual-d4d-existing-data",
+  "level": "human-approved",
+  "duration_s": 1800,
+  "items_found": 2,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 22000,
+  "outcome": "fix-proposed",
+  "notes": "Added six-class E-GMD mapping, built non-destructive rare/combined metadata, fixed exact D4R resume, trained one equal-budget D4D candidate, and recorded mixed/raw 0.4601/0.4692. Commercial gate remains FAIL."
 }
 ```

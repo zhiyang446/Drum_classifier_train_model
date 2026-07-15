@@ -166,7 +166,9 @@ def transfer_d3r_hybrid_state(model, source_state):
     target = model.state_dict()
     copied = 0
     for name, value in source_state.items():
-        if name.startswith('onset_tcn.'):
+        if name in target and value.shape == target[name].shape:
+            target_name = name
+        elif name.startswith('onset_tcn.'):
             target_name = name.replace('onset_tcn.', 'onset_tcn.base.', 1)
         elif name.startswith('velocity_tcn.'):
             target_name = name.replace('velocity_tcn.', 'velocity_tcn.base.', 1)

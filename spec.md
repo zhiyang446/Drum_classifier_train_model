@@ -1708,3 +1708,23 @@ stateDiagram-v2
 - 相對 D3R，mixed/raw 分別增加 `0.0099/0.0165`，六類皆未下降超過 `0.03`，因此 D4R 架構改善 gate 通過並保留為後續研究基線。
 - 商業 STAR gate 仍 FAIL：Macro F1 距 `0.70` 尚差 `0.2315`（以較佳 raw 計），且 HH/TOM/CRASH/RIDE 未達單類 `0.55`。不得替換產品模型、不得部署，也不得用固定五首反覆選 checkpoint/threshold。
 - 結論：保留 TCN 再以 gated Conformer 學殘差，比直接替換 TCN 有效；但架構改善幅度不足以補足稀有類資料與 false-positive 邊界問題。下一步應先補歌曲隔離、非 gate、具授權且含 TOM/CRASH/RIDE 的真實音訊與標註，再做一次預先鎖定的訓練。
+
+### Phase D4D 現有資料覆蓋修復規格
+
+- 不更換 D4R 架構、loss、threshold 或驗證器；來源 checkpoint 固定為 D4R mixed 最佳 epoch 10。唯一實驗變因是把本機既有 E-GMD TOM/CRASH/RIDE 與更多 STAR train 窗口加入候選訓練。
+- E-GMD 六類映射固定為 TOM `41/43/45/47/48/50`、CRASH `49/52/55/57`、RIDE `51/53/59`；保留既有 KD/SD/HH 映射。只讀原始 train MIDI，輸出新的 rare metadata，不覆蓋 `processed_data/egmd_meta.json`。
+- E-GMD 以 `groove_key` 去重，每個 groove 最多一個 kit；只選含 TOM/CRASH/RIDE 的 train item。與 `processed_data/star_meta.json` 合併時，遇到重複 key 必須失敗，不得靜默覆蓋。
+- 固定每類 `1,152` windows 加 `1,152` NEG，共 `8,064` windows；訓練 `5` epochs、batch `12`，總計 `3,360` batches，與 D4R 的總更新步數相同。Queen augmentation、seed、heads/inherited/new-module LR `1e-4/1e-6/5e-5` 全部不變。
+- 必須先輸出 schedule 來源分布，確認 TOM/CRASH/RIDE 都實際包含 E-GMD 與 STAR；否則停止，不允許以「已合併」名義訓練。
+- 正式候選只訓練一次。依 mixed STAR 選 epoch 1–5，最佳者只跑一次 raw STAR；promotion 必須 mixed `>0.4599`、raw `>0.4685`，且任一類相對 D4R 不得下降超過 `0.03`。
+- `test_real_audio`、STAR validation/test 與其衍生輸出不得進入訓練或選參。未達商業 gate（Macro F1 `>=0.70` 且每類 `>=0.55`）時，不替換產品模型、不部署。
+
+### Phase D4D 最終結果（技術 gate 通過；效果不足以商用）
+
+- E-GMD rare metadata 共 `716` 個去重 groove；事件為 TOM `18,000`、CRASH `2,565`、RIDE `31,543`。新檔與 STAR 無 key 衝突，舊 `egmd_meta.json` 未覆蓋。
+- 8,064-window schedule 確認三類同時含 STAR/E-GMD：TOM `1,041/111`、CRASH `1,097/55`、RIDE `721/431`；正式訓練內實際三類事件為 `26,177/8,993/18,634`。
+- D4R epoch 10 已完整續載 `383` 個 tensors；5 epochs、3,360 batches 正常完成，loss `0.2337 -> 0.0694`，沒有 NaN/OOM。
+- mixed STAR 最佳為 epoch 2，Macro F1 `0.4601`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`。
+- raw STAR 只測 epoch 2，Macro F1 `0.4692`；六類為 `0.7127/0.7177/0.5245/0.3132/0.1556/0.3912`。
+- 相對 D4R mixed/raw 只增加 `0.0002/0.0007`，且沒有類別下降超過 `0.03`，因此預先定義的技術 promotion gate 通過；但幅度沒有實務意義，不足以宣稱資料問題已解決。
+- 商業 gate 仍 FAIL，產品模型、固定五首與部署狀態不變。結論是既有 E-GMD rare mapping 可用，但自然比例下 CRASH 新窗口太少，且電子鼓/合成鼓域仍無法補足真實歌曲的類別邊界。

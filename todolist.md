@@ -755,6 +755,15 @@
     *   [x] 商業 gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未全達 `0.55`；不替換產品模型、不跑固定五首。
     *   [x] 已以 commit `c1ab36f` push 至 `origin/codex`，供其他 AI 依相同架構與 gate 接力。
 
+*   [x] **Phase D4D 現有 TOM/CRASH/RIDE 資料覆蓋（完成；技術通過、商業失敗）**
+    *   [x] 盤點 STAR train 與原始 E-GMD rare pitch，確認現有資料未被完整利用。
+    *   [x] 鎖定單一變因：D4R 架構不變，1,152 windows/class、5 epochs，總 batches 維持 3,360。
+    *   [x] 擴充 E-GMD TOM/CRASH/RIDE mapping 與 self-check。
+    *   [x] 建立不覆蓋舊檔的 E-GMD rare metadata、STAR+E-GMD combined metadata 與來源分布報告。
+    *   [x] 執行 syntax/self-check、完整 regression 與一次 D4R candidate 訓練。
+    *   [x] mixed/raw `0.4601/0.4692`，相對 D4R `+0.0002/+0.0007`；技術 gate 通過但商業 gate FAIL。
+    *   [ ] 完成文件、commit 並 push 至 `origin/codex`。
+
 *   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
     *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
     *   [x] 實作零閘門 residual DCNN，確保轉移初始化逐值保留來源模型輸出。

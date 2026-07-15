@@ -66,6 +66,12 @@ def run_self_check():
         for parameter in hybrid.onset_tcn.conformer.parameters()
     )
 
+    resumed_hybrid = ResidualDCNNDrumHybridConformer(num_classes=6)
+    resumed_copied = transfer_d3r_hybrid_state(resumed_hybrid, hybrid.state_dict())
+    assert resumed_copied == len(hybrid.state_dict())
+    assert torch.equal(resumed_hybrid.onset_tcn.gate, hybrid.onset_tcn.gate)
+    assert torch.equal(next(resumed_hybrid.onset_tcn.base.parameters()), next(hybrid.onset_tcn.base.parameters()))
+
     optimizer, counts = build_full_model_optimizer(model, 'dcnn-conformer', 1e-4, 1e-6, 5e-5)
     assert [group['lr'] for group in optimizer.param_groups] == [1e-4, 1e-6, 5e-5]
     assert counts['new_modules'] > 0

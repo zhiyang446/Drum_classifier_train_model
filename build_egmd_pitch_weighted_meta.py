@@ -22,7 +22,21 @@ PITCH_TO_INST = {
     42: 'HH',
     44: 'HH',
     46: 'HH',
+    41: 'TOM',
+    43: 'TOM',
+    45: 'TOM',
+    47: 'TOM',
+    48: 'TOM',
+    50: 'TOM',
+    49: 'CRASH',
+    52: 'CRASH',
+    55: 'CRASH',
+    57: 'CRASH',
+    51: 'RIDE',
+    53: 'RIDE',
+    59: 'RIDE',
 }
+LABELS = ('KD', 'SD', 'HH', 'TOM', 'CRASH', 'RIDE')
 
 
 def parse_pitch_weights(text):
@@ -192,9 +206,7 @@ def build_meta(source_meta, limit, pitch_weights, required_pitches, velocity_min
             'report': {
                 'key': key,
                 'events': len(events),
-                'KD': inst_counts.get('KD', 0),
-                'SD': inst_counts.get('SD', 0),
-                'HH': inst_counts.get('HH', 0),
+                **{label: inst_counts.get(label, 0) for label in LABELS},
                 'KD_per_sec': f'{kd_rate:.4f}',
                 'SD_per_sec': f'{sd_rate:.4f}',
                 'density_score': f'{score:.4f}',
@@ -224,7 +236,7 @@ def write_report(path, rows):
     import csv
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    fields = ['key', 'events', 'KD', 'SD', 'HH', 'KD_per_sec', 'SD_per_sec', 'density_score', 'pitches', 'audio_path']
+    fields = ['key', 'events', *LABELS, 'KD_per_sec', 'SD_per_sec', 'density_score', 'pitches', 'audio_path']
     with open(path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
@@ -267,6 +279,9 @@ def run_self_check():
     assert groove_key_for_audio('x/10_jazz_110_beat_4-4_15.wav') == '10_jazz_110_beat_4-4'
     assert len(window_items('x', {'duration': 8.0}, 4.0)) == 2
     assert density_score(Counter({'KD': 8, 'SD': 4}), 4.0, 'kdsd_density') == 3.0
+    assert {PITCH_TO_INST[pitch] for pitch in (41, 43, 45, 47, 48, 50)} == {'TOM'}
+    assert {PITCH_TO_INST[pitch] for pitch in (49, 52, 55, 57)} == {'CRASH'}
+    assert {PITCH_TO_INST[pitch] for pitch in (51, 53, 59)} == {'RIDE'}
     print('Self-check passed.')
 
 

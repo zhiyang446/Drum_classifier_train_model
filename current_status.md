@@ -690,3 +690,12 @@ Older sections below describe previous failed attempts and are kept as history; 
 - raw STAR 只測 mixed 最佳 epoch 10，Macro F1 `0.4685`，六類 `0.7166/0.7221/0.5151/0.3043/0.1600/0.3929`。
 - 相對 D3R mixed/raw 改善 `+0.0099/+0.0165`，且沒有類別下降超過 `0.03`；D4R 相對架構 gate 通過，可作後續研究基線。
 - 商業 gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未達 `0.55`。未跑固定五首、未替換產品 checkpoint、未部署；主要阻塞仍是稀有類資料覆蓋與大量 false positives，不是單純更換時序模型。
+
+## 2026-07-15 Phase D4D 現有資料覆蓋（技術通過；不可商用）
+
+- E-GMD six-class mapping 已加入 TOM `41/43/45/47/48/50`、CRASH `49/52/55/57`、RIDE `51/53/59`；新 rare metadata 有 716 個去重 groove，沒有覆蓋舊資料。
+- D4D 使用 STAR+E-GMD 新 metadata、1,152 windows/class、5 epochs，總 batches 固定為 3,360；三個 weak classes 均實際包含兩個來源。
+- hybrid resume 根因已修正：同名 D4R tensors 優先完整載入，self-check 證明 383 個 tensors 可續訓；完整 `verify_current_solution.py` PASS。
+- mixed epoch 2 最佳 Macro F1 `0.4601`，六類 `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`。
+- raw epoch 2 Macro F1 `0.4692`，六類 `0.7127/0.7177/0.5245/0.3132/0.1556/0.3912`。
+- 相對 D4R 只改善 mixed/raw `+0.0002/+0.0007`；技術 gate 通過但沒有實務提升。商業 gate 仍 FAIL，未跑固定五首、未替換產品 checkpoint、未部署。
