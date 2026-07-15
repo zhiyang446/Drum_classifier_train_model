@@ -224,3 +224,18 @@ Append one entry per loop run. Keep entries concise.
   "notes": "Added opt-in 50/50 STAR-EGMD rare scheduling, trained one equal-budget candidate, and rejected it because mixed STAR fell to 0.4594 despite raw rising to 0.4716. Commercial gate remains FAIL."
 }
 ```
+
+```json
+{
+  "run_id": "2026-07-16T00:50:00+08:00",
+  "pattern": "manual-d5c-mdb-hard-negative",
+  "level": "human-approved",
+  "duration_s": 2400,
+  "items_found": 1,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 20000,
+  "outcome": "rejected",
+  "notes": "Added opt-in MDB full-mix hard-negative scheduling, trained one equal-budget five-epoch candidate, and rejected it because mixed/raw/MDB were 0.4503/0.4570/0.4390 while HH-TOM-CRASH false positives increased from 697 to 790. Product and fixed-five gates were untouched."
+}
+```

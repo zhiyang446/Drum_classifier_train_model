@@ -792,3 +792,11 @@
     *   [x] 執行 syntax、self-check、完整 regression；全部 PASS。
     *   [x] 實作與證據已提交為 `5140046`；closure push 後同步至 `origin/codex`。
     *   [x] D5C 暫不啟動：MDB train 只有 TOM `15`、CRASH `57`、RIDE `210`，重複到既有配額只會過擬合。
+
+*   [x] **Phase D5C MDB 真實局部 hard-negative（完成並拒絕）**
+    *   [x] 鎖定唯一變因為 NEG 來源；不重複 MDB 的 15 個 TOM 正例。
+    *   [x] opt-in 擴充 builder 與 `build_schedule`，預設路徑逐值相容。
+    *   [x] 建立 combined metadata，稽核 12 首 MDB train 與 1,152 個 window-local negative anchors。
+    *   [x] 執行 syntax/self-check、完整 regression 與唯一一次等預算 5-epoch 訓練。
+    *   [x] mixed/raw/MDB 為 `0.4503/0.4570/0.4390`；HH/TOM/CRASH FP 合計 `790 > 697`，promotion FAIL。
+    *   [x] 不跑固定五首、不替換產品模型；準備 commit/push 至 `origin/codex`。

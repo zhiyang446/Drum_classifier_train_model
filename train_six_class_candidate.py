@@ -16,8 +16,8 @@ from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
 
 
-def build_schedule(metadata, per_class, balance_rare_sources=False):
-    """中文註解：建立固定排程，並可選擇將罕見類別平均分配至 STAR/E-GMD。"""
+def build_schedule(metadata, per_class, balance_rare_sources=False, negative_source=None):
+    """中文註解：建立固定排程，並可指定 window-local 真實負樣本來源。"""
     selected_by_label = {}
     info_cache = {}
     half_window_seconds = TARGET_SAMPLES / float(SR) / 2.0
@@ -57,10 +57,13 @@ def build_schedule(metadata, per_class, balance_rare_sources=False):
             {'label': label, 'key': key, 'anchor': anchor} for key, anchor in selected
         ]
 
-    # 中文註解：篩選無 TOM/CRASH/RIDE 但有 KD/SD/HH 的負樣本窗口，強迫 rare heads 學會安靜
+    # 中文註解：預設保留整首無 rare 的舊邏輯；opt-in 來源改用窗口內無 rare 的真實混音。
     neg_candidates = []
     for key, item in metadata.items():
-        if item.get('split') != 'train':
+        if negative_source:
+            if item.get('split') != 'negative_train' or item.get('source') != negative_source:
+                continue
+        elif item.get('split') != 'train':
             continue
         path = item.get('audio_path')
         if path:
@@ -70,16 +73,21 @@ def build_schedule(metadata, per_class, balance_rare_sources=False):
         else:
             duration = None
         events = item.get('events', [])
-        has_pos_base = any(event.get('inst') in ('KD', 'SD', 'HH') for event in events)
         has_neg_rare = any(event.get('inst') in ('TOM', 'CRASH', 'RIDE') for event in events)
-        if has_pos_base and not has_neg_rare:
-            for event in events:
-                anchor = float(event['time'])
-                if event.get('inst') in ('KD', 'SD', 'HH') and (duration is None or half_window_seconds <= anchor <= duration - half_window_seconds):
-                    neg_candidates.append((key, anchor))
+        for event in events:
+            anchor = float(event['time'])
+            if event.get('inst') not in ('KD', 'SD', 'HH') or (duration is not None and not half_window_seconds <= anchor <= duration - half_window_seconds):
+                continue
+            if negative_source:
+                start, end = anchor - half_window_seconds, anchor + half_window_seconds
+                if any(rare.get('inst') in ('TOM', 'CRASH', 'RIDE') and start <= float(rare['time']) < end for rare in events):
+                    continue
+            elif has_neg_rare:
+                continue
+            neg_candidates.append((key, anchor))
     neg_candidates.sort()
     if len(neg_candidates) < per_class:
-        raise ValueError(f'Only {len(neg_candidates)} negative centered train events, need {per_class}.')
+        raise ValueError(f'Only {len(neg_candidates)} negative centered train events for source={negative_source}, need {per_class}.')
     selected_by_label['NEG'] = []
     for index in range(per_class):
         key, anchor = neg_candidates[index * len(neg_candidates) // per_class]
@@ -190,6 +198,22 @@ def run_self_check():
     else:
         raise AssertionError('來源不足時必須拒絕排程')
     metadata['egmd_CRASH']['events'] = crash_events
+    metadata['mdb_negative'] = {
+        'split': 'negative_train',
+        'source': 'mdbdrums_full_mix',
+        'events': [
+            {'inst': 'KD', 'time': 3.0}, {'inst': 'CRASH', 'time': 3.5},
+            {'inst': 'SD', 'time': 10.0},
+        ],
+    }
+    local_negative = build_schedule(metadata, 1, negative_source='mdbdrums_full_mix')
+    assert [row for row in local_negative if row['label'] == 'NEG'][0]['anchor'] == 10.0
+    try:
+        build_schedule(metadata, 1, negative_source='missing_source')
+    except ValueError as error:
+        assert 'source=missing_source' in str(error)
+    else:
+        raise AssertionError('指定負樣本來源不足時必須拒絕排程')
     assert balanced_positive_weight(1, 1) == float(np.sqrt(CHUNK_FRAMES))
     targets = torch.zeros(1, 8, len(LABELS))
     targets[0, 4, 5] = 1.0
@@ -268,6 +292,7 @@ def main():
     parser.add_argument('--positive-weight', type=float, default=20.0)
     parser.add_argument('--schedule-balanced-weights', action='store_true')
     parser.add_argument('--balance-rare-sources', action='store_true', help='TOM/CRASH/RIDE 各取一半 STAR 與一半 E-GMD')
+    parser.add_argument('--negative-source', help='Opt-in negative_train metadata source for window-local rare negatives')
     parser.add_argument('--freeze-bn', action='store_true')
     parser.add_argument('--log-every', type=int, default=1)
     parser.add_argument('--candidate-name', default='six_class_candidate.pth')
@@ -298,7 +323,11 @@ def main():
     np.random.seed(1337)
     with open(args.meta, encoding='utf-8') as handle:
         metadata = json.load(handle)
-    schedule = build_schedule(metadata, args.per_class, balance_rare_sources=args.balance_rare_sources)
+    schedule = build_schedule(
+        metadata, args.per_class,
+        balance_rare_sources=args.balance_rare_sources,
+        negative_source=args.negative_source,
+    )
     accompaniment_pool = [load_accompaniment(args.accompaniment)] if args.accompaniment else None
     if len(schedule) % args.batch_size:
         raise ValueError('Schedule length must divide evenly by batch size.')
@@ -380,6 +409,7 @@ def main():
         'new_module_learning_rate': args.new_module_lr if args.full_model and args.architecture in ('dcnn-residual-tcn', 'dcnn-conformer', 'dcnn-tcn-conformer') else None,
         'optimizer_parameter_counts': optimizer_parameter_counts,
         'balance_rare_sources': args.balance_rare_sources,
+        'negative_source': args.negative_source,
         'full_model': args.full_model, 'gaussian_targets': args.gaussian_targets,
         'class_positive_weights': class_weights, 'class_event_counts': class_event_counts, 'freeze_batchnorm': args.freeze_bn,
         'first_loss': losses[0], 'last_loss': losses[-1],

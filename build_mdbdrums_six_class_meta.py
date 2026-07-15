@@ -120,6 +120,27 @@ def build_metadata(root):
     return metadata, audit
 
 
+def merge_negative_metadata(base, mdb_metadata):
+    """中文註解：只把 MDB 官方 train 歌曲以 negative_train 身分加入既有正樣本 metadata。"""
+    output = dict(base)
+    added = 0
+    for song, item in sorted(mdb_metadata.items()):
+        if item.get('split') != 'train':
+            continue
+        if item.get('source') != 'mdbdrums_full_mix':
+            raise ValueError(f'Unexpected MDB source for {song}: {item.get("source")}')
+        key = f'mdb_negative_{song}'
+        if key in output:
+            raise ValueError(f'Metadata key collision: {key}')
+        copied = dict(item)
+        copied['split'] = 'negative_train'
+        output[key] = copied
+        added += 1
+    if added != 12:
+        raise ValueError(f'Expected 12 MDB negative_train songs, found {added}')
+    return output, added
+
+
 def run_self_check():
     """中文註解：驗證官方映射、忽略標籤、未知標籤拒絕與歌曲級 split。"""
     assert {map_subclass(value) for value in ('HIT', 'MHT', 'HFT', 'LFT')} == {'TOM'}
@@ -134,6 +155,13 @@ def run_self_check():
         pass
     else:
         raise AssertionError('未知 MDB subclass 必須拒絕')
+    mock_mdb = {
+        f'song_{index}': {'split': 'train', 'source': 'mdbdrums_full_mix'}
+        for index in range(12)
+    }
+    mock_mdb['held'] = {'split': 'test', 'source': 'mdbdrums_full_mix'}
+    merged, added = merge_negative_metadata({'base': {'split': 'train'}}, mock_mdb)
+    assert added == 12 and merged['mdb_negative_song_0']['split'] == 'negative_train'
     print('Self-check passed.')
 
 
@@ -143,6 +171,7 @@ def main():
     parser.add_argument('--root', default='MDBDrums/MDB Drums')
     parser.add_argument('--output', default='processed_data/mdbdrums_six_class_meta_d5b.json')
     parser.add_argument('--audit', default='validation_runs/mdbdrums_d5b_audit.json')
+    parser.add_argument('--base-meta', help='Opt-in base metadata merged with MDB train as negative_train only')
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
     if args.self_check:
@@ -150,6 +179,13 @@ def main():
         return
 
     metadata, audit = build_metadata(Path(args.root))
+    if args.base_meta:
+        with Path(args.base_meta).open(encoding='utf-8') as handle:
+            base = json.load(handle)
+        metadata, added = merge_negative_metadata(base, metadata)
+        audit['base_meta'] = str(Path(args.base_meta).resolve())
+        audit['negative_train_songs'] = added
+        audit['combined_items'] = len(metadata)
     for path, payload in ((Path(args.output), metadata), (Path(args.audit), audit)):
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('w', encoding='utf-8') as handle:

@@ -722,3 +722,11 @@ Older sections below describe previous failed attempts and are kept as history; 
 - D4D epoch 2 在官方 MDB test 的固定 48-window診斷為 Macro F1 `0.4478`；KD/SD/HH/TOM/CRASH/RIDE `0.6411/0.5995/0.4180/0.3136/0.1436/0.5708`。
 - 完整 regression PASS。沒有訓練 D5C、沒有使用 MDB test 選參、沒有觸碰固定五首或產品 checkpoint。
 - D5B 實作 commit 為 `5140046`；MDB 原始音訊與所有生成 artifacts 保持本機忽略，不進父專案 Git。
+
+## 2026-07-16 Phase D5C MDB 真實局部 hard-negative（拒絕）
+
+- builder 已用 opt-in 方式把 MDB 官方 train 12 首合併為 `negative_train`；scheduler 只取窗口內沒有 TOM/CRASH/RIDE 的 KD/SD/HH 中心，正式排程為 8,064 windows，其中 1,152 個 NEG 全部來自 `mdbdrums_full_mix`，MDB test 與 MDB 正樣本均未進訓練。
+- 5 epochs、3,360 batches 正常完成，loss `0.2418 -> 0.0875`；五個 mixed STAR 分數為 `0.4503/0.4496/0.4476/0.4438/0.4410`，最佳 epoch 1 未超過 D4D `0.4601`。
+- 最佳 epoch 1 的 raw STAR 為 `0.4570 < 0.4692`；MDB test 為 `0.4390 < 0.4478`。MDB HH/TOM/CRASH FP 合計 `790 > 697`，HH F1 由 `0.4180` 降至 `0.3663`。
+- D5C 拒絕，D4D 仍為現有資料研究基線；未碰 `test_real_audio`、固定五首或產品 checkpoint。MDB 權重也受非商業授權限制，不能部署。
+- 下一個合理資料投資不是在相同 12 首上掃比例或 threshold，而是新增具有商業授權、歌曲級隔離且含足量 TOM/CRASH/RIDE 的真實完整歌曲，並保留獨立 validation/test。

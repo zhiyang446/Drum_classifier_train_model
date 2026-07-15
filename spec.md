@@ -1774,3 +1774,23 @@ stateDiagram-v2
 - 以 D4D epoch 2、固定 threshold `0.50`、tolerance `50 ms`、官方 MDB test、每類 8 個互不重疊窗口做零調參診斷：Macro F1 `0.4478`；六類 `0.6411/0.5995/0.4180/0.3136/0.1436/0.5708`。
 - MDB test 診斷顯示 HH/TOM/CRASH 的主要錯誤仍是 false positives：分別 `423/140/134`。官方 11 首 test 不得回流訓練；不以僅 15 個 train TOM 啟動過度重複的 D5C 候選。
 - 完整 `verify_current_solution.py` PASS；舊三類產品路徑、固定五首與產品 checkpoint 均未改動。
+
+### Phase D5C MDB 真實局部 hard-negative 規格
+
+- 根因是 D4D 在 MDB test 的 HH/TOM/CRASH false positives 為 `423/140/134`；D5C 不重複稀少 MDB 正例，只把 NEG bucket 改為 MDB train full-mix 中窗口內沒有 TOM/CRASH/RIDE 的真實混音。
+- `build_schedule` 新增預設關閉的 `negative_source`。未指定時逐值保留既有「整首無 rare」邏輯；指定 `mdbdrums_full_mix` 時只接受 `split=negative_train`、來源相符、以 KD/SD/HH 為中心且實體四秒窗口內無 rare 事件的 anchor。
+- D5B builder 新增 opt-in base metadata 合併：保留 `processed_data/star_egmd_six_class_d4d.json` 全部內容，只複製 MDB 官方 train 12 首並改為 `negative_train`，加 `mdb_negative_` key prefix；MDB 官方 test 11 首不得進 combined metadata。
+- 輸出全新 `processed_data/star_egmd_mdb_negative_d5c.json`；碰到 key collision、來源或 split 不符必須失敗，不覆蓋 D4D/D5B metadata。
+- D5C 從 D4R epoch 10 起點重跑與 D4D 相同正樣本配方：每類 `1,152` + NEG `1,152`，總 `8,064` windows、5 epochs、batch 12、3,360 batches；架構 `dcnn-tcn-conformer`、legacy diff、seed、Queen augmentation、LR `1e-4/1e-6/5e-5`、weight cap 12 全部不變。唯一變因是 NEG 來源。
+- self-check 必須證明預設 schedule 不變、指定來源時排除窗口內 rare、來源不足 fail-fast；正式 schedule 必須精確有 1,152 個 `mdbdrums_full_mix` NEG 且正樣本不得來自 MDB。
+- 每 epoch 只跑既有 mixed STAR validation；選最佳者後各跑一次 raw STAR 與 MDB 官方 test。promotion 必須 mixed `>=0.4601`、raw `>=0.4692`、MDB Macro F1 `>0.4478`，且 MDB HH/TOM/CRASH FP 合計 `<697`，任一 STAR/MDB 類別 F1 不得下降超過 `0.03`。
+- 未通過全部技術 gate 時立即拒絕；不得跑固定五首、不得替換產品 checkpoint。MDB 授權為非商業，D5C 即使通過也只能證明資料方向，不能部署。
+
+### Phase D5C 最終結果（拒絕）
+
+- builder 與 scheduler self-check、語法、正式 metadata/schedule 稽核及完整 regression 全部 PASS；combined metadata 共 `6,455` items，僅加入 MDB 官方 train 12 首，正式 NEG 為 `1,152` 個 `mdbdrums_full_mix` windows，MDB 正樣本與官方 test 均未進訓練。
+- 從 D4R epoch 10 完整續載 `383` tensors；8,064 windows、5 epochs、3,360 batches 正常完成，loss `0.2418 -> 0.0875`，沒有 NaN、OOM 或 checkpoint 中斷。
+- mixed STAR 五個 epoch 為 `0.4503/0.4496/0.4476/0.4438/0.4410`，最佳 epoch 1 仍低於 D4D `0.4601`；最佳六類為 `0.6859/0.7114/0.4960/0.3122/0.1377/0.3588`，HH 相對 D4D 下降 `0.0334`，超過安全上限。
+- raw STAR epoch 1 為 `0.4570 < 0.4692`；六類為 `0.7044/0.7115/0.4878/0.3079/0.1402/0.3902`。
+- MDB 官方 test epoch 1 為 `0.4390 < 0.4478`；六類為 `0.6385/0.5939/0.3663/0.3304/0.1290/0.5759`。HH/TOM/CRASH false positives 為 `522/128/140`，合計 `790`，比 D4D 的 `697` 增加 `93`；MDB HH F1 下降 `0.0517`。
+- D5C 所有 promotion gate 均未同時通過，且訓練越久 mixed 表現越差，因此候選拒絕；不跑固定五首、不替換產品 checkpoint、不部署。結論是直接把真實混音負樣本完全替換 NEG，未能建立足夠精確的類別邊界，反而犧牲 HH；不得在同一資料上繼續比例或 threshold sweep。
