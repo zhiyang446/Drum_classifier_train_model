@@ -721,3 +721,4 @@ Older sections below describe previous failed attempts and are kept as history; 
 - train 六類事件為 `661/1310/1603/15/57/210`，test 為 `878/1382/1036/75/94/641`。train TOM 僅 15，不能支撐大配額微調。
 - D4D epoch 2 在官方 MDB test 的固定 48-window診斷為 Macro F1 `0.4478`；KD/SD/HH/TOM/CRASH/RIDE `0.6411/0.5995/0.4180/0.3136/0.1436/0.5708`。
 - 完整 regression PASS。沒有訓練 D5C、沒有使用 MDB test 選參、沒有觸碰固定五首或產品 checkpoint。
+- D5B 實作 commit 為 `5140046`；MDB 原始音訊與所有生成 artifacts 保持本機忽略，不進父專案 Git。

@@ -790,5 +790,5 @@
     *   [x] 建立全新 metadata/audit，確認 23 首、六類覆蓋、事件時間與 split 隔離。
     *   [x] 零調參 D4D→MDB test 診斷為 Macro F1 `0.4478`；HH/TOM/CRASH 未過線且 false positives 明顯。
     *   [x] 執行 syntax、self-check、完整 regression；全部 PASS。
-    *   [ ] commit/push 至 `origin/codex`。
+    *   [x] 實作與證據已提交為 `5140046`；closure push 後同步至 `origin/codex`。
     *   [x] D5C 暫不啟動：MDB train 只有 TOM `15`、CRASH `57`、RIDE `210`，重複到既有配額只會過擬合。
