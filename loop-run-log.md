@@ -20,6 +20,21 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-15T23:58:11+08:00",
+  "pattern": "manual-d5b-mdbdrums-ingest",
+  "level": "human-approved",
+  "duration_s": 900,
+  "items_found": 2,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 14000,
+  "outcome": "fix-proposed",
+  "notes": "Built isolated MDBDrums six-class metadata with official 12/11 song split. Train rare counts were TOM 15, CRASH 57, RIDE 210, so training was not started. D4D zero-tune MDB test macro F1 was 0.4478; full regression passed."
+}
+```
+
+```json
+{
   "run_id": "2026-07-15T23:35:27+08:00",
   "pattern": "manual-mdbdrums-download",
   "level": "human-approved",

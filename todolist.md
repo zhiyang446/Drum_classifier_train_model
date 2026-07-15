@@ -783,3 +783,12 @@
     *   [x] 確認目標 `MDBDrums/` 不存在，且不影響既有未追蹤檔案。
     *   [x] shallow clone 官方資料庫至專案根目錄。
     *   [x] 驗證 Git HEAD、檔案數、音訊／標註結構與授權文件。
+
+*   [x] **Phase D5B MDB Drums 六類 metadata（完成；train rare 覆蓋不足）**
+    *   [x] 核對官方 21 subclass 定義、六類映射與 MIREX 12/11 歌曲級 split。
+    *   [x] 實作最小 builder 與 self-check，不修改現有 trainer。
+    *   [x] 建立全新 metadata/audit，確認 23 首、六類覆蓋、事件時間與 split 隔離。
+    *   [x] 零調參 D4D→MDB test 診斷為 Macro F1 `0.4478`；HH/TOM/CRASH 未過線且 false positives 明顯。
+    *   [x] 執行 syntax、self-check、完整 regression；全部 PASS。
+    *   [ ] commit/push 至 `origin/codex`。
+    *   [x] D5C 暫不啟動：MDB train 只有 TOM `15`、CRASH `57`、RIDE `210`，重複到既有配額只會過擬合。

@@ -714,3 +714,10 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 官方 `CarlSouthall/MDBDrums` 已 shallow clone 至 `MDBDrums/`，HEAD 為 `b29e2d63c3a023506f4bf353c5b2e8a558eed135`。
 - 本機驗證為 362 個追蹤檔、268 個 WAV、46 個文字標註，總大小 `2,010,349,446` bytes；沒有小於 1 KB 的 WAV。
 - 資料授權為 CC BY-NC-SA 4.0，只能先作非商業研究驗證；尚未訓練、未觸碰 `test_real_audio` 或產品 checkpoint。
+
+## 2026-07-15 Phase D5B MDB Drums 六類接入（完成；不可直接訓練）
+
+- `build_mdbdrums_six_class_meta.py` 已把官方 full mix/subclass 轉成現有六類 schema，保留 MIREX train/test `12/11` 歌曲級隔離；syntax/self-check PASS。
+- train 六類事件為 `661/1310/1603/15/57/210`，test 為 `878/1382/1036/75/94/641`。train TOM 僅 15，不能支撐大配額微調。
+- D4D epoch 2 在官方 MDB test 的固定 48-window診斷為 Macro F1 `0.4478`；KD/SD/HH/TOM/CRASH/RIDE `0.6411/0.5995/0.4180/0.3136/0.1436/0.5708`。
+- 完整 regression PASS。沒有訓練 D5C、沒有使用 MDB test 選參、沒有觸碰固定五首或產品 checkpoint。

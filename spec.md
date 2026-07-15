@@ -1755,3 +1755,22 @@ stateDiagram-v2
 - 本階段只驗證下載完整性、資料結構與授權文件；不得訓練、調參或將內容放入 `test_real_audio/`。
 - MDB Drums 為 CC BY-NC-SA 4.0 研究資料，後續若使用只能作非商業方向驗證，不得直接宣稱商業模型可使用。
 - 下載結果鎖定官方 `master` commit `b29e2d63c3a023506f4bf353c5b2e8a558eed135`：362 個追蹤檔、268 個 WAV、46 個文字標註，總大小 `2,010,349,446` bytes；沒有小於 1 KB 的 WAV。
+
+### Phase D5B MDB Drums 六類 metadata 規格
+
+- 新增單一 builder，將 `MDBDrums/MDB Drums/audio/full_mix` 與 `annotations/subclass` 轉成現有 `audio_path/duration/split/source/events` schema；不建立另一套 dataset/trainer。
+- 六類映射固定為：`KD→KD`；`SD/SDB/SDD/SDF/SDG/SDNS/SST→SD`；`CHH/OHH/PHH→HH`；`HIT/MHT/HFT/LFT→TOM`；`CRC/CHC/SPC→CRASH`；`RDC/RDB→RIDE`。`TMB` tambourine 忽略。
+- 依官方 MIREX 2017 split 保留 12 首 train 與 11 首 test；README 的 `Zepplin` 拼字錯誤須正規化為實際檔名 `Zeppelin`。同一歌曲的 full mix、drum-only、stems 不得跨 split；本階段只使用 full mix。
+- 每個事件沒有力度標註，沿用現有 `build_window` 的預設 velocity `100`；輸出新檔 `processed_data/mdbdrums_six_class_meta_d5b.json` 與 `validation_runs/mdbdrums_d5b_audit.json`，不得覆蓋既有 metadata。
+- builder 必須拒絕缺音訊、缺標註、未知 subclass、時間超出音訊、歌曲重複或 train/test 數量不是 12/11；self-check 至少驗證官方映射、未知標籤拒絕與 split 隔離。
+- 虛擬碼：`for song in full_mix -> parse subclass -> map supported labels -> validate times -> assign official split -> write metadata + aggregate audit`。
+- D5B 只做資料接入與稽核，不訓練。只有 train split 同時覆蓋六類且 TOM/CRASH/RIDE 事件數公開記錄後，才可預先鎖定 D5C 的唯一訓練配方。
+- MDB Drums 為 CC BY-NC-SA 4.0；所有 D5 結果只能作非商業研究證據，不得成為商業部署權重。
+
+### Phase D5B 最終結果（資料接入通過；訓練覆蓋不足）
+
+- builder syntax/self-check PASS；建立 23 首 full-mix metadata，官方 split 為 train/test `12/11`，兩側均覆蓋六類，未知 subclass、缺檔、超時事件與 split 數量均 fail-fast。
+- train 事件為 KD/SD/HH/TOM/CRASH/RIDE `661/1310/1603/15/57/210`；test 為 `878/1382/1036/75/94/641`。train 的 TOM 只有 15 個，不能合理支撐既有每類 1,152-window 配方或宣稱解決資料 blocker。
+- 以 D4D epoch 2、固定 threshold `0.50`、tolerance `50 ms`、官方 MDB test、每類 8 個互不重疊窗口做零調參診斷：Macro F1 `0.4478`；六類 `0.6411/0.5995/0.4180/0.3136/0.1436/0.5708`。
+- MDB test 診斷顯示 HH/TOM/CRASH 的主要錯誤仍是 false positives：分別 `423/140/134`。官方 11 首 test 不得回流訓練；不以僅 15 個 train TOM 啟動過度重複的 D5C 候選。
+- 完整 `verify_current_solution.py` PASS；舊三類產品路徑、固定五首與產品 checkpoint 均未改動。
