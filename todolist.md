@@ -799,4 +799,4 @@
     *   [x] 建立 combined metadata，稽核 12 首 MDB train 與 1,152 個 window-local negative anchors。
     *   [x] 執行 syntax/self-check、完整 regression 與唯一一次等預算 5-epoch 訓練。
     *   [x] mixed/raw/MDB 為 `0.4503/0.4570/0.4390`；HH/TOM/CRASH FP 合計 `790 > 697`，promotion FAIL。
-    *   [x] 不跑固定五首、不替換產品模型；準備 commit/push 至 `origin/codex`。
+    *   [x] 不跑固定五首、不替換產品模型；主提交 `2908524` 已 push 至 `origin/codex`。

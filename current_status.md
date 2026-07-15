@@ -730,3 +730,4 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 最佳 epoch 1 的 raw STAR 為 `0.4570 < 0.4692`；MDB test 為 `0.4390 < 0.4478`。MDB HH/TOM/CRASH FP 合計 `790 > 697`，HH F1 由 `0.4180` 降至 `0.3663`。
 - D5C 拒絕，D4D 仍為現有資料研究基線；未碰 `test_real_audio`、固定五首或產品 checkpoint。MDB 權重也受非商業授權限制，不能部署。
 - 下一個合理資料投資不是在相同 12 首上掃比例或 threshold，而是新增具有商業授權、歌曲級隔離且含足量 TOM/CRASH/RIDE 的真實完整歌曲，並保留獨立 validation/test。
+- D5C 程式、驗證結果與拒絕證據已由 commit `2908524` push 至 `origin/codex`，其他 AI 不得把此候選誤標為可晉級模型。
