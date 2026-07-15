@@ -1594,6 +1594,15 @@ superflux[:, lag:] = max(0, log_energy[:, lag:] - reference[:, :-lag])
 superflux[:, :lag] = 0
 ```
 
+### Phase D2 DCNN + TCN 模型與權重移植
+
+- `SharedCNNBackbone(input_channels=2)` 只參數化第一層輸入通道；預設 `2` 必須保持舊 checkpoint state key 與 tensor shape 不變。
+- `DCNNBackbone` 內含兩個獨立的 `SharedCNNBackbone(input_channels=1)`：timbre 只讀 feature channel 0，transient 只讀 channel 1。
+- 兩分支各輸出 `[B,64,T]`，concatenate 後以 `Conv1d(128,64,1)` late fusion；fusion 初始值為同索引兩分支各 `0.5`，bias 為零。
+- `DCNNDrumTCN` 沿用既有 onset/velocity TCN 與六類 heads，D2 不改 loss、threshold 或事件解碼。
+- 從六類 Symmetric checkpoint 移植時，timbre 第一層只複製舊 `conv1` 的 input channel 0，transient 只複製 channel 1；其餘 backbone tensor 複製到兩分支，TCN/head 只複製 shape 相容 tensor。
+- D2 self-check 必須驗證舊模型第一層仍為 2 channels、DCNN 輸出 shape、兩分支參數獨立、首層語意切分、TCN/head 精確移植與非法輸入拒絕。
+
 ### 模組關係圖
 
 ```mermaid

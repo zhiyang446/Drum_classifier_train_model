@@ -110,7 +110,10 @@ def mix_accompaniment(waveform, accompaniment, gain, offset=0):
     return np.asarray(mixed, dtype=np.float32)
 
 
-def build_window(item, anchor=None, accompaniment=None, accompaniment_gain=0.17, accompaniment_offset=0):
+def build_window(
+    item, anchor=None, accompaniment=None, accompaniment_gain=0.17,
+    accompaniment_offset=0, use_true_superflux=False,
+):
     """中文註解：讀取一個實體四秒音訊窗口，並建立六類 onset/velocity target。"""
     events = item['events']
     if anchor is None:
@@ -144,7 +147,10 @@ def build_window(item, anchor=None, accompaniment=None, accompaniment_gain=0.17,
             index = LABEL_INDEX[label]
             onset[frame, index] = 1.0
             velocity[frame, index] = float(event.get('velocity', 100.0)) / 127.0
-    features = extract_features(waveform, sr=SR, hop_length=HOP_LENGTH, n_mels=N_MELS, use_hybrid=False)
+    features = extract_features(
+        waveform, sr=SR, hop_length=HOP_LENGTH, n_mels=N_MELS,
+        use_hybrid=False, use_true_superflux=use_true_superflux,
+    )
     features = features[:, :, :CHUNK_FRAMES]
     if features.shape[2] < CHUNK_FRAMES:
         features = np.pad(features, ((0, 0), (0, 0), (0, CHUNK_FRAMES - features.shape[2])))

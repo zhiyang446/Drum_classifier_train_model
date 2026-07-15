@@ -644,3 +644,11 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 新增 frequency maximum-filtered、lag 2 的 log-Mel SuperFlux 差分，輸出 shape 與原時間框完全對齊。
 - `test_superflux.py` 驗證靜態輸入、鄰頻漂移抑制、寬頻瞬態、非法參數、shape/finite 及 legacy bitwise compatibility，全部 PASS。
 - 語法檢查與 `verify_current_solution.py` PASS；Round4 strong event gate 保持 `30/30` 與 `6/6`。
+
+## 2026-07-15 Phase D2 DCNN + TCN 架構
+
+- `SharedCNNBackbone` 新增預設為 2 的 `input_channels`，舊 `SymmetricDrumTCN` state keys/shape 與產品行為不變。
+- 新增 `DCNNBackbone`：Log-Mel/True SuperFlux 各自進入獨立單通道 CNN，兩個 `[B,64,T]` 以初始化為平均的 `1×1 Conv1d` 融合。
+- 新增 `DCNNDrumTCN`，完整沿用既有 onset/velocity TCN 與六類 heads；沒有加入純 Transformer。
+- Symmetric 六類 checkpoint 可把首層 channel 0/1 分別移植到 timbre/transient，其餘相容 backbone tensor 複製至兩分支，TCN/head 精確移植。
+- `test_dcnn_model.py`、六類 smoke self-check、語法與 `verify_current_solution.py` 全部 PASS；尚未訓練或宣稱 F1 改善。

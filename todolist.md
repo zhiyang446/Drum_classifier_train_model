@@ -723,12 +723,13 @@
     *   [x] 加入最小特徵 shape、時間對齊與 vibrato suppression self-check。
     *   [x] True SuperFlux self-check 與 `verify_current_solution.py` PASS；等待本 Phase commit/push。
 
-*   [ ] **Phase D2 DCNN + TCN 隔離候選（下一階段）**
-    *   [ ] 建立 Log-Mel 音色 CNN 與 SuperFlux 瞬態 CNN，late fusion 後沿用 TCN。
-    *   [ ] 只移植語意及 shape 相容權重，不覆蓋產品 checkpoint。
-    *   [ ] 通過 self-check/regression 後 commit、push `origin/codex`。
+*   [x] **Phase D2 DCNN + TCN 隔離候選（完成）**
+    *   [x] 鎖定單通道雙分支、128→64 late fusion 與六類 checkpoint 移植規則。
+    *   [x] 建立 Log-Mel 音色 CNN 與 SuperFlux 瞬態 CNN，late fusion 後沿用 TCN。
+    *   [x] 只移植語意及 shape 相容權重，不覆蓋產品 checkpoint。
+    *   [x] DCNN/model-transfer self-check 與完整 regression PASS；等待本 Phase commit/push。
 
-*   [ ] **Phase D3 DCNN + TCN 訓練與 STAR 驗證（待 D2 完成）**
+*   [ ] **Phase D3 DCNN + TCN 訓練與 STAR 驗證（下一階段）**
     *   [ ] 使用固定 v20 資料/seed/augmentation 配方訓練隔離候選。
     *   [ ] 同時比較 Queen-mixed baseline `0.4313` 與 raw baseline `0.4277`。
     *   [ ] 未同時改善即拒絕並提交證據；改善才進 D4。

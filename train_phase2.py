@@ -108,11 +108,12 @@ class TCNBlock(nn.Module):
         return self.relu2(out + residual)
 
 class SharedCNNBackbone(nn.Module):
-    def __init__(self):
+    def __init__(self, input_channels=2):
+        """建立保留時間解析度的頻譜 CNN；預設雙通道以相容既有模型。"""
         super().__init__()
         # Reduced channel capacities for 4x CPU computation speedup
         self.conv1 = nn.Sequential(
-            nn.Conv2d(2, 16, kernel_size=3, padding=1),
+            nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),
             nn.BatchNorm2d(16),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=(2, 1), stride=(2, 1)) # Freq: 256 -> 128
