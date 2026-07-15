@@ -9,6 +9,7 @@ import soundfile as sf
 import torch
 import torch.nn.functional as F
 
+from model_dcnn import DCNNDrumTCN, transfer_symmetric_state
 from run_six_class_smoke import CHUNK_FRAMES, LABELS, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_compatible_weights
 from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
@@ -81,7 +82,10 @@ def freeze_for_head_training(model):
         parameter.requires_grad = name.startswith('onset_head') or name.startswith('velocity_head')
 
 
-def batch_from_schedule(schedule, metadata, start, batch_size, accompaniment_pool=None, gain_range=(0.10, 0.30)):
+def batch_from_schedule(
+    schedule, metadata, start, batch_size, accompaniment_pool=None,
+    gain_range=(0.10, 0.30), use_true_superflux=False,
+):
     """中文註解：依固定 schedule 建立一個不含測試資料的訓練 batch。"""
     features, onsets, velocities = [], [], []
     for row in schedule[start:start + batch_size]:
@@ -96,6 +100,7 @@ def batch_from_schedule(schedule, metadata, start, batch_size, accompaniment_poo
         feature, onset, velocity, _ = build_window(
             item, row['anchor'], accompaniment=accompaniment,
             accompaniment_gain=gain, accompaniment_offset=offset,
+            use_true_superflux=use_true_superflux,
         )
         features.append(feature)
         onsets.append(onset)
@@ -158,6 +163,18 @@ def run_self_check():
     targets[0, 4, 5] = 1.0
     assert gaussian_smooth_targets(targets)[0, 4, 5].item() == 1.0
     print('Self-check passed.')
+
+
+def create_model(architecture, checkpoint_path, device):
+    """依架構建立六類模型，並從 Symmetric checkpoint 移植相容權重。"""
+    if architecture == 'symmetric':
+        model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
+        return model, load_compatible_weights(model, checkpoint_path, device)
+    model = DCNNDrumTCN(num_classes=len(LABELS)).to(device)
+    source_state = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    return model, transfer_symmetric_state(model, source_state)
+
+
 def main():
     """中文註解：執行一個固定預算的六類 head-only 候選訓練。"""
     parser = argparse.ArgumentParser(description='Train one bounded six-class STAR candidate.')
@@ -182,6 +199,7 @@ def main():
     parser.add_argument('--accompaniment', help='Optional non-gate no-drums WAV for online domain mixing')
     parser.add_argument('--accompaniment-gain-min', type=float, default=0.10)
     parser.add_argument('--accompaniment-gain-max', type=float, default=0.30)
+    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn'), default='symmetric')
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
 
@@ -216,8 +234,7 @@ def main():
                 class_weights[label] = args.max_positive_weight
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
-    transferred = load_compatible_weights(model, args.checkpoint, device)
+    model, transferred = create_model(args.architecture, args.checkpoint, device)
     if args.full_model:
         head_params = list(model.onset_head.parameters()) + list(model.velocity_head.parameters())
         head_ids = {id(parameter) for parameter in head_params}
@@ -241,6 +258,7 @@ def main():
                 schedule, metadata, start, args.batch_size,
                 accompaniment_pool=accompaniment_pool,
                 gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
+                use_true_superflux=args.architecture == 'dcnn-tcn',
             )
             x = torch.from_numpy(feature).float().to(device)
             onset_target = torch.from_numpy(onset).float().to(device)
@@ -285,6 +303,8 @@ def main():
         'first_loss': losses[0], 'last_loss': losses[-1],
         'accompaniment': os.path.abspath(args.accompaniment) if args.accompaniment else None,
         'accompaniment_gain_range': [args.accompaniment_gain_min, args.accompaniment_gain_max],
+        'architecture': args.architecture,
+        'feature_mode': 'log_mel+true_superflux' if args.architecture == 'dcnn-tcn' else 'log_mel+legacy_diff',
         'transferred_compatible_tensors': transferred, 'candidate': os.path.abspath(candidate_path),
     }
     with open(os.path.join(args.output_dir, 'train_report.json'), 'w', encoding='utf-8') as handle:

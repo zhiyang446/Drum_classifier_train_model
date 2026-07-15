@@ -8,6 +8,7 @@ import os
 import numpy as np
 import torch
 
+from model_dcnn import DCNNDrumTCN, load_dcnn_checkpoint
 from run_egmd_round4_validation import match_events
 from run_six_class_smoke import CHUNK_FRAMES, HOP_LENGTH, LABELS, LABEL_INDEX, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_six_class_checkpoint
 from train_phase2 import SymmetricDrumTCN
@@ -148,6 +149,7 @@ def main():
     parser.add_argument('--per-class', type=int, default=8)
     parser.add_argument('--accompaniment')
     parser.add_argument('--accompaniment-gain', type=float, default=0.17)
+    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn'), default='symmetric')
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
     if args.self_check:
@@ -158,8 +160,12 @@ def main():
     with open(args.meta, encoding='utf-8') as handle:
         metadata = json.load(handle)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
-    load_six_class_checkpoint(model, args.model, device)
+    if args.architecture == 'dcnn-tcn':
+        model = DCNNDrumTCN(num_classes=len(LABELS)).to(device)
+        load_dcnn_checkpoint(model, args.model, device)
+    else:
+        model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
+        load_six_class_checkpoint(model, args.model, device)
     model.eval()
     accompaniment = load_accompaniment(args.accompaniment) if args.accompaniment else None
     aggregate = {label: ([], []) for label in LABELS}
@@ -170,6 +176,7 @@ def main():
         features, _, _, start_sec = build_window(
             selected['item'], selected['anchor'], accompaniment=accompaniment,
             accompaniment_gain=args.accompaniment_gain, accompaniment_offset=accompaniment_offset,
+            use_true_superflux=args.architecture == 'dcnn-tcn',
         )
         with torch.no_grad():
             logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
@@ -184,6 +191,7 @@ def main():
             'window_start': start_sec, 'audio_path': selected['item']['audio_path'],
             'split': args.split, 'aggregate_offset': aggregate_offset,
             'accompaniment': args.accompaniment, 'accompaniment_gain': args.accompaniment_gain,
+            'architecture': args.architecture,
             'expected_counts': {label: len(expected[label]) for label in LABELS},
         })
     rows, gate = write_outputs(selected_rows, aggregate, args.output_dir)

@@ -652,3 +652,11 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 新增 `DCNNDrumTCN`，完整沿用既有 onset/velocity TCN 與六類 heads；沒有加入純 Transformer。
 - Symmetric 六類 checkpoint 可把首層 channel 0/1 分別移植到 timbre/transient，其餘相容 backbone tensor 複製至兩分支，TCN/head 精確移植。
 - `test_dcnn_model.py`、六類 smoke self-check、語法與 `verify_current_solution.py` 全部 PASS；尚未訓練或宣稱 F1 改善。
+
+## 2026-07-15 Phase D3 DCNN + TCN 訓練結果（拒絕）
+
+- trainer/validator 新增預設不變的 `--architecture dcnn-tcn`；該路徑自動使用 True SuperFlux，train report 明確記錄 architecture/feature mode。
+- 14-window 真實反向傳播 smoke 與 6-window validator reload PASS；排除只會 forward 或載入錯 projection 的問題。
+- 完整訓練使用與 v20 相同 4,032 windows、10 epochs、Queen augmentation 與 seed；train loss `0.3217 → 0.0959`。
+- mixed STAR 最佳 epoch 10 為 `0.3937 < 0.4313`；raw STAR 為 `0.3951 < 0.4277`。HH/TOM/CRASH/RIDE 仍未達 `0.55`。
+- D3 gate FAIL，候選保留為研究證據但不進五首、不替換產品。依已確認規格，D4 Conformer 未解鎖；若要繞過此 gate，必須由使用者明確改變規格。

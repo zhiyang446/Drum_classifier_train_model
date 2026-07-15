@@ -70,3 +70,12 @@ def transfer_symmetric_state(model, source_state):
         model.backbone.timbre.use_legacy_proj = True
         model.backbone.transient.use_legacy_proj = True
     return copied
+
+
+def load_dcnn_checkpoint(model, checkpoint_path, device):
+    """載入 DCNN 候選並依 state keys 還原兩分支 legacy projection。"""
+    state = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    if 'backbone.timbre.legacy_slot_proj.weight' in state:
+        model.backbone.timbre.use_legacy_proj = True
+        model.backbone.transient.use_legacy_proj = True
+    model.load_state_dict(state)

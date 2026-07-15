@@ -1603,6 +1603,23 @@ superflux[:, :lag] = 0
 - 從六類 Symmetric checkpoint 移植時，timbre 第一層只複製舊 `conv1` 的 input channel 0，transient 只複製 channel 1；其餘 backbone tensor 複製到兩分支，TCN/head 只複製 shape 相容 tensor。
 - D2 self-check 必須驗證舊模型第一層仍為 2 channels、DCNN 輸出 shape、兩分支參數獨立、首層語意切分、TCN/head 精確移植與非法輸入拒絕。
 
+### Phase D3 訓練與驗證控制
+
+- 既有 `train_six_class_candidate.py` 與 `run_six_class_validation.py` 新增 `--architecture symmetric|dcnn-tcn`，預設 `symmetric`，不得另建重複 trainer/validator。
+- `dcnn-tcn` 自動使用 True SuperFlux 並以 `transfer_symmetric_state` 從 v12 六類 checkpoint 移植；候選重新載入時必須還原兩分支 legacy projection 狀態。
+- D3 固定複用 v20 配方：STAR train、576 windows/類、10 epochs、batch 12、head LR `1e-4`、backbone LR `1e-6`、balanced positive weight cap 12、freeze BN、Queen accompaniment `0.10–0.30`、seed 1337。
+- 模型選擇只看固定 Queen-mixed STAR validation；最佳 epoch 再跑 raw STAR validation。matched baselines 為 mixed `0.4313`、raw `0.4277`。
+- 只有 mixed 與 raw Macro F1 均高於各自 baseline，且沒有任一類 F1 下降超過 `0.03`，才允許進 D4 Conformer；否則提交失敗證據並停止架構升級。
+
+### Phase D3 最終結果（拒絕）
+
+- 14-window smoke training 與正式 validator reload PASS；完整候選使用 4,032 windows、10 epochs，成功移植 220 個 tensor，train loss 由 `0.3217` 降至 `0.0959`。
+- 十個 Queen-mixed STAR validation checkpoint 由 `0.3180` 逐步升至 epoch 10 的最佳 `0.3937`，仍低於 matched baseline `0.4313`。
+- mixed epoch 10 的 KD/SD/HH/TOM/CRASH/RIDE F1 為 `0.5627/0.6245/0.4904/0.2718/0.1311/0.2820`。
+- raw epoch 10 Macro F1 `0.3951 < 0.4277`；六類為 `0.5745/0.6198/0.4938/0.2765/0.1235/0.2825`。
+- D3 未同時改善 mixed/raw baseline，且多類退步超過 `0.03`，因此依預先 gate 拒絕；不跑固定五首、不替換產品模型、不解鎖 D4 Conformer。
+- 結果顯示簡單拆分共享 CNN 會損失 Log-Mel 與瞬態特徵的早期交互；訓練 loss 收斂但 held-out F1 退步，不屬於訓練未執行或 checkpoint reload 錯誤。
+
 ### 模組關係圖
 
 ```mermaid

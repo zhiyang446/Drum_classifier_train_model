@@ -729,12 +729,13 @@
     *   [x] 只移植語意及 shape 相容權重，不覆蓋產品 checkpoint。
     *   [x] DCNN/model-transfer self-check 與完整 regression PASS；等待本 Phase commit/push。
 
-*   [ ] **Phase D3 DCNN + TCN 訓練與 STAR 驗證（下一階段）**
-    *   [ ] 使用固定 v20 資料/seed/augmentation 配方訓練隔離候選。
-    *   [ ] 同時比較 Queen-mixed baseline `0.4313` 與 raw baseline `0.4277`。
-    *   [ ] 未同時改善即拒絕並提交證據；改善才進 D4。
+*   [x] **Phase D3 DCNN + TCN 訓練與 STAR 驗證（拒絕）**
+    *   [x] 鎖定 `dcnn-tcn` 自動 True SuperFlux、v20 固定配方與 mixed/raw continuation gate。
+    *   [x] 使用固定 v20 資料/seed/augmentation 配方訓練隔離候選。
+    *   [x] mixed 最佳 `0.3937 < 0.4313`；raw `0.3951 < 0.4277`。
+    *   [x] 未同時改善，候選拒絕；不跑五首、不替換產品模型、不進 D4。
 
-*   [ ] **Phase D4–D5 小型 Conformer 與 promotion（條件式）**
+*   [ ] **Phase D4–D5 小型 Conformer 與 promotion（未解鎖：D3 gate fail）**
     *   [ ] 只在 D3 通過時，以 2–4 層小型 Conformer 替換 TCN；禁止純 Transformer。
     *   [ ] 依序執行 STAR validation、STAR test、固定五首 gate，不得跳級。
     *   [ ] 每 Phase 測試、commit、push；完整 gate 通過前不得部署。

@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """DCNN + TCN 架構與 Symmetric checkpoint 移植的最小檢查。"""
 
+import os
+import tempfile
+
 import torch
 
-from model_dcnn import DCNNDrumTCN, transfer_symmetric_state
+from model_dcnn import DCNNDrumTCN, load_dcnn_checkpoint, transfer_symmetric_state
 from train_phase2 import SymmetricDrumTCN
 
 
@@ -29,6 +32,14 @@ def run_self_check():
     with torch.no_grad():
         onset, velocity = model(features)
     assert onset.shape == velocity.shape == (1, 32, 6)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        checkpoint = os.path.join(temp_dir, 'dcnn.pth')
+        torch.save(model.state_dict(), checkpoint)
+        reloaded = DCNNDrumTCN(num_classes=6)
+        load_dcnn_checkpoint(reloaded, checkpoint, torch.device('cpu'))
+        assert reloaded.backbone.timbre.use_legacy_proj
+        assert torch.equal(reloaded.onset_head.bias, model.onset_head.bias)
 
     try:
         model(torch.randn(1, 1, 256, 32))
