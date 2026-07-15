@@ -764,6 +764,14 @@
     *   [x] mixed/raw `0.4601/0.4692`，相對 D4R `+0.0002/+0.0007`；技術 gate 通過但商業 gate FAIL。
     *   [x] 已以 commit `baab1c1` push 至 `origin/codex`，保留技術通過但商業失敗的完整接力證據。
 
+*   [x] **Phase D4S rare source-balance（完成並拒絕）**
+    *   [x] 鎖定單一變因：TOM/CRASH/RIDE 各為 STAR 576 + E-GMD 576；總 batches 維持 3,360。
+    *   [x] 實作 opt-in source quota，預設排程行為不變，來源不足必須拒絕。
+    *   [x] schedule self-check、精確 50/50 分布、syntax 與完整 regression PASS。
+    *   [x] 從 D4R epoch 10 執行唯一一次 5-epoch D4S 訓練。
+    *   [x] mixed/raw `0.4594/0.4716`；raw 改善但 mixed 低於 D4D，promotion FAIL，商業 gate 仍 FAIL。
+    *   [ ] 完成文件、commit 並 push 至 `origin/codex`。
+
 *   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
     *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
     *   [x] 實作零閘門 residual DCNN，確保轉移初始化逐值保留來源模型輸出。

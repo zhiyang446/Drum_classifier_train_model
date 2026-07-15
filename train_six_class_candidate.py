@@ -16,8 +16,8 @@ from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
 
 
-def build_schedule(metadata, per_class):
-    """中文註解：只取可置中的 train 錨點，並以六類及負樣本交錯順序建立固定排程。"""
+def build_schedule(metadata, per_class, balance_rare_sources=False):
+    """中文註解：建立固定排程，並可選擇將罕見類別平均分配至 STAR/E-GMD。"""
     selected_by_label = {}
     info_cache = {}
     half_window_seconds = TARGET_SAMPLES / float(SR) / 2.0
@@ -38,12 +38,24 @@ def build_schedule(metadata, per_class):
                 if event.get('inst') == label and (duration is None or half_window_seconds <= anchor <= duration - half_window_seconds):
                     candidates.append((key, anchor))
         candidates.sort()
-        if len(candidates) < per_class:
-            raise ValueError(f'Only {len(candidates)} centered train events for {label}, need {per_class}.')
-        selected_by_label[label] = []
-        for index in range(per_class):
-            key, anchor = candidates[index * len(candidates) // per_class]
-            selected_by_label[label].append({'label': label, 'key': key, 'anchor': anchor})
+        if balance_rare_sources and label in ('TOM', 'CRASH', 'RIDE'):
+            if per_class % 2:
+                raise ValueError('--balance-rare-sources requires an even --per-class value.')
+            egmd = [row for row in candidates if metadata[row[0]].get('source') == 'egmd_pitch_weighted']
+            star = [row for row in candidates if metadata[row[0]].get('source') != 'egmd_pitch_weighted']
+            quota = per_class // 2
+            if len(star) < quota or len(egmd) < quota:
+                raise ValueError(f'Only STAR={len(star)} E-GMD={len(egmd)} centered events for {label}, need {quota} each.')
+            star = [star[index * len(star) // quota] for index in range(quota)]
+            egmd = [egmd[index * len(egmd) // quota] for index in range(quota)]
+            selected = [row for pair in zip(star, egmd) for row in pair]
+        else:
+            if len(candidates) < per_class:
+                raise ValueError(f'Only {len(candidates)} centered train events for {label}, need {per_class}.')
+            selected = [candidates[index * len(candidates) // per_class] for index in range(per_class)]
+        selected_by_label[label] = [
+            {'label': label, 'key': key, 'anchor': anchor} for key, anchor in selected
+        ]
 
     # 中文註解：篩選無 TOM/CRASH/RIDE 但有 KD/SD/HH 的負樣本窗口，強迫 rare heads 學會安靜
     neg_candidates = []
@@ -159,6 +171,25 @@ def run_self_check():
     assert len(schedule) == len(expected_labels) * 2
     assert {row['label'] for row in schedule} == expected_labels
     assert [row['label'] for row in schedule[:len(expected_labels)]] == list(LABELS) + ['NEG']
+    for label in ('TOM', 'CRASH', 'RIDE'):
+        metadata[f'egmd_{label}'] = {
+            'split': 'train',
+            'source': 'egmd_pitch_weighted',
+            'events': [{'inst': label, 'time': float(time)} for time in range(3)],
+        }
+    balanced = build_schedule(metadata, 2, balance_rare_sources=True)
+    for label in ('TOM', 'CRASH', 'RIDE'):
+        rows = [row for row in balanced if row['label'] == label]
+        assert sum(metadata[row['key']].get('source') == 'egmd_pitch_weighted' for row in rows) == 1
+    crash_events = metadata['egmd_CRASH']['events']
+    metadata['egmd_CRASH']['events'] = []
+    try:
+        build_schedule(metadata, 2, balance_rare_sources=True)
+    except ValueError as error:
+        assert 'E-GMD=0' in str(error)
+    else:
+        raise AssertionError('來源不足時必須拒絕排程')
+    metadata['egmd_CRASH']['events'] = crash_events
     assert balanced_positive_weight(1, 1) == float(np.sqrt(CHUNK_FRAMES))
     targets = torch.zeros(1, 8, len(LABELS))
     targets[0, 4, 5] = 1.0
@@ -236,6 +267,7 @@ def main():
     parser.add_argument('--gaussian-targets', action='store_true')
     parser.add_argument('--positive-weight', type=float, default=20.0)
     parser.add_argument('--schedule-balanced-weights', action='store_true')
+    parser.add_argument('--balance-rare-sources', action='store_true', help='TOM/CRASH/RIDE 各取一半 STAR 與一半 E-GMD')
     parser.add_argument('--freeze-bn', action='store_true')
     parser.add_argument('--log-every', type=int, default=1)
     parser.add_argument('--candidate-name', default='six_class_candidate.pth')
@@ -266,7 +298,7 @@ def main():
     np.random.seed(1337)
     with open(args.meta, encoding='utf-8') as handle:
         metadata = json.load(handle)
-    schedule = build_schedule(metadata, args.per_class)
+    schedule = build_schedule(metadata, args.per_class, balance_rare_sources=args.balance_rare_sources)
     accompaniment_pool = [load_accompaniment(args.accompaniment)] if args.accompaniment else None
     if len(schedule) % args.batch_size:
         raise ValueError('Schedule length must divide evenly by batch size.')
@@ -347,6 +379,7 @@ def main():
         'head_learning_rate': args.lr, 'backbone_learning_rate': args.backbone_lr if args.full_model else None,
         'new_module_learning_rate': args.new_module_lr if args.full_model and args.architecture in ('dcnn-residual-tcn', 'dcnn-conformer', 'dcnn-tcn-conformer') else None,
         'optimizer_parameter_counts': optimizer_parameter_counts,
+        'balance_rare_sources': args.balance_rare_sources,
         'full_model': args.full_model, 'gaussian_targets': args.gaussian_targets,
         'class_positive_weights': class_weights, 'class_event_counts': class_event_counts, 'freeze_batchnorm': args.freeze_bn,
         'first_loss': losses[0], 'last_loss': losses[-1],

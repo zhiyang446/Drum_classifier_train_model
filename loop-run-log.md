@@ -179,3 +179,18 @@ Append one entry per loop run. Keep entries concise.
   "notes": "Added six-class E-GMD mapping, built non-destructive rare/combined metadata, fixed exact D4R resume, trained one equal-budget D4D candidate, and recorded mixed/raw 0.4601/0.4692. Commercial gate remains FAIL."
 }
 ```
+
+```json
+{
+  "run_id": "2026-07-15T22:00:00+08:00",
+  "pattern": "manual-d4s-source-balance",
+  "level": "human-approved",
+  "duration_s": 1800,
+  "items_found": 1,
+  "actions_taken": 3,
+  "escalations": 0,
+  "tokens_estimate": 22000,
+  "outcome": "fix-proposed",
+  "notes": "Added opt-in 50/50 STAR-EGMD rare scheduling, trained one equal-budget candidate, and rejected it because mixed STAR fell to 0.4594 despite raw rising to 0.4716. Commercial gate remains FAIL."
+}
+```

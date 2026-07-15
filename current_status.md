@@ -699,3 +699,12 @@ Older sections below describe previous failed attempts and are kept as history; 
 - mixed epoch 2 最佳 Macro F1 `0.4601`，六類 `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`。
 - raw epoch 2 Macro F1 `0.4692`，六類 `0.7127/0.7177/0.5245/0.3132/0.1556/0.3912`。
 - 相對 D4R 只改善 mixed/raw `+0.0002/+0.0007`；技術 gate 通過但沒有實務提升。商業 gate 仍 FAIL，未跑固定五首、未替換產品 checkpoint、未部署。
+
+## 2026-07-15 Phase D4S rare source-balance（拒絕）
+
+- trainer 新增預設關閉的 `--balance-rare-sources`；啟用時 TOM/CRASH/RIDE 各精確取 STAR/E-GMD 50/50，來源不足直接失敗，不影響舊 caller。
+- 正式 schedule 為每個 weak class `576/576`，總計 8,064 windows、5 epochs、3,360 batches；完整 regression 與 self-check PASS。
+- 訓練 loss `0.1895 -> 0.1290`，顯著高於 D4D，證實 50% 電子鼓域造成較強適應負擔。
+- mixed epoch 1 最佳 Macro F1 `0.4594`，六類 `0.6780/0.7037/0.5621/0.2958/0.1603/0.3564`。
+- raw epoch 1 Macro F1 `0.4716`，六類 `0.6887/0.7066/0.5604/0.2965/0.1878/0.3894`。
+- raw HH/CRASH 改善，但 mixed `0.4594 < 0.4601`，因此 D4S promotion FAIL。D4D 保持現有資料研究基線；未跑固定五首、未替換產品 checkpoint、未部署。

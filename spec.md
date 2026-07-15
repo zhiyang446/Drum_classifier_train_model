@@ -1728,3 +1728,23 @@ stateDiagram-v2
 - raw STAR 只測 epoch 2，Macro F1 `0.4692`；六類為 `0.7127/0.7177/0.5245/0.3132/0.1556/0.3912`。
 - 相對 D4R mixed/raw 只增加 `0.0002/0.0007`，且沒有類別下降超過 `0.03`，因此預先定義的技術 promotion gate 通過；但幅度沒有實務意義，不足以宣稱資料問題已解決。
 - 商業 gate 仍 FAIL，產品模型、固定五首與部署狀態不變。結論是既有 E-GMD rare mapping 可用，但自然比例下 CRASH 新窗口太少，且電子鼓/合成鼓域仍無法補足真實歌曲的類別邊界。
+
+### Phase D4S rare source-balance 修復規格
+
+- 唯一變因是 TOM/CRASH/RIDE 的來源配額；D4R 架構、legacy diff、loss、threshold、Queen augmentation、seed、LR 與驗證器全部不變。
+- 來源 checkpoint 固定為 D4R epoch 10，不從 D4D epoch 2 繼續，避免把前一輪自然比例訓練疊加進來。
+- `build_schedule` 新增 opt-in `--balance-rare-sources`；預設關閉並保持舊排程行為。啟用後固定 50/50，使每個 weak class 的 1,152 windows 精確分成 STAR `576` + E-GMD `576`。
+- source 判定只允許 metadata 的 `source == "egmd_pitch_weighted"`；不得依測試檔名、歌曲名稱或預期答案分類。若任一來源不足 quota，必須立即失敗，不得靜默回退。
+- KD/SD/HH/NEG 維持既有自然比例排程；總計仍為 8,064 windows、5 epochs、batch 12、3,360 batches，與 D4D/D4R 比較保持等預算。
+- 必須先以 self-check 驗證預設相容、50/50 精確配額與不足來源拒絕，再輸出正式 schedule 來源分布；未達精確配額不訓練。
+- 正式候選只訓練一次。依 mixed STAR 選 epoch 1–5，最佳者只跑一次 raw；promotion 必須 mixed `>0.4601`、raw `>0.4692`，且任一類相對 D4D 不得下降超過 `0.03`。
+- 未達商業 gate（Macro F1 `>=0.70` 且每類 `>=0.55`）時，不跑固定五首、不替換產品 checkpoint、不部署。
+
+### Phase D4S 最終結果（拒絕）
+
+- schedule self-check、預設相容、來源不足拒絕與正式分布稽核全部 PASS；TOM/CRASH/RIDE 均精確使用 STAR `576` + E-GMD `576`，KD/SD/HH/NEG 維持既有自然比例。
+- 從 D4R epoch 10 完整續載 `383` tensors；8,064 windows、5 epochs、3,360 batches 正常完成。loss `0.1895 -> 0.1290`，明顯高於 D4D，顯示 50% E-GMD 帶來強烈來源域衝突。
+- mixed STAR 最佳為 epoch 1，Macro F1 `0.4594 < 0.4601`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.6780/0.7037/0.5621/0.2958/0.1603/0.3564`。
+- raw STAR epoch 1 為 `0.4716 > 0.4692`；六類為 `0.6887/0.7066/0.5604/0.2965/0.1878/0.3894`。HH/CRASH 改善，但 KD/TOM/RIDE 與 mixed 整體付出代價。
+- 因 mixed gate 下降，D4S promotion FAIL；保留 opt-in scheduler 與候選作研究證據，但不得成為新基線、不得跑固定五首、不得替換產品模型或部署。
+- 結論：E-GMD 對 HH/CRASH 有可見訊號，但 50/50 比例過高。不得把下一步變成無限制比例 sweep；在新增真實授權 full-song 六類資料前，D4D 仍是現有資料路線的較安全研究基線。
