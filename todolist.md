@@ -762,7 +762,7 @@
     *   [x] 建立不覆蓋舊檔的 E-GMD rare metadata、STAR+E-GMD combined metadata 與來源分布報告。
     *   [x] 執行 syntax/self-check、完整 regression 與一次 D4R candidate 訓練。
     *   [x] mixed/raw `0.4601/0.4692`，相對 D4R `+0.0002/+0.0007`；技術 gate 通過但商業 gate FAIL。
-    *   [ ] 完成文件、commit 並 push 至 `origin/codex`。
+    *   [x] 已以 commit `baab1c1` push 至 `origin/codex`，保留技術通過但商業失敗的完整接力證據。
 
 *   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
     *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
