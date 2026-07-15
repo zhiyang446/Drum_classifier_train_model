@@ -753,7 +753,7 @@
     *   [x] 以固定 D3R 配方訓練並執行 mixed/raw STAR gate；不使用固定五首調參。
     *   [x] mixed/raw 最佳 `0.4599/0.4685`，六類均未相對 D3R 下降超過 `0.03`；D4R 相對改善 gate 通過。
     *   [x] 商業 gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未全達 `0.55`；不替換產品模型、不跑固定五首。
-    *   [ ] commit/push 至 `origin/codex`（待本階段最終稽核完成）。
+    *   [x] 已以 commit `c1ab36f` push 至 `origin/codex`，供其他 AI 依相同架構與 gate 接力。
 
 *   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
     *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
