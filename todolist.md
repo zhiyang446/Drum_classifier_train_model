@@ -770,7 +770,7 @@
     *   [x] schedule self-check、精確 50/50 分布、syntax 與完整 regression PASS。
     *   [x] 從 D4R epoch 10 執行唯一一次 5-epoch D4S 訓練。
     *   [x] mixed/raw `0.4594/0.4716`；raw 改善但 mixed 低於 D4D，promotion FAIL，商業 gate 仍 FAIL。
-    *   [ ] 完成文件、commit 並 push 至 `origin/codex`。
+    *   [x] 已以 commit `09befd0` push 至 `origin/codex`，保留 mixed 拒絕與 raw 改善的完整證據。
 
 *   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
     *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
