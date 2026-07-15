@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 
 from model_dcnn import DCNNDrumTCN, ResidualDCNNDrumTCN, transfer_residual_state, transfer_symmetric_state
+from model_conformer import ResidualDCNNDrumConformer, transfer_d3r_state
 from run_six_class_smoke import CHUNK_FRAMES, LABELS, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_compatible_weights
 from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
@@ -170,6 +171,10 @@ def create_model(architecture, checkpoint_path, device):
     if architecture == 'symmetric':
         model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
         return model, load_compatible_weights(model, checkpoint_path, device)
+    if architecture == 'dcnn-conformer':
+        model = ResidualDCNNDrumConformer(num_classes=len(LABELS)).to(device)
+        source_state = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        return model, transfer_d3r_state(model, source_state)
     model_class = ResidualDCNNDrumTCN if architecture == 'dcnn-residual-tcn' else DCNNDrumTCN
     model = model_class(num_classes=len(LABELS)).to(device)
     source_state = torch.load(checkpoint_path, map_location=device, weights_only=False)
@@ -188,7 +193,12 @@ def build_full_model_optimizer(model, architecture, head_lr, backbone_lr, new_mo
     """依 heads、新增 DCNN、既有網路三組學習率建立 optimizer。"""
     named = list(model.named_parameters())
     heads = [parameter for name, parameter in named if name.startswith(('onset_head', 'velocity_head'))]
-    new_prefixes = ('backbone.correction.', 'backbone.gate') if architecture == 'dcnn-residual-tcn' else ()
+    if architecture == 'dcnn-residual-tcn':
+        new_prefixes = ('backbone.correction.', 'backbone.gate')
+    elif architecture == 'dcnn-conformer':
+        new_prefixes = ('onset_tcn.', 'velocity_tcn.')
+    else:
+        new_prefixes = ()
     new_modules = [parameter for name, parameter in named if new_prefixes and name.startswith(new_prefixes)]
     excluded = {id(parameter) for parameter in heads + new_modules}
     inherited = [parameter for _, parameter in named if id(parameter) not in excluded]
@@ -226,7 +236,7 @@ def main():
     parser.add_argument('--accompaniment', help='Optional non-gate no-drums WAV for online domain mixing')
     parser.add_argument('--accompaniment-gain-min', type=float, default=0.10)
     parser.add_argument('--accompaniment-gain-max', type=float, default=0.30)
-    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn'), default='symmetric')
+    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn', 'dcnn-conformer'), default='symmetric')
     parser.add_argument('--feature-mode', choices=('legacy-diff', 'true-superflux'))
     parser.add_argument('--new-module-lr', type=float, help='Residual DCNN correction/gate learning rate; defaults to --lr')
     args = parser.parse_args()
@@ -326,7 +336,7 @@ def main():
         'status': 'pass', 'labels': LABELS, 'schedule_windows': len(schedule),
         'per_class': args.per_class, 'batch_size': args.batch_size, 'epochs': args.epochs, 'batches': len(losses),
         'head_learning_rate': args.lr, 'backbone_learning_rate': args.backbone_lr if args.full_model else None,
-        'new_module_learning_rate': args.new_module_lr if args.full_model and args.architecture == 'dcnn-residual-tcn' else None,
+        'new_module_learning_rate': args.new_module_lr if args.full_model and args.architecture in ('dcnn-residual-tcn', 'dcnn-conformer') else None,
         'optimizer_parameter_counts': optimizer_parameter_counts,
         'full_model': args.full_model, 'gaussian_targets': args.gaussian_targets,
         'class_positive_weights': class_weights, 'class_event_counts': class_event_counts, 'freeze_batchnorm': args.freeze_bn,

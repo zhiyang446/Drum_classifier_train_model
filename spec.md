@@ -1672,3 +1672,21 @@ stateDiagram-v2
 - epoch 10 raw STAR Macro F1 為 `0.4520`，高於 v20 `0.4277` 與原 D3 `0.3951`；mixed/raw 均改善，且沒有類別 F1 下降超過 `0.03`，因此 D3R conditional architecture gate 通過並解鎖 D4。
 - mixed KD/SD/HH/TOM/CRASH/RIDE 為 `0.6984/0.6992/0.5036/0.3032/0.1384/0.3570`；raw 為 `0.7062/0.6990/0.4945/0.3038/0.1367/0.3720`。
 - 商業 STAR gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未達 `0.55`。不執行固定五首、不替換產品模型；D4 只能測小型 Conformer 是否改善時間建模，不能宣稱資料不足問題已解決。
+
+### Phase D4 小型 Conformer 規格
+
+- 新候選固定為 `dcnn-conformer`：沿用 D3R residual DCNN backbone 與 legacy diff，僅把 onset/velocity 的 TCN temporal encoders 換成兩套相同的小型 Conformer encoders。
+- 每套 encoder 使用 2 層、`d_model=64`、4-head self-attention、FFN expansion 2、depthwise convolution kernel 15；輸入輸出均為 `[B,64,T]`，不得降採樣或改變 onset frame 對齊。
+- 每個 Conformer block 使用 Macaron half-step FFN、multi-head self-attention、GLU pointwise + depthwise convolution、第二個 half-step FFN 與 final LayerNorm；只使用 PyTorch 現有元件，不新增依賴。
+- 來源 checkpoint 固定為 D3R mixed 最佳 epoch 10。只移植 shape 相容的 residual DCNN backbone 與 onset/velocity heads；TCN tensor 不得語意冒充 Conformer tensor。
+- optimizer 維持三組：heads `1e-4`、既有 residual DCNN `1e-6`、新 Conformer `5e-5`。資料、4,032-window schedule、Queen `0.10–0.30`、seed、loss、threshold 與驗證窗口全部不變。
+- 先通過 shape、有限值、時間長度、checkpoint reload、backward 與參數分組 self-check，再跑完整 regression。正式訓練後只以 mixed STAR 選 epoch，最佳者再跑一次 raw STAR。
+- D4 promotion 必須 mixed 高於 D3R `0.4500`、raw 高於 D3R `0.4520`，且任一類不得下降超過 `0.03`；否則拒絕 Conformer，不跑固定五首、不替換產品模型。
+
+### Phase D4 最終結果（拒絕）
+
+- 完整候選使用 4,032 windows、10 epochs、batch 12 與 D3R 完全相同的資料/增強/loss；train loss 由 `0.4096` 降至 `0.0824`，證明 Conformer 可訓練且非 reload/NaN/OOM 問題。
+- mixed STAR 由 epoch 1 `0.3579` 升至 epoch 10 最佳 `0.4501`，只比 D3R `0.4500` 高 `0.0001`；raw epoch 10 為 `0.4538`，只比 D3R `0.4520` 高 `0.0018`，沒有實質整體改善。
+- mixed KD/SD/HH/TOM/CRASH/RIDE 為 `0.6550/0.7185/0.5024/0.2801/0.1392/0.4053`；raw 為 `0.6745/0.7187/0.5080/0.2770/0.1438/0.4008`。
+- mixed KD 相對 D3R 下降 `0.0434`，raw KD 下降 `0.0317`，均超過允許的 `0.03`；TOM 亦退步。D4 promotion FAIL，D5 不解鎖，不跑 STAR test/固定五首、不替換產品模型。
+- 結論：小型 Conformer 改善 SD/RIDE，但未解決 HH/TOM/CRASH 類別邊界，且犧牲 KD。現有資料下，時間模型替換不是到達 `0.70` 的主解法。

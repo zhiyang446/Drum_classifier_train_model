@@ -671,3 +671,13 @@ Older sections below describe previous failed attempts and are kept as history; 
 - raw STAR epoch 10 Macro F1 `0.4520`，六類 `0.7062/0.6990/0.4945/0.3038/0.1367/0.3720`。
 - D3R 同時高於 mixed `0.4313` 與 raw `0.4277`，且無類別下降超過 `0.03`，conditional architecture gate 通過，D4 小型 Conformer 已解鎖。
 - 商業 gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未達 `0.55`；未跑固定五首、未替換產品 checkpoint。
+
+## 2026-07-15 Phase D4 小型 Conformer（拒絕）
+
+- 新增 2 層、64 維、4-head、kernel 15 的 Macaron Conformer，onset/velocity 各一套；保留 residual DCNN、legacy diff 與 frame resolution，沒有使用純 Transformer 或新增依賴。
+- shape/finite/backward/optimizer/checkpoint reload self-check 與 `verify_current_solution.py` PASS；batch 12 在 RTX 4050 正常，沒有 OOM/NaN。
+- 完整訓練使用 D3R 相同 4,032 windows、10 epochs、Queen augmentation、seed、loss 與學習率分組；train loss `0.4096 -> 0.0824`。
+- mixed epoch 10 最佳 Macro F1 `0.4501`，六類 `0.6550/0.7185/0.5024/0.2801/0.1392/0.4053`。
+- raw epoch 10 Macro F1 `0.4538`，六類 `0.6745/0.7187/0.5080/0.2770/0.1438/0.4008`。
+- 整體僅比 D3R mixed/raw 高 `0.0001/0.0018`，但 KD 分別下降 `0.0434/0.0317`，超過類別安全上限 `0.03`；D4 promotion FAIL。
+- D5 未解鎖；未跑 STAR test/固定五首、未替換產品模型。現有證據顯示更換時間模型無法解決 HH/TOM/CRASH 類別混淆，下一個有效投入仍是非 gate、歌曲隔離、具授權的六類資料。

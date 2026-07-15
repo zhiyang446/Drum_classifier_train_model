@@ -735,10 +735,16 @@
     *   [x] mixed 最佳 `0.3937 < 0.4313`；raw `0.3951 < 0.4277`。
     *   [x] 未同時改善，候選拒絕；不跑五首、不替換產品模型、不進 D4。
 
-*   [ ] **Phase D4–D5 小型 Conformer 與 promotion（D3R conditional gate 已解鎖）**
-    *   [ ] 只在 D3 通過時，以 2–4 層小型 Conformer 替換 TCN；禁止純 Transformer。
-    *   [ ] 依序執行 STAR validation、STAR test、固定五首 gate，不得跳級。
-    *   [ ] 每 Phase 測試、commit、push；完整 gate 通過前不得部署。
+*   [x] **Phase D4 小型 Conformer（完成並拒絕；D5 未解鎖）**
+    *   [x] 鎖定 2 層、64 維、4-head、kernel 15 的小型 Conformer；禁止純 Transformer。
+    *   [x] 實作 onset/velocity Conformer encoder、D3R checkpoint 移植與 reload。
+    *   [x] 接入既有 trainer/validator，完成 shape/backward/optimizer self-check 與完整 regression。
+    *   [x] 使用固定 D3R 資料配方訓練，依 mixed STAR 選 epoch，最佳者只跑一次 raw STAR。
+    *   [x] mixed/raw `0.4501/0.4538`，但 KD 分別下降 `0.0434/0.0317`；promotion FAIL。
+    *   [x] 不執行 STAR test/固定五首、不替換產品模型；提交拒絕證據供其他 AI 接力。
+
+*   [ ] **Phase D5 promotion（未解鎖）**
+    *   [ ] 只有未來候選通過 STAR validation 類別安全 gate 才可執行 STAR test 與固定五首商業 gate。
 
 *   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
     *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
