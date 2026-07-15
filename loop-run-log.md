@@ -20,6 +20,21 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-15T23:35:27+08:00",
+  "pattern": "manual-mdbdrums-download",
+  "level": "human-approved",
+  "duration_s": 360,
+  "items_found": 1,
+  "actions_taken": 1,
+  "escalations": 0,
+  "tokens_estimate": 7000,
+  "outcome": "fix-proposed",
+  "notes": "Shallow-cloned MDBDrums at b29e2d6 and verified 362 tracked files, 268 WAV files, 46 text annotations, and 2.01 GB total size. No training performed."
+}
+```
+
+```json
+{
   "run_id": "2026-07-15T20:30:00+08:00",
   "pattern": "manual-data-audit",
   "level": "L1",

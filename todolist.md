@@ -778,3 +778,8 @@
     *   [x] 將 feature mode 與 architecture 分離，並建立 heads/new modules/inherited 三組 optimizer。
     *   [x] 執行最小 self-check、`verify_current_solution.py` 與固定 STAR D3R 訓練/驗證。
     *   [x] mixed `0.4500 > 0.4313`、raw `0.4520 > 0.4277`；conditional gate 通過並解鎖 D4，但商業 gate 仍 FAIL。
+
+*   [x] **Phase D5A MDB Drums 研究資料匯入（完成）**
+    *   [x] 確認目標 `MDBDrums/` 不存在，且不影響既有未追蹤檔案。
+    *   [x] shallow clone 官方資料庫至專案根目錄。
+    *   [x] 驗證 Git HEAD、檔案數、音訊／標註結構與授權文件。

@@ -708,3 +708,9 @@ Older sections below describe previous failed attempts and are kept as history; 
 - mixed epoch 1 最佳 Macro F1 `0.4594`，六類 `0.6780/0.7037/0.5621/0.2958/0.1603/0.3564`。
 - raw epoch 1 Macro F1 `0.4716`，六類 `0.6887/0.7066/0.5604/0.2965/0.1878/0.3894`。
 - raw HH/CRASH 改善，但 mixed `0.4594 < 0.4601`，因此 D4S promotion FAIL。D4D 保持現有資料研究基線；未跑固定五首、未替換產品 checkpoint、未部署。
+
+## 2026-07-15 Phase D5A MDB Drums 研究資料匯入（完成）
+
+- 官方 `CarlSouthall/MDBDrums` 已 shallow clone 至 `MDBDrums/`，HEAD 為 `b29e2d63c3a023506f4bf353c5b2e8a558eed135`。
+- 本機驗證為 362 個追蹤檔、268 個 WAV、46 個文字標註，總大小 `2,010,349,446` bytes；沒有小於 1 KB 的 WAV。
+- 資料授權為 CC BY-NC-SA 4.0，只能先作非商業研究驗證；尚未訓練、未觸碰 `test_real_audio` 或產品 checkpoint。

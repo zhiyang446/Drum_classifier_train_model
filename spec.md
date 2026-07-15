@@ -1748,3 +1748,10 @@ stateDiagram-v2
 - raw STAR epoch 1 為 `0.4716 > 0.4692`；六類為 `0.6887/0.7066/0.5604/0.2965/0.1878/0.3894`。HH/CRASH 改善，但 KD/TOM/RIDE 與 mixed 整體付出代價。
 - 因 mixed gate 下降，D4S promotion FAIL；保留 opt-in scheduler 與候選作研究證據，但不得成為新基線、不得跑固定五首、不得替換產品模型或部署。
 - 結論：E-GMD 對 HH/CRASH 有可見訊號，但 50/50 比例過高。不得把下一步變成無限制比例 sweep；在新增真實授權 full-song 六類資料前，D4D 仍是現有資料路線的較安全研究基線。
+
+### Phase D5A MDB Drums 研究資料匯入規格
+
+- 以 shallow clone 將 `CarlSouthall/MDBDrums` 原樣下載至專案根目錄 `MDBDrums/`，不得覆蓋既有資料或 checkpoint。
+- 本階段只驗證下載完整性、資料結構與授權文件；不得訓練、調參或將內容放入 `test_real_audio/`。
+- MDB Drums 為 CC BY-NC-SA 4.0 研究資料，後續若使用只能作非商業方向驗證，不得直接宣稱商業模型可使用。
+- 下載結果鎖定官方 `master` commit `b29e2d63c3a023506f4bf353c5b2e8a558eed135`：362 個追蹤檔、268 個 WAV、46 個文字標註，總大小 `2,010,349,446` bytes；沒有小於 1 KB 的 WAV。
