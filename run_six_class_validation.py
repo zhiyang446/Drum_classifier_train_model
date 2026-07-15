@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from model_dcnn import DCNNDrumTCN, ResidualDCNNDrumTCN, load_dcnn_checkpoint, load_residual_dcnn_checkpoint
-from model_conformer import ResidualDCNNDrumConformer, load_conformer_checkpoint
+from model_conformer import ResidualDCNNDrumConformer, ResidualDCNNDrumHybridConformer, load_conformer_checkpoint, load_hybrid_conformer_checkpoint
 from run_egmd_round4_validation import match_events
 from run_six_class_smoke import CHUNK_FRAMES, HOP_LENGTH, LABELS, LABEL_INDEX, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_six_class_checkpoint
 from train_phase2 import SymmetricDrumTCN
@@ -157,7 +157,7 @@ def main():
     parser.add_argument('--per-class', type=int, default=8)
     parser.add_argument('--accompaniment')
     parser.add_argument('--accompaniment-gain', type=float, default=0.17)
-    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn', 'dcnn-conformer'), default='symmetric')
+    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn', 'dcnn-conformer', 'dcnn-tcn-conformer'), default='symmetric')
     parser.add_argument('--feature-mode', choices=('legacy-diff', 'true-superflux'))
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
@@ -179,6 +179,9 @@ def main():
     elif args.architecture == 'dcnn-conformer':
         model = ResidualDCNNDrumConformer(num_classes=len(LABELS)).to(device)
         load_conformer_checkpoint(model, args.model, device)
+    elif args.architecture == 'dcnn-tcn-conformer':
+        model = ResidualDCNNDrumHybridConformer(num_classes=len(LABELS)).to(device)
+        load_hybrid_conformer_checkpoint(model, args.model, device)
     else:
         model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
         load_six_class_checkpoint(model, args.model, device)

@@ -1690,3 +1690,21 @@ stateDiagram-v2
 - mixed KD/SD/HH/TOM/CRASH/RIDE 為 `0.6550/0.7185/0.5024/0.2801/0.1392/0.4053`；raw 為 `0.6745/0.7187/0.5080/0.2770/0.1438/0.4008`。
 - mixed KD 相對 D3R 下降 `0.0434`，raw KD 下降 `0.0317`，均超過允許的 `0.03`；TOM 亦退步。D4 promotion FAIL，D5 不解鎖，不跑 STAR test/固定五首、不替換產品模型。
 - 結論：小型 Conformer 改善 SD/RIDE，但未解決 HH/TOM/CRASH 類別邊界，且犧牲 KD。現有資料下，時間模型替換不是到達 `0.70` 的主解法。
+
+### Phase D4R gated TCN-Conformer 修復規格
+
+- D4R 不再刪除已訓練 TCN；onset/velocity temporal path 改為 `TCN(x) + gate * Conformer(x)`，`gate` 初始化為零。載入 D3R epoch 10 後，eval 輸出必須與 D3R 逐值相同。
+- Conformer correction 沿用 D4 的 2 層、64 維、4-head、kernel 15 配置；TCN 與 Conformer 均保持 `[B,64,T]`，不得改變 frame alignment。
+- D3R residual DCNN、TCN、heads 全部語意移植；新 Conformer 與 gate 為新參數。optimizer 使用 heads `1e-4`、新 Conformer/gate `5e-5`、其餘繼承參數 `1e-6`。
+- 訓練資料、4,032-window schedule、10 epochs、batch 12、Queen augmentation、seed、loss、threshold 與驗證窗口全部不變；不得使用固定五首選擇 gate、LR 或 epoch。
+- promotion gate 固定為 mixed `>0.4500`、raw `>0.4520`，且任一類別相對 D3R 不得下降超過 `0.03`。未通過即拒絕，不進 D5、不替換產品模型。
+
+### Phase D4R 最終結果（相對改善通過；商業 gate 失敗）
+
+- exact-output、兩階段 backward、optimizer 分組、checkpoint reload、trainer/validator self-check 與完整 `verify_current_solution.py` 全部 PASS；零 gate 初始化確實保留 D3R 輸出。
+- 完整訓練使用固定 4,032 windows、10 epochs、batch 12、Queen augmentation、seed 與 loss；train loss `0.0803 -> 0.0721`，沒有 NaN、OOM 或純 Conformer 的初期崩塌。
+- 依 mixed STAR 比較 epoch 1–10，epoch 10 最佳 Macro F1 `0.4599`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.7010/0.7142/0.5174/0.3062/0.1413/0.3791`。
+- 只對 mixed 最佳 epoch 10 執行一次 raw STAR，Macro F1 `0.4685`；六類為 `0.7166/0.7221/0.5151/0.3043/0.1600/0.3929`。
+- 相對 D3R，mixed/raw 分別增加 `0.0099/0.0165`，六類皆未下降超過 `0.03`，因此 D4R 架構改善 gate 通過並保留為後續研究基線。
+- 商業 STAR gate 仍 FAIL：Macro F1 距 `0.70` 尚差 `0.2315`（以較佳 raw 計），且 HH/TOM/CRASH/RIDE 未達單類 `0.55`。不得替換產品模型、不得部署，也不得用固定五首反覆選 checkpoint/threshold。
+- 結論：保留 TCN 再以 gated Conformer 學殘差，比直接替換 TCN 有效；但架構改善幅度不足以補足稀有類資料與 false-positive 邊界問題。下一步應先補歌曲隔離、非 gate、具授權且含 TOM/CRASH/RIDE 的真實音訊與標註，再做一次預先鎖定的訓練。

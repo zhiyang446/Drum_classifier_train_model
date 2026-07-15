@@ -681,3 +681,12 @@ Older sections below describe previous failed attempts and are kept as history; 
 - raw epoch 10 Macro F1 `0.4538`，六類 `0.6745/0.7187/0.5080/0.2770/0.1438/0.4008`。
 - 整體僅比 D3R mixed/raw 高 `0.0001/0.0018`，但 KD 分別下降 `0.0434/0.0317`，超過類別安全上限 `0.03`；D4 promotion FAIL。
 - D5 未解鎖；未跑 STAR test/固定五首、未替換產品模型。現有證據顯示更換時間模型無法解決 HH/TOM/CRASH 類別混淆，下一個有效投入仍是非 gate、歌曲隔離、具授權的六類資料。
+
+## 2026-07-15 Phase D4R gated TCN-Conformer（保留；不可商用）
+
+- 新增 `dcnn-tcn-conformer`：onset/velocity 均使用 `TCN(x) + gate * Conformer(x)`，gate 從零初始化；D3R residual DCNN、TCN 與 heads 皆語意移植。
+- exact-output、backward、optimizer、reload、trainer/validator self-check 與 `verify_current_solution.py` 全部 PASS；完整訓練 4,032 windows、10 epochs，loss `0.0803 -> 0.0721`。
+- mixed STAR 比較全部 10 個 epoch，epoch 10 最佳 Macro F1 `0.4599`，六類 `0.7010/0.7142/0.5174/0.3062/0.1413/0.3791`。
+- raw STAR 只測 mixed 最佳 epoch 10，Macro F1 `0.4685`，六類 `0.7166/0.7221/0.5151/0.3043/0.1600/0.3929`。
+- 相對 D3R mixed/raw 改善 `+0.0099/+0.0165`，且沒有類別下降超過 `0.03`；D4R 相對架構 gate 通過，可作後續研究基線。
+- 商業 gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未達 `0.55`。未跑固定五首、未替換產品 checkpoint、未部署；主要阻塞仍是稀有類資料覆蓋與大量 false positives，不是單純更換時序模型。

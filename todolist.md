@@ -746,6 +746,15 @@
 *   [ ] **Phase D5 promotion（未解鎖）**
     *   [ ] 只有未來候選通過 STAR validation 類別安全 gate 才可執行 STAR test 與固定五首商業 gate。
 
+*   [x] **Phase D4R gated TCN-Conformer（完成並保留；商業 gate 仍 FAIL）**
+    *   [x] 鎖定 `TCN(x) + gate * Conformer(x)`，gate 從零開始並逐值保留 D3R 輸出。
+    *   [x] 實作 hybrid temporal encoder、D3R TCN/head/backbone 移植與 checkpoint reload。
+    *   [x] 接入既有 trainer/validator，完成 exact-output、backward、optimizer 與完整 regression。
+    *   [x] 以固定 D3R 配方訓練並執行 mixed/raw STAR gate；不使用固定五首調參。
+    *   [x] mixed/raw 最佳 `0.4599/0.4685`，六類均未相對 D3R 下降超過 `0.03`；D4R 相對改善 gate 通過。
+    *   [x] 商業 gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未全達 `0.55`；不替換產品模型、不跑固定五首。
+    *   [ ] commit/push 至 `origin/codex`（待本階段最終稽核完成）。
+
 *   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
     *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
     *   [x] 實作零閘門 residual DCNN，確保轉移初始化逐值保留來源模型輸出。

@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 
-from model_dcnn import ResidualDCNNBackbone
+from model_dcnn import ResidualDCNNBackbone, ResidualDCNNDrumTCN
 from train_phase2 import SymmetricDrumTCN
 
 
@@ -108,6 +108,31 @@ class ResidualDCNNDrumConformer(SymmetricDrumTCN):
         self.velocity_tcn = SmallConformerEncoder()
 
 
+class GatedTemporalConformer(nn.Module):
+    """保留既有 TCN，并以零闸门加入 Conformer 修正。"""
+
+    def __init__(self, base):
+        """包装已训练 temporal encoder，并建立全新的 correction。"""
+        super().__init__()
+        self.base = base
+        self.conformer = SmallConformerEncoder()
+        self.gate = nn.Parameter(torch.zeros(()))
+
+    def forward(self, x):
+        """输出 function-preserving TCN 与 gated Conformer 修正之和。"""
+        return self.base(x) + self.gate * self.conformer(x)
+
+
+class ResidualDCNNDrumHybridConformer(ResidualDCNNDrumTCN):
+    """D3R residual DCNN+TCN 与 gated Conformer correction。"""
+
+    def __init__(self, num_classes=6):
+        """建立逐值保留 D3R 起点的六类 hybrid 候选。"""
+        super().__init__(num_classes=num_classes)
+        self.onset_tcn = GatedTemporalConformer(self.onset_tcn)
+        self.velocity_tcn = GatedTemporalConformer(self.velocity_tcn)
+
+
 def transfer_d3r_state(model, source_state):
     """從 D3R 移植 backbone/head，明確跳過不可相容的 TCN。"""
     target = model.state_dict()
@@ -128,6 +153,38 @@ def transfer_d3r_state(model, source_state):
 
 def load_conformer_checkpoint(model, checkpoint_path, device):
     """載入 D4 candidate 並還原 residual DCNN projection 狀態。"""
+    state = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    if 'backbone.shared.legacy_slot_proj.weight' in state:
+        model.backbone.shared.use_legacy_proj = True
+        model.backbone.correction.timbre.use_legacy_proj = True
+        model.backbone.correction.transient.use_legacy_proj = True
+    model.load_state_dict(state)
+
+
+def transfer_d3r_hybrid_state(model, source_state):
+    """完整移植 D3R backbone、TCN、heads，并保留新 correction 为零闸门。"""
+    target = model.state_dict()
+    copied = 0
+    for name, value in source_state.items():
+        if name.startswith('onset_tcn.'):
+            target_name = name.replace('onset_tcn.', 'onset_tcn.base.', 1)
+        elif name.startswith('velocity_tcn.'):
+            target_name = name.replace('velocity_tcn.', 'velocity_tcn.base.', 1)
+        else:
+            target_name = name
+        if target_name in target and value.shape == target[target_name].shape:
+            target[target_name].copy_(value)
+            copied += 1
+    model.load_state_dict(target)
+    if 'backbone.shared.legacy_slot_proj.weight' in source_state:
+        model.backbone.shared.use_legacy_proj = True
+        model.backbone.correction.timbre.use_legacy_proj = True
+        model.backbone.correction.transient.use_legacy_proj = True
+    return copied
+
+
+def load_hybrid_conformer_checkpoint(model, checkpoint_path, device):
+    """载入 D4R candidate 并还原 residual DCNN projection 状态。"""
     state = torch.load(checkpoint_path, map_location=device, weights_only=False)
     if 'backbone.shared.legacy_slot_proj.weight' in state:
         model.backbone.shared.use_legacy_proj = True
