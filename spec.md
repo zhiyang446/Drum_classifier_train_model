@@ -1580,6 +1580,20 @@ phase D4: replace only temporal encoder with small Conformer -> self-check + reg
 phase D5: train candidate -> STAR validation -> STAR test -> fixed five-song gate only after promotion
 ```
 
+### Phase D1 True SuperFlux 公式
+
+- `extract_features(..., use_true_superflux=False)` 預設維持既有 Mel 正向差分，確保產品與舊 checkpoint 完全不變。
+- opt-in 路徑先對 Mel power 做 `log1p`，再對前一個延遲 frame 沿頻率軸做寬度 3 的 maximum filter；目前 frame 減去 filtered reference，負值截為零。
+- 固定 lag 為 2 frames，輸出前補零保持 `[frequency, time]` shape 與 onset frame 對齊，之後沿用既有獨立 Z-score normalization。
+- 最小測試必須證明：shape 不變、靜態頻譜為零、鄰近頻率漂移被抑制、真正寬頻瞬態保留正值、非法 lag/max-size 被拒絕。
+
+```text
+log_energy = log1p(mel_power * 1000)
+reference = frequency_max_filter(log_energy, width=3)
+superflux[:, lag:] = max(0, log_energy[:, lag:] - reference[:, :-lag])
+superflux[:, :lag] = 0
+```
+
 ### 模組關係圖
 
 ```mermaid

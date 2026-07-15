@@ -637,3 +637,10 @@ Older sections below describe previous failed attempts and are kept as history; 
 - `verify_current_solution.py` PASS；Round4 strong event gate 為 `30/30` 與 `6/6`。這只保護既有回歸，不代表六類商業 gate 通過。
 - `loop-audit.cmd . --suggest` 為 `100/100`；`loop-cost.cmd --pattern daily-triage --level L1` 完成並保留高頻 cadence 預算警告。
 - D0 stage 白名單：`AGENTS.md`、核心 Phase 2–22 程式修改、正式驗證器、兩個 self-check、固定 manifest、規格/任務/狀態/loop log。硬編碼比較腳本及二進位/衍生證據排除。
+
+## 2026-07-15 Phase D1 True SuperFlux
+
+- `dsp_utils.extract_features` 新增 opt-in `use_true_superflux`；預設 `False`，既有產品特徵逐位不變。
+- 新增 frequency maximum-filtered、lag 2 的 log-Mel SuperFlux 差分，輸出 shape 與原時間框完全對齊。
+- `test_superflux.py` 驗證靜態輸入、鄰頻漂移抑制、寬頻瞬態、非法參數、shape/finite 及 legacy bitwise compatibility，全部 PASS。
+- 語法檢查與 `verify_current_solution.py` PASS；Round4 strong event gate 保持 `30/30` 與 `6/6`。

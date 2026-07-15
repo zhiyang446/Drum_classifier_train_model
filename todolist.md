@@ -717,12 +717,13 @@
     *   [x] 執行既有 self-check、`verify_current_solution.py`、`loop-audit.cmd . --suggest`。
     *   [x] 鎖定只 stage 可重現的程式、測試、manifest、文件與 loop log；等待本 Phase commit/push。
 
-*   [ ] **Phase D1 True SuperFlux（下一階段）**
-    *   [ ] 以 opt-in 模式實作 maximum-filter spectral trajectory suppression，不改產品預設。
-    *   [ ] 加入最小特徵 shape、時間對齊與 vibrato suppression self-check。
-    *   [ ] 通過 regression 後 commit、push `origin/codex`。
+*   [x] **Phase D1 True SuperFlux（完成）**
+    *   [x] 鎖定 opt-in 公式、lag=2、frequency max width=3 與測試條件，不改產品預設。
+    *   [x] 以 opt-in 模式實作 maximum-filter spectral trajectory suppression，不改產品預設。
+    *   [x] 加入最小特徵 shape、時間對齊與 vibrato suppression self-check。
+    *   [x] True SuperFlux self-check 與 `verify_current_solution.py` PASS；等待本 Phase commit/push。
 
-*   [ ] **Phase D2 DCNN + TCN 隔離候選（待 D1 完成）**
+*   [ ] **Phase D2 DCNN + TCN 隔離候選（下一階段）**
     *   [ ] 建立 Log-Mel 音色 CNN 與 SuperFlux 瞬態 CNN，late fusion 後沿用 TCN。
     *   [ ] 只移植語意及 shape 相容權重，不覆蓋產品 checkpoint。
     *   [ ] 通過 self-check/regression 後 commit、push `origin/codex`。
