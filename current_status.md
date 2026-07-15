@@ -660,3 +660,14 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 完整訓練使用與 v20 相同 4,032 windows、10 epochs、Queen augmentation 與 seed；train loss `0.3217 → 0.0959`。
 - mixed STAR 最佳 epoch 10 為 `0.3937 < 0.4313`；raw STAR 為 `0.3951 < 0.4277`。HH/TOM/CRASH/RIDE 仍未達 `0.55`。
 - D3 gate FAIL，候選保留為研究證據但不進五首、不替換產品。依已確認規格，D4 Conformer 未解鎖；若要繞過此 gate，必須由使用者明確改變規格。
+
+## 2026-07-15 Phase D3R residual DCNN 根因修復
+
+- D3 根因包含兩個實驗設計問題：架構與 True SuperFlux 同時變更，以及所有非 head 參數共用 `1e-6`，使新 DCNN/fusion 幾乎無法適應；validation 逐 epoch 上升，不支持典型過擬合判定。
+- 新 `dcnn-residual-tcn` 保留來源 shared CNN，使用零閘門 DCNN correction；self-check 證明轉移初始化輸出逐值相同，且新 correction 在 gate 更新後收到非零梯度。
+- feature mode 已與 architecture 分離；D3R 固定 legacy diff。optimizer 為 heads `1e-4`、既有 shared/TCN `1e-6`、新 correction/gate `5e-5`。
+- 完整訓練使用 4,032 windows、10 epochs、Queen `0.10–0.30`、seed 1337；loss `0.0910 -> 0.0746`。`verify_current_solution.py` PASS。
+- mixed STAR epoch 10 最佳 Macro F1 `0.4500`，KD/SD/HH/TOM/CRASH/RIDE `0.6984/0.6992/0.5036/0.3032/0.1384/0.3570`。
+- raw STAR epoch 10 Macro F1 `0.4520`，六類 `0.7062/0.6990/0.4945/0.3038/0.1367/0.3720`。
+- D3R 同時高於 mixed `0.4313` 與 raw `0.4277`，且無類別下降超過 `0.03`，conditional architecture gate 通過，D4 小型 Conformer 已解鎖。
+- 商業 gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未達 `0.55`；未跑固定五首、未替換產品 checkpoint。

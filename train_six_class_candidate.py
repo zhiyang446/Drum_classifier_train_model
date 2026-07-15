@@ -9,7 +9,7 @@ import soundfile as sf
 import torch
 import torch.nn.functional as F
 
-from model_dcnn import DCNNDrumTCN, transfer_symmetric_state
+from model_dcnn import DCNNDrumTCN, ResidualDCNNDrumTCN, transfer_residual_state, transfer_symmetric_state
 from run_six_class_smoke import CHUNK_FRAMES, LABELS, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_compatible_weights
 from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
@@ -170,9 +170,36 @@ def create_model(architecture, checkpoint_path, device):
     if architecture == 'symmetric':
         model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
         return model, load_compatible_weights(model, checkpoint_path, device)
-    model = DCNNDrumTCN(num_classes=len(LABELS)).to(device)
+    model_class = ResidualDCNNDrumTCN if architecture == 'dcnn-residual-tcn' else DCNNDrumTCN
+    model = model_class(num_classes=len(LABELS)).to(device)
     source_state = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    return model, transfer_symmetric_state(model, source_state)
+    transfer = transfer_residual_state if architecture == 'dcnn-residual-tcn' else transfer_symmetric_state
+    return model, transfer(model, source_state)
+
+
+def resolve_feature_mode(architecture, feature_mode):
+    """將特徵選擇與模型架構解耦，同時保留舊 D3 CLI 行為。"""
+    if feature_mode:
+        return feature_mode
+    return 'true-superflux' if architecture == 'dcnn-tcn' else 'legacy-diff'
+
+
+def build_full_model_optimizer(model, architecture, head_lr, backbone_lr, new_module_lr):
+    """依 heads、新增 DCNN、既有網路三組學習率建立 optimizer。"""
+    named = list(model.named_parameters())
+    heads = [parameter for name, parameter in named if name.startswith(('onset_head', 'velocity_head'))]
+    new_prefixes = ('backbone.correction.', 'backbone.gate') if architecture == 'dcnn-residual-tcn' else ()
+    new_modules = [parameter for name, parameter in named if new_prefixes and name.startswith(new_prefixes)]
+    excluded = {id(parameter) for parameter in heads + new_modules}
+    inherited = [parameter for _, parameter in named if id(parameter) not in excluded]
+    groups = [{'params': heads, 'lr': head_lr}, {'params': inherited, 'lr': backbone_lr}]
+    if new_modules:
+        groups.append({'params': new_modules, 'lr': new_module_lr})
+    return torch.optim.Adam(groups), {
+        'heads': sum(parameter.numel() for parameter in heads),
+        'inherited': sum(parameter.numel() for parameter in inherited),
+        'new_modules': sum(parameter.numel() for parameter in new_modules),
+    }
 
 
 def main():
@@ -199,9 +226,13 @@ def main():
     parser.add_argument('--accompaniment', help='Optional non-gate no-drums WAV for online domain mixing')
     parser.add_argument('--accompaniment-gain-min', type=float, default=0.10)
     parser.add_argument('--accompaniment-gain-max', type=float, default=0.30)
-    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn'), default='symmetric')
+    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn'), default='symmetric')
+    parser.add_argument('--feature-mode', choices=('legacy-diff', 'true-superflux'))
+    parser.add_argument('--new-module-lr', type=float, help='Residual DCNN correction/gate learning rate; defaults to --lr')
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
+    args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
+    args.new_module_lr = args.lr if args.new_module_lr is None else args.new_module_lr
 
     if args.self_check:
         run_self_check()
@@ -236,16 +267,13 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model, transferred = create_model(args.architecture, args.checkpoint, device)
     if args.full_model:
-        head_params = list(model.onset_head.parameters()) + list(model.velocity_head.parameters())
-        head_ids = {id(parameter) for parameter in head_params}
-        backbone_params = [parameter for parameter in model.parameters() if id(parameter) not in head_ids]
-        optimizer = torch.optim.Adam([
-            {'params': head_params, 'lr': args.lr},
-            {'params': backbone_params, 'lr': args.backbone_lr},
-        ])
+        optimizer, optimizer_parameter_counts = build_full_model_optimizer(
+            model, args.architecture, args.lr, args.backbone_lr, args.new_module_lr,
+        )
     else:
         freeze_for_head_training(model)
         optimizer = torch.optim.Adam((parameter for parameter in model.parameters() if parameter.requires_grad), lr=args.lr)
+        optimizer_parameter_counts = None
     losses = []
     positive_weight = torch.tensor([class_weights[label] for label in LABELS], dtype=torch.float32, device=device).view(1, 1, -1)
     batches_per_epoch = len(schedule) // args.batch_size
@@ -258,7 +286,7 @@ def main():
                 schedule, metadata, start, args.batch_size,
                 accompaniment_pool=accompaniment_pool,
                 gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
-                use_true_superflux=args.architecture == 'dcnn-tcn',
+                use_true_superflux=args.feature_mode == 'true-superflux',
             )
             x = torch.from_numpy(feature).float().to(device)
             onset_target = torch.from_numpy(onset).float().to(device)
@@ -298,13 +326,15 @@ def main():
         'status': 'pass', 'labels': LABELS, 'schedule_windows': len(schedule),
         'per_class': args.per_class, 'batch_size': args.batch_size, 'epochs': args.epochs, 'batches': len(losses),
         'head_learning_rate': args.lr, 'backbone_learning_rate': args.backbone_lr if args.full_model else None,
+        'new_module_learning_rate': args.new_module_lr if args.full_model and args.architecture == 'dcnn-residual-tcn' else None,
+        'optimizer_parameter_counts': optimizer_parameter_counts,
         'full_model': args.full_model, 'gaussian_targets': args.gaussian_targets,
         'class_positive_weights': class_weights, 'class_event_counts': class_event_counts, 'freeze_batchnorm': args.freeze_bn,
         'first_loss': losses[0], 'last_loss': losses[-1],
         'accompaniment': os.path.abspath(args.accompaniment) if args.accompaniment else None,
         'accompaniment_gain_range': [args.accompaniment_gain_min, args.accompaniment_gain_max],
         'architecture': args.architecture,
-        'feature_mode': 'log_mel+true_superflux' if args.architecture == 'dcnn-tcn' else 'log_mel+legacy_diff',
+        'feature_mode': f'log_mel+{args.feature_mode.replace("-", "_")}',
         'transferred_compatible_tensors': transferred, 'candidate': os.path.abspath(candidate_path),
     }
     with open(os.path.join(args.output_dir, 'train_report.json'), 'w', encoding='utf-8') as handle:

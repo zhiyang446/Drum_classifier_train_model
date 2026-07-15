@@ -1650,9 +1650,25 @@ stateDiagram-v2
     FiveSong --> Ready: Macro F1 >= 0.70 且各類 >= 0.55
 ```
 
+### Phase D3R 根因修復規格
+
+- D3 同時改變 CNN 拓撲與特徵差分，且把新 DCNN/fusion 與既有 TCN 一起放在 `1e-6` 學習率；因此 D3 不能單獨歸因於 DCNN，也不足以判定過擬合。
+- D3R 新增 `dcnn-residual-tcn`：完整保留來源 shared CNN，另加雙分支 DCNN correction，輸出為 `shared + gate * correction`；`gate` 初始化為零，轉移後必須在 eval mode 與來源模型逐值相同。
+- trainer/validator 將 feature mode 與 architecture 分離為 `legacy-diff|true-superflux`。D3R 第一個候選固定使用 `legacy-diff`，只測拓撲與優化修復，不同時更換前端特徵。
+- full-model optimizer 分成三組：heads 使用 `--lr`，新 DCNN correction/gate 使用 `--new-module-lr`，既有 shared CNN/TCN 使用 `--backbone-lr`。新模組不得再落入 `1e-6` 群組。
+- D3R 先跑最小 transfer/optimizer/backward self-check 與完整三類 regression；再以固定 STAR train/validation、Queen augmentation、seed 1337 評估。不得使用固定五首歌曲選模型。
+- promotion 仍須同時高於 mixed `0.4313` 與 raw `0.4277`，且任一類不得下降超過 `0.03`；未通過則保留證據、停止，不進 D4 Conformer。
+
 ### 協作、部署與回退
 
 - 每個 Phase 必須先更新文件、完成規定測試，再以單一目的 commit 並 push 至 `origin/codex`；測試失敗不得標記完成或進下一 Phase。
 - 其他 AI 接手時必須先 fetch `origin/codex`，閱讀 `AGENTS.md`、`spec.md`、`todolist.md`、`current_status.md`，並依本節的資料隔離、架構順序及 gate 繼續。
 - 任何改用純 Transformer、使用五首調參、降低門檻、覆蓋 checkpoint 或跳過 Phase 的提案，都必須先記錄證據並取得使用者明確確認。
 - 部署前保留目前產品模型與設定作為回退；DCNN/Conformer 候選未通過完整 gate 前不得成為預設。
+
+### Phase D3R 最終結果（架構修復通過，商業 gate 未通過）
+
+- 4,032 windows、10 epochs 的 residual DCNN + legacy diff 候選由 mixed `0.4235` 穩定升至 epoch 10 的 `0.4500`，高於 v20 `0.4313` 與原 D3 `0.3937`。
+- epoch 10 raw STAR Macro F1 為 `0.4520`，高於 v20 `0.4277` 與原 D3 `0.3951`；mixed/raw 均改善，且沒有類別 F1 下降超過 `0.03`，因此 D3R conditional architecture gate 通過並解鎖 D4。
+- mixed KD/SD/HH/TOM/CRASH/RIDE 為 `0.6984/0.6992/0.5036/0.3032/0.1384/0.3570`；raw 為 `0.7062/0.6990/0.4945/0.3038/0.1367/0.3720`。
+- 商業 STAR gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未達 `0.55`。不執行固定五首、不替換產品模型；D4 只能測小型 Conformer 是否改善時間建模，不能宣稱資料不足問題已解決。

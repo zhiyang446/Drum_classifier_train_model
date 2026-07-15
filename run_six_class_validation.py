@@ -8,7 +8,7 @@ import os
 import numpy as np
 import torch
 
-from model_dcnn import DCNNDrumTCN, load_dcnn_checkpoint
+from model_dcnn import DCNNDrumTCN, ResidualDCNNDrumTCN, load_dcnn_checkpoint, load_residual_dcnn_checkpoint
 from run_egmd_round4_validation import match_events
 from run_six_class_smoke import CHUNK_FRAMES, HOP_LENGTH, LABELS, LABEL_INDEX, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_six_class_checkpoint
 from train_phase2 import SymmetricDrumTCN
@@ -139,6 +139,13 @@ def run_self_check():
     print('Self-check passed.')
 
 
+def resolve_feature_mode(architecture, feature_mode):
+    """將驗證特徵明確綁定到報告，而不是由架構隱式決定。"""
+    if feature_mode:
+        return feature_mode
+    return 'true-superflux' if architecture == 'dcnn-tcn' else 'legacy-diff'
+
+
 def main():
     """中文註解：對六類候選執行 STAR test 物理事件驗收。"""
     parser = argparse.ArgumentParser(description='Validate an isolated six-class candidate on STAR test data.')
@@ -149,7 +156,8 @@ def main():
     parser.add_argument('--per-class', type=int, default=8)
     parser.add_argument('--accompaniment')
     parser.add_argument('--accompaniment-gain', type=float, default=0.17)
-    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn'), default='symmetric')
+    parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn'), default='symmetric')
+    parser.add_argument('--feature-mode', choices=('legacy-diff', 'true-superflux'))
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
     if args.self_check:
@@ -157,12 +165,16 @@ def main():
         return
     if not args.meta or not args.model or not args.output_dir:
         parser.error('--meta, --model, and --output-dir are required unless --self-check is used')
+    args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
     with open(args.meta, encoding='utf-8') as handle:
         metadata = json.load(handle)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if args.architecture == 'dcnn-tcn':
         model = DCNNDrumTCN(num_classes=len(LABELS)).to(device)
         load_dcnn_checkpoint(model, args.model, device)
+    elif args.architecture == 'dcnn-residual-tcn':
+        model = ResidualDCNNDrumTCN(num_classes=len(LABELS)).to(device)
+        load_residual_dcnn_checkpoint(model, args.model, device)
     else:
         model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
         load_six_class_checkpoint(model, args.model, device)
@@ -176,7 +188,7 @@ def main():
         features, _, _, start_sec = build_window(
             selected['item'], selected['anchor'], accompaniment=accompaniment,
             accompaniment_gain=args.accompaniment_gain, accompaniment_offset=accompaniment_offset,
-            use_true_superflux=args.architecture == 'dcnn-tcn',
+            use_true_superflux=args.feature_mode == 'true-superflux',
         )
         with torch.no_grad():
             logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
@@ -192,6 +204,7 @@ def main():
             'split': args.split, 'aggregate_offset': aggregate_offset,
             'accompaniment': args.accompaniment, 'accompaniment_gain': args.accompaniment_gain,
             'architecture': args.architecture,
+            'feature_mode': args.feature_mode,
             'expected_counts': {label: len(expected[label]) for label in LABELS},
         })
     rows, gate = write_outputs(selected_rows, aggregate, args.output_dir)

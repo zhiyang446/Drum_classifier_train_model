@@ -735,7 +735,14 @@
     *   [x] mixed 最佳 `0.3937 < 0.4313`；raw `0.3951 < 0.4277`。
     *   [x] 未同時改善，候選拒絕；不跑五首、不替換產品模型、不進 D4。
 
-*   [ ] **Phase D4–D5 小型 Conformer 與 promotion（未解鎖：D3 gate fail）**
+*   [ ] **Phase D4–D5 小型 Conformer 與 promotion（D3R conditional gate 已解鎖）**
     *   [ ] 只在 D3 通過時，以 2–4 層小型 Conformer 替換 TCN；禁止純 Transformer。
     *   [ ] 依序執行 STAR validation、STAR test、固定五首 gate，不得跳級。
     *   [ ] 每 Phase 測試、commit、push；完整 gate 通過前不得部署。
+
+*   [x] **Phase D3R DCNN 根因修復（完成；商業 gate 仍 FAIL）**
+    *   [x] 確認 D3 同時更換 feature/architecture，且新 DCNN/fusion 錯用 `1e-6` 學習率。
+    *   [x] 實作零閘門 residual DCNN，確保轉移初始化逐值保留來源模型輸出。
+    *   [x] 將 feature mode 與 architecture 分離，並建立 heads/new modules/inherited 三組 optimizer。
+    *   [x] 執行最小 self-check、`verify_current_solution.py` 與固定 STAR D3R 訓練/驗證。
+    *   [x] mixed `0.4500 > 0.4313`、raw `0.4520 > 0.4277`；conditional gate 通過並解鎖 D4，但商業 gate 仍 FAIL。
