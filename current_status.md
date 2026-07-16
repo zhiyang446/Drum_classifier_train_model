@@ -731,3 +731,11 @@ Older sections below describe previous failed attempts and are kept as history; 
 - D5C 拒絕，D4D 仍為現有資料研究基線；未碰 `test_real_audio`、固定五首或產品 checkpoint。MDB 權重也受非商業授權限制，不能部署。
 - 下一個合理資料投資不是在相同 12 首上掃比例或 threshold，而是新增具有商業授權、歌曲級隔離且含足量 TOM/CRASH/RIDE 的真實完整歌曲，並保留獨立 validation/test。
 - D5C 程式、驗證結果與拒絕證據已由 commit `2908524` push 至 `origin/codex`，其他 AI 不得把此候選誤標為可晉級模型。
+
+## 2026-07-16 Phase D6 STAR original_mix 真實鼓域（拒絕）
+
+- `preprocess_star.py` 新增預設關閉的 `--audio-kind original_mix`，只改 STAR 音訊來源；原 annotation、split、六類映射、D4R 起點、D4D 等預算配方與 gate 不變。
+- 新 metadata 為 STAR `5,727` + E-GMD `716` items；8,064-window schedule 有 `7,213` 個 STAR original_mix windows，validation/test 進入訓練的數量為 0。
+- D4D 在 original_mix held-out baseline 為 `0.4030`。D6 完整 5-epoch 最佳 mixed/raw/original_mix/MDB 分別為 `0.4282/0.4240/0.3961/0.4185`，均未達預先 gate。
+- MDB HH/TOM/CRASH FP 從 `697` 降至 `581`，但 KD/RIDE F1 下降 `0.0400/0.0890`；原始真實鼓域本身也由 `0.4030` 降至 `0.3961`，因此不是可接受的 precision/recall 交換。
+- D6 候選拒絕，未跑固定五首、未碰 `test_real_audio`、未替換產品模型。STAR original_mix 可作研究資料，但其自動標註與混合授權未滿足商業部署要求。

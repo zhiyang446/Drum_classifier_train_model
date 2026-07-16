@@ -239,3 +239,18 @@ Append one entry per loop run. Keep entries concise.
   "notes": "Added opt-in MDB full-mix hard-negative scheduling, trained one equal-budget five-epoch candidate, and rejected it because mixed/raw/MDB were 0.4503/0.4570/0.4390 while HH-TOM-CRASH false positives increased from 697 to 790. Product and fixed-five gates were untouched."
 }
 ```
+
+```json
+{
+  "run_id": "2026-07-16T15:10:00+08:00",
+  "pattern": "manual-d6-star-original-mix",
+  "level": "human-approved",
+  "duration_s": 5400,
+  "items_found": 1,
+  "actions_taken": 5,
+  "escalations": 0,
+  "tokens_estimate": 30000,
+  "outcome": "rejected",
+  "notes": "Added opt-in STAR original_mix metadata, measured the locked D4D real-mix baseline, completed one equal-budget five-epoch restart after an external terminal interruption, and rejected D6 because mixed/raw/original_mix/MDB were 0.4282/0.4240/0.3961/0.4185. Product and fixed-five gates were untouched."
+}
+```

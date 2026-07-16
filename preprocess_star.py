@@ -96,17 +96,24 @@ def get_audio_duration(audio_path):
     return float(info.frames / info.samplerate)
 
 
-def annotation_to_audio_path(annotation_path):
+def annotation_to_audio_path(annotation_path, audio_kind='mix'):
     """
-    依 STAR 目錄命名規則，由 annotation txt 找到對應 mix FLAC。
+    依 STAR 目錄命名規則，由 annotation txt 找到對應 mix 或 original_mix FLAC。
 
     :param annotation_path: str，annotation txt 路徑。
-    :return: str，對應 audio/mix/*.flac 路徑。
+    :param audio_kind: str，`mix` 或 `original_mix`。
+    :return: str，對應音訊路徑。
     """
+    if audio_kind not in ('mix', 'original_mix'):
+        raise ValueError(f'Unsupported STAR audio kind: {audio_kind}')
     annotation_dir = os.path.dirname(annotation_path)
     split_root = os.path.dirname(annotation_dir)
     base_name = os.path.splitext(os.path.basename(annotation_path))[0]
-    return os.path.join(split_root, 'audio', 'mix', f'{base_name}.flac')
+    if audio_kind == 'original_mix':
+        if '_mix_' not in base_name:
+            raise ValueError(f'Cannot derive original_mix name from annotation: {base_name}')
+        base_name = base_name.rsplit('_mix_', 1)[0] + '_original_mix'
+    return os.path.join(split_root, 'audio', audio_kind, f'{base_name}.flac')
 
 
 def iter_annotation_files(star_dir):
@@ -132,9 +139,9 @@ def iter_annotation_files(star_dir):
                     yield split, os.path.join(root, name)
 
 
-def build_star_metadata(star_dir, class_to_inst=THREE_CLASS_TO_INST):
+def build_star_metadata(star_dir, class_to_inst=THREE_CLASS_TO_INST, audio_kind='mix'):
     """
-    建立 STAR 三類 metadata，格式對齊現有 E-GMD metadata。
+    建立 STAR metadata，並可選擇重新合成 mix 或原始真實鼓 mix。
 
     :param star_dir: str，STAR_publication 根目錄。
     :return: tuple[dict, dict]，metadata 與統計資訊。
@@ -150,7 +157,7 @@ def build_star_metadata(star_dir, class_to_inst=THREE_CLASS_TO_INST):
     }
 
     for split, annotation_path in iter_annotation_files(star_dir):
-        audio_path = annotation_to_audio_path(annotation_path)
+        audio_path = annotation_to_audio_path(annotation_path, audio_kind)
         if not os.path.isfile(audio_path):
             stats['skipped_missing_audio'] += 1
             continue
@@ -167,7 +174,8 @@ def build_star_metadata(star_dir, class_to_inst=THREE_CLASS_TO_INST):
         rel_key = os.path.relpath(annotation_path, os.path.join(star_dir, 'data'))
         song_key = 'star_' + os.path.splitext(rel_key)[0].replace('\\', '_').replace('/', '_')
 
-        meta[song_key] = {
+        # 中文註解：單一 metadata item 保留音訊、標註、split 與事件的可追溯關係。
+        item = {
             'audio_path': os.path.abspath(audio_path),
             'annotation_path': os.path.abspath(annotation_path),
             'duration': get_audio_duration(audio_path),
@@ -176,6 +184,9 @@ def build_star_metadata(star_dir, class_to_inst=THREE_CLASS_TO_INST):
             'kit_name': os.path.basename(audio_path).replace('.flac', '').split('_mix_')[-1],
             'events': events
         }
+        if audio_kind == 'original_mix':
+            item['source'] = 'star_original_mix'
+        meta[song_key] = item
         stats['processed'] += 1
         stats['splits'][split] += 1
 
@@ -201,6 +212,9 @@ def run_self_check():
     assert label_mapping('six-class')['MT'] == 'TOM'
     assert label_mapping('six-class')['CRC'] == 'CRASH'
     assert label_mapping('six-class')['RD'] == 'RIDE'
+    fake_annotation = os.path.join('root', 'annotation', 'track_mix_909_detailed_kit_full.txt')
+    assert annotation_to_audio_path(fake_annotation).endswith(os.path.join('audio', 'mix', 'track_mix_909_detailed_kit_full.flac'))
+    assert annotation_to_audio_path(fake_annotation, 'original_mix').endswith(os.path.join('audio', 'original_mix', 'track_original_mix.flac'))
     print('Self-check passed.')
 
 
@@ -212,6 +226,7 @@ def main():
     parser.add_argument('--star-dir', default=STAR_DIR, help='Path to STAR_publication directory.')
     parser.add_argument('--output', default=OUTPUT_JSON, help='Output JSON metadata path.')
     parser.add_argument('--label-scheme', choices=['three-class', 'six-class'], default='three-class')
+    parser.add_argument('--audio-kind', choices=['mix', 'original_mix'], default='mix')
     parser.add_argument('--self-check', action='store_true', help='Run parser self-check and exit.')
     args = parser.parse_args()
 
@@ -222,7 +237,7 @@ def main():
     if not os.path.isdir(args.star_dir):
         raise FileNotFoundError(f'STAR directory not found: {args.star_dir}')
 
-    meta, stats = build_star_metadata(args.star_dir, label_mapping(args.label_scheme))
+    meta, stats = build_star_metadata(args.star_dir, label_mapping(args.label_scheme), args.audio_kind)
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w', encoding='utf-8') as f:
@@ -231,6 +246,7 @@ def main():
     print(f"Wrote {len(meta)} STAR items to {args.output}")
     print(f"Splits: {dict(stats['splits'])}")
     print(f"Mapped events ({args.label_scheme}): {dict(stats['events'])}")
+    print(f"Audio kind: {args.audio_kind}")
     print(f"Raw STAR classes: {dict(stats['raw_classes'])}")
     print(f"Skipped missing audio: {stats['skipped_missing_audio']}")
     print(f"Skipped empty KD/SD/HH: {stats['skipped_empty_events']}")

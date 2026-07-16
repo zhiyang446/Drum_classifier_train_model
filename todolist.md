@@ -800,3 +800,13 @@
     *   [x] 執行 syntax/self-check、完整 regression 與唯一一次等預算 5-epoch 訓練。
     *   [x] mixed/raw/MDB 為 `0.4503/0.4570/0.4390`；HH/TOM/CRASH FP 合計 `790 > 697`，promotion FAIL。
     *   [x] 不跑固定五首、不替換產品模型；主提交 `2908524` 已 push 至 `origin/codex`。
+
+*   [ ] **Phase D6 STAR original_mix 真實鼓域（已拒絕；不得標記完成）**
+    *   [x] 鎖定單一變因、等預算配方、資料隔離、原始/真實域 gate 與研究授權限制。
+    *   [x] 為 `preprocess_star.py` 加入預設相容的 opt-in `original_mix` 路徑與 self-check。
+    *   [x] 建立 original_mix STAR/combined metadata，稽核 split、缺檔、key collision 與正式 schedule。
+    *   [x] 先量 D4D original_mix held-out baseline，再執行唯一一次完整 5-epoch D6 訓練。
+        *   [x] D4D original_mix baseline 已鎖定為 `0.4030`；首次訓練由外部終端切換在 epoch 4 後中止，保留部分 artifacts 但不作 gate。
+        *   [x] 以相同配方在新目錄完整重跑5 epochs；3,360 batches、loss `0.2402 → 0.0911`，只採用完整結果。
+    *   [x] mixed/raw/original_mix/MDB 為 `0.4282/0.4240/0.3961/0.4185`，全部整體 gate FAIL；不進固定五首、不替換產品模型。
+    *   [ ] 完成回歸、記錄結果、commit 並 push 至 `origin/codex`。

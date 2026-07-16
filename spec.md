@@ -1794,3 +1794,25 @@ stateDiagram-v2
 - raw STAR epoch 1 為 `0.4570 < 0.4692`；六類為 `0.7044/0.7115/0.4878/0.3079/0.1402/0.3902`。
 - MDB 官方 test epoch 1 為 `0.4390 < 0.4478`；六類為 `0.6385/0.5939/0.3663/0.3304/0.1290/0.5759`。HH/TOM/CRASH false positives 為 `522/128/140`，合計 `790`，比 D4D 的 `697` 增加 `93`；MDB HH F1 下降 `0.0517`。
 - D5C 所有 promotion gate 均未同時通過，且訓練越久 mixed 表現越差，因此候選拒絕；不跑固定五首、不替換產品 checkpoint、不部署。結論是直接把真實混音負樣本完全替換 NEG，未能建立足夠精確的類別邊界，反而犧牲 HH；不得在同一資料上繼續比例或 threshold sweep。
+
+### Phase D6 STAR original_mix 真實鼓域規格
+
+- STAR 既有 `audio/mix` 是重新合成鼓軌與真實非鼓伴奏的混音；D6 唯一變因是把 STAR metadata 的音訊改指向同歌曲 `audio/original_mix`，使用原始真實鼓與完整歌曲混音。annotation、歌曲 split、六類映射、模型與 threshold 均不變。
+- `preprocess_star.py` 新增預設為 `mix` 的 opt-in `--audio-kind original_mix`；預設輸出必須逐值相容。`original_mix` 檔名由 annotation 的最後一段 `_mix_...` kit suffix 移除後加 `_original_mix.flac`，缺檔只能記錄 skip，不得回退至合成 mix。
+- 產生全新 `processed_data/star_original_mix_six_class_d6.json`，再與既有 `processed_data/egmd_six_class_rare_meta_d4d.json` 無衝突合併為 `processed_data/star_original_mix_egmd_d6.json`；不得覆蓋任何既有 metadata。
+- 訓練只讀 combined metadata 的 STAR `train` 與既有 E-GMD train；STAR original_mix validation/test、MDB test、固定五首及 `test_real_audio` 均不得進訓練或選 schedule。
+- D6 從 D4R epoch 10 起點重跑 D4D 配方：每類 `1,152` + NEG `1,152`，總 `8,064` windows、5 epochs、batch 12、3,360 batches；`dcnn-tcn-conformer`、legacy diff、seed、Queen augmentation、LR `1e-4/1e-6/5e-5` 與 weight cap 12 全部不變。
+- 正式訓練前以 D4D epoch 2、固定 threshold `0.50`、tolerance `50ms` 跑 held-out STAR original_mix validation，零調參基線為 Macro F1 `0.4030`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.5926/0.6447/0.3571/0.2201/0.1120/0.4913`。訓練後以既有 STAR mixed validation 選 epoch，最佳者各跑一次 raw STAR、original_mix STAR 與 MDB test。
+- promotion 必須 mixed `>=0.4601`、raw `>=0.4692`、original_mix Macro F1 嚴格高於預先量得的 D4D baseline、MDB Macro F1 `>0.4478`、MDB HH/TOM/CRASH FP 合計 `<697`，且任一對應類別 F1 不得下降超過 `0.03`。
+- STAR annotation 來自自動轉譜且音訊授權混合；D6 即使技術通過也只是研究方向證據。未完成逐歌曲商業授權白名單與人工標註稽核前，不得將候選當作商業部署權重。
+- 首次正式程序因 Codex 互動回合切換在完成 epoch 4 後被外部終止，沒有 epoch 5 或 final report；這不是模型 gate 結果。不得從 epoch 4 重新建立 Adam optimizer 後冒充連續訓練，也不得覆蓋部分 artifacts；以完全相同配方在新 candidate 目錄完整重跑一次，並只採用完整重跑結果。
+
+### Phase D6 最終結果（拒絕）
+
+- opt-in `original_mix` 路徑、syntax 與 self-check PASS；新 STAR metadata 有 `5,727` items、split `5,679/22/26`、缺檔 `102`、空標註 skip `356`。與既有 E-GMD 716 items 合併後共 `6,443`，key collision 為 0。
+- 正式 schedule 為 8,064 windows、每 bucket 1,152；`7,213` windows 來自 `star_original_mix`、`851` 來自既有 E-GMD，非 train windows 為 0。完整重跑 5 epochs、3,360 batches 成功，loss `0.2402 -> 0.0911`。
+- mixed STAR epoch 1–5 為 `0.4172/0.4201/0.4194/0.4229/0.4282`；最佳 epoch 5 低於 D4D `0.4601`。最佳六類為 `0.6445/0.7425/0.5288/0.3036/0.0825/0.2675`，CRASH/RIDE 明顯退步。
+- raw STAR epoch 5 為 `0.4240 < 0.4692`；六類為 `0.6531/0.7362/0.5265/0.3063/0.0625/0.2595`。
+- original_mix STAR epoch 5 為 `0.3961 < 0.4030`；六類為 `0.5698/0.6330/0.4371/0.2057/0.0282/0.5029`。HH 有改善，但整體與 CRASH 均退步，未解決真實域 gate。
+- MDB test epoch 5 為 `0.4185 < 0.4478`；六類為 `0.6011/0.6392/0.3968/0.2765/0.1154/0.4818`。HH/TOM/CRASH FP 合計雖由 `697` 降至 `581`，但 KD/RIDE F1 分別下降 `0.0400/0.0890`，屬於抑制預測換取的代價，不符合類別安全 gate。
+- D6 所有整體 promotion gate 均失敗，候選拒絕；不跑固定五首、不替換產品 checkpoint、不部署。結論是 STAR original_mix 有研究價值，但完全替換重新合成 mix 會造成域遺忘；不得在相同資料上掃混合比例，下一個 materially different 方案需先取得人工標註稽核或商業授權的真實資料。
