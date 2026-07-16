@@ -739,3 +739,4 @@ Older sections below describe previous failed attempts and are kept as history; 
 - D4D 在 original_mix held-out baseline 為 `0.4030`。D6 完整 5-epoch 最佳 mixed/raw/original_mix/MDB 分別為 `0.4282/0.4240/0.3961/0.4185`，均未達預先 gate。
 - MDB HH/TOM/CRASH FP 從 `697` 降至 `581`，但 KD/RIDE F1 下降 `0.0400/0.0890`；原始真實鼓域本身也由 `0.4030` 降至 `0.3961`，因此不是可接受的 precision/recall 交換。
 - D6 候選拒絕，未跑固定五首、未碰 `test_real_audio`、未替換產品模型。STAR original_mix 可作研究資料，但其自動標註與混合授權未滿足商業部署要求。
+- D6 opt-in 實作與完整拒絕證據已由 commit `3fe8a3b` push 至 `origin/codex`；其他 AI 不得把 partial epoch 1–4 或完整候選誤標為新基線。

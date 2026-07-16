@@ -809,4 +809,4 @@
         *   [x] D4D original_mix baseline 已鎖定為 `0.4030`；首次訓練由外部終端切換在 epoch 4 後中止，保留部分 artifacts 但不作 gate。
         *   [x] 以相同配方在新目錄完整重跑5 epochs；3,360 batches、loss `0.2402 → 0.0911`，只採用完整結果。
     *   [x] mixed/raw/original_mix/MDB 為 `0.4282/0.4240/0.3961/0.4185`，全部整體 gate FAIL；不進固定五首、不替換產品模型。
-    *   [ ] 完成回歸、記錄結果、commit 並 push 至 `origin/codex`。
+    *   [x] 回歸與記錄完成；主提交 `3fe8a3b` 已 push 至 `origin/codex`。Phase 維持拒絕，不標記成功完成。
