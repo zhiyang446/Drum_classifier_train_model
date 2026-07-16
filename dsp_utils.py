@@ -67,11 +67,35 @@ def custom_hybrid_filterbank(sr, n_fft, n_filters=256, fmin=0.0, fmax=None, spli
         
     return fb
 
-def extract_features(y, sr=SR, n_fft=2048, hop_length=HOP_LENGTH, n_mels=N_MELS, use_hybrid=False):
+def superflux_difference(log_spectrogram, lag=2, max_size=3):
+    """以頻率 maximum filter 建立 SuperFlux 差分圖，並保持原始時間 shape。"""
+    values = np.asarray(log_spectrogram)
+    if values.ndim != 2:
+        raise ValueError('log_spectrogram must have shape [frequency, time]')
+    if lag < 1:
+        raise ValueError('lag must be positive')
+    if max_size < 1 or max_size % 2 == 0:
+        raise ValueError('max_size must be a positive odd integer')
+
+    radius = max_size // 2
+    padded = np.pad(values, ((radius, radius), (0, 0)), mode='edge')
+    frequency_reference = np.maximum.reduce(
+        [padded[offset:offset + values.shape[0]] for offset in range(max_size)]
+    )
+    difference = np.zeros_like(values)
+    if values.shape[1] > lag:
+        difference[:, lag:] = np.maximum(0.0, values[:, lag:] - frequency_reference[:, :-lag])
+    return difference
+
+
+def extract_features(
+    y, sr=SR, n_fft=2048, hop_length=HOP_LENGTH, n_mels=N_MELS,
+    use_hybrid=False, use_true_superflux=False,
+):
     """
     Extracts 2-channel ADT features:
     Channel 1: Log-Mel Spectrogram (standard Mel if use_hybrid=False, otherwise hybrid filterbank)
-    Channel 2: Mel-domain Superflux (先差分，后对数)
+    Channel 2: 預設為既有 Mel 正向差分；opt-in 可使用 frequency-filtered True SuperFlux。
     """
     # 1. Compute linear spectrogram
     stft = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
@@ -88,11 +112,14 @@ def extract_features(y, sr=SR, n_fft=2048, hop_length=HOP_LENGTH, n_mels=N_MELS,
     # Channel 1: Log-Mel
     log_mel = librosa.power_to_db(mel, ref=np.max)
     
-    # Channel 2: Superflux (先差分，后对数)
-    diff_mel = np.diff(mel, axis=1)
-    diff_mel = np.maximum(0.0, diff_mel)
-    diff_mel = np.pad(diff_mel, ((0, 0), (1, 0)), mode='constant')
-    log_diff_mel = np.log1p(diff_mel * 1000.0)
+    # Channel 2：預設保留既有特徵；新模型才 opt-in True SuperFlux。
+    if use_true_superflux:
+        log_diff_mel = superflux_difference(np.log1p(mel * 1000.0), lag=2, max_size=3)
+    else:
+        diff_mel = np.diff(mel, axis=1)
+        diff_mel = np.maximum(0.0, diff_mel)
+        diff_mel = np.pad(diff_mel, ((0, 0), (1, 0)), mode='constant')
+        log_diff_mel = np.log1p(diff_mel * 1000.0)
     
     # Independent Channel Z-Score Normalization
     log_mel = (log_mel - log_mel.mean()) / (log_mel.std() + 1e-6)

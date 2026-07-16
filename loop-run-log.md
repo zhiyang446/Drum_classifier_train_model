@@ -20,6 +20,79 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-15T23:58:11+08:00",
+  "pattern": "manual-d5b-mdbdrums-ingest",
+  "level": "human-approved",
+  "duration_s": 900,
+  "items_found": 2,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 14000,
+  "outcome": "fix-proposed",
+  "notes": "Built isolated MDBDrums six-class metadata with official 12/11 song split. Train rare counts were TOM 15, CRASH 57, RIDE 210, so training was not started. D4D zero-tune MDB test macro F1 was 0.4478; full regression passed."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T23:35:27+08:00",
+  "pattern": "manual-mdbdrums-download",
+  "level": "human-approved",
+  "duration_s": 360,
+  "items_found": 1,
+  "actions_taken": 1,
+  "escalations": 0,
+  "tokens_estimate": 7000,
+  "outcome": "fix-proposed",
+  "notes": "Shallow-cloned MDBDrums at b29e2d6 and verified 362 tracked files, 268 WAV files, 46 text annotations, and 2.01 GB total size. No training performed."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T20:30:00+08:00",
+  "pattern": "manual-data-audit",
+  "level": "L1",
+  "duration_s": 180,
+  "items_found": 2,
+  "actions_taken": 0,
+  "escalations": 0,
+  "tokens_estimate": 7000,
+  "outcome": "report-only",
+  "notes": "Confirmed STAR train already contains TOM/CRASH/RIDE; raw E-GMD MIDI also contains those pitches, but current egmd_meta preprocessing keeps only KD/SD/HH. No code, data, checkpoint, or gate changes."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T01:00:00+08:00",
+  "pattern": "manual-validation",
+  "duration_s": 360,
+  "items_found": 1,
+  "actions_taken": 0,
+  "escalations": 1,
+  "tokens_estimate": 14000,
+  "outcome": "escalated",
+  "notes": "Rare-class threshold and core-competition sweeps proved TOM/CRASH/RIDE are model class-confusion errors. Existing v15 failed unchanged STAR held-out gate at macro F1 0.3551, so no product code, five-song run, training, checkpoint replacement, push, or deployment followed."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T00:00:00+08:00",
+  "pattern": "manual-validation",
+  "duration_s": 420,
+  "items_found": 1,
+  "actions_taken": 1,
+  "escalations": 1,
+  "tokens_estimate": 18000,
+  "outcome": "fix-proposed",
+  "notes": "Removed duplicate floating sync prefix offset and added one shared 67ms output-latency correction. Existing verifier passed; unchanged five-song gate improved to macro F1 0.4710 but remains below 0.70, so no deployment or further runtime fix was attempted."
+}
+```
+
+```json
+{
   "run_id": "2026-07-06T00:00:00+08:00",
   "pattern": "daily-triage",
   "level": "L1",
@@ -119,5 +192,50 @@ Append one entry per loop run. Keep entries concise.
     "loop-cost.cmd --pattern daily-triage --level L1"
   ],
   "notes": "Confirmed E-GMD pitch 22 and 26 are already in the shared HH mapping; no model or runtime change."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T21:15:00+08:00",
+  "pattern": "manual-d4d-existing-data",
+  "level": "human-approved",
+  "duration_s": 1800,
+  "items_found": 2,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 22000,
+  "outcome": "fix-proposed",
+  "notes": "Added six-class E-GMD mapping, built non-destructive rare/combined metadata, fixed exact D4R resume, trained one equal-budget D4D candidate, and recorded mixed/raw 0.4601/0.4692. Commercial gate remains FAIL."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-15T22:00:00+08:00",
+  "pattern": "manual-d4s-source-balance",
+  "level": "human-approved",
+  "duration_s": 1800,
+  "items_found": 1,
+  "actions_taken": 3,
+  "escalations": 0,
+  "tokens_estimate": 22000,
+  "outcome": "fix-proposed",
+  "notes": "Added opt-in 50/50 STAR-EGMD rare scheduling, trained one equal-budget candidate, and rejected it because mixed STAR fell to 0.4594 despite raw rising to 0.4716. Commercial gate remains FAIL."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-16T00:50:00+08:00",
+  "pattern": "manual-d5c-mdb-hard-negative",
+  "level": "human-approved",
+  "duration_s": 2400,
+  "items_found": 1,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 20000,
+  "outcome": "rejected",
+  "notes": "Added opt-in MDB full-mix hard-negative scheduling, trained one equal-budget five-epoch candidate, and rejected it because mixed/raw/MDB were 0.4503/0.4570/0.4390 while HH-TOM-CRASH false positives increased from 697 to 790. Product and fixed-five gates were untouched."
 }
 ```

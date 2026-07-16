@@ -1024,10 +1024,787 @@ Round4 compound-meter trailing-prune rule:
 *   **衰減統計**：統計整首歌 Detected HH 幀的高頻能量衰減中位數，動態計算自適應閾值 `hh_thresh`（限制於 $[-25.0, -10.0]$ 區間內），極大提升不同歌質下的開合判定。
 
 ### 11.3 批量多線程與多 GPU 卡負載分流 (ThreadPool Batch Processing & Multi-GPU Balance)
-*   **多任務並行**：支援 `--input` 目錄或 glob 匹配，採用 `ThreadPoolExecutor` 進行批量並發。
-*   **多卡負載均衡**：利用 `torch.cuda.device_count()`，動態將不同的 Wav 任務分流綁定至不同的 CUDA 卡上，充分發揮多 GPU 算力。
+*   **多任務並行**：支援 `--input` 目錄或 glob 匹配，採用 `ThreadPoolExecutor` 進行批量並發.
+*   **多卡負載均衡**：利用 `torch.cuda.device_count()`，動態將不同的 Wav 任務分流綁定至不同的 CUDA 卡上，充分發揮多 GPU 算力.
 
+---
 
+## 12. V27 端到端商業驗收 Gate（Phase 0 / Phase 1）
 
+### 12.1 架構與選型
 
+- 新增單一命令列驗證入口 `run_end_to_end_validation.py`，直接比較 `transcribe.py` 產生的最終 MIDI 與獨立參考 MIDI。
+- 沿用 `run_egmd_round4_validation.match_events` 的 50ms 一對一事件匹配，不新增第三方套件。
+- 沿用 `run_real_audio_validation.PITCH_TO_LABEL_IDX` 的六類 GM pitch mapping，另外將 Hi-Hat 拆分為 Closed（42）、Pedal（44）、Open（46）。
+- 驗證器只讀音訊、參考 MIDI 與模型；輸出僅能寫入呼叫者指定的新目錄，不得覆蓋 checkpoint、來源音訊或既有 validation run。
+- Phase 1 只建立可信量測，不修改 `transcribe.py`、模型或門檻。
 
+### 12.2 資料模型
+
+每首歌曲由 manifest JSON 定義：
+
+```json
+{
+  "name": "song-id",
+  "audio": "path/to/audio.wav",
+  "reference_midi": "path/to/reference.mid",
+  "reference_offset_sec": 0.0,
+  "expected_tempo_bpm": 120.0,
+  "expected_time_signature": "4/4"
+}
+```
+
+驗證結果包含：歌曲、層級（class/articulation）、expected、predicted、TP、FP、FN、Precision、Recall、F1、Tempo 誤差、拍號結果與總 gate 狀態。
+
+### 12.3 關鍵流程
+
+1. 驗證 manifest 與路徑。
+2. 以固定命令呼叫正式 `transcribe.py`，不得由預測結果選擇參考偏移。
+3. 載入最終 MIDI 與參考 MIDI。
+4. 依六類及 HH articulation 執行 50ms 一對一匹配。
+5. 彙總逐歌、逐類、micro 與 macro 指標。
+6. 依固定門檻判定 PASS/FAIL；任一必要欄位缺失或轉譜失敗均為 FAIL。
+7. 寫出 `details.csv`、`summary.json` 與 `gate_summary.json`。
+
+### 12.4 虛擬碼
+
+```text
+validate(manifest, output_dir):
+    assert output_dir is new or explicitly empty
+    for song in manifest:
+        validate_paths(song)
+        run_transcribe(song.audio, generated_midi)
+        reference = load_events(song.reference_midi, fixed_offset)
+        predicted = load_events(generated_midi)
+        for group in six_classes + hh_articulations:
+            metrics = match_events(reference[group], predicted[group], 50ms)
+            record(metrics)
+        record(tempo_and_meter(generated_midi, song.expected_*))
+    aggregate_all_rows()
+    gate = evaluate_fixed_thresholds()
+    write_reports()
+    exit(0 if gate_pass else 1)
+```
+
+### 12.5 系統脈絡圖
+
+```mermaid
+flowchart LR
+    U["開發者／客戶驗收者"] --> V["端到端驗證器"]
+    V --> T["正式 transcribe.py"]
+    T --> M["Base / Rare Checkpoints"]
+    T --> O["生成 MIDI"]
+    R["獨立參考 MIDI"] --> V
+    O --> V
+    V --> G["CSV / JSON / PASS-FAIL"]
+```
+
+### 12.6 容器／部署概觀
+
+- 執行環境維持 Windows PowerShell 與 `\.venv\Scripts\python.exe`。
+- Phase 1 不新增容器、服務或網路依賴。
+- 所有輸入與報表均為本機檔案；正式部署前再由 CI 或封裝流程呼叫同一命令。
+
+### 12.7 模組關係圖
+
+```mermaid
+flowchart TD
+    CLI["run_end_to_end_validation.py"] --> TR["transcribe.py"]
+    CLI --> PM["pretty_midi"]
+    CLI --> ME["match_events"]
+    TR --> DSP["dsp_utils.py"]
+    TR --> MODEL["train_phase2.SymmetricDrumTCN"]
+```
+
+本專案無 Frontend/Backend 分層；此階段為本機 Python CLI，因此不新增 `api.md`。
+
+### 12.8 序列圖
+
+```mermaid
+sequenceDiagram
+    participant C as CLI
+    participant T as transcribe.py
+    participant M as 模型
+    participant R as 參考 MIDI
+    participant G as Gate
+    C->>T: 音訊與固定參數
+    T->>M: 推論
+    M-->>T: 六類機率
+    T-->>C: 最終 MIDI
+    C->>R: 載入固定真值
+    C->>G: 事件、Tempo、拍號指標
+    G-->>C: PASS / FAIL
+```
+
+### 12.9 ER 圖
+
+```mermaid
+erDiagram
+    VALIDATION_RUN ||--o{ SONG_RESULT : contains
+    SONG_RESULT ||--o{ METRIC_ROW : contains
+    SONG_RESULT ||--|| GENERATED_MIDI : produces
+    SONG_RESULT }o--|| REFERENCE_MIDI : compares
+    VALIDATION_RUN {
+        string run_id
+        string gate_status
+    }
+    SONG_RESULT {
+        string song_name
+        float reference_offset_sec
+    }
+    METRIC_ROW {
+        string group_name
+        int tp
+        int fp
+        int fn
+        float f1
+    }
+```
+
+### 12.10 類別圖
+
+```mermaid
+classDiagram
+    class SongSpec {
+        +name: str
+        +audio: str
+        +reference_midi: str
+        +reference_offset_sec: float
+    }
+    class MetricRow {
+        +group: str
+        +tp: int
+        +fp: int
+        +fn: int
+        +precision: float
+        +recall: float
+        +f1: float
+    }
+    class EndToEndValidator {
+        +validate_manifest()
+        +run_transcription()
+        +compare_events()
+        +write_reports()
+    }
+    EndToEndValidator --> SongSpec
+    EndToEndValidator --> MetricRow
+```
+
+### 12.11 流程圖
+
+```mermaid
+flowchart TD
+    A["讀取 manifest"] --> B{"輸入合法？"}
+    B -- 否 --> F["FAIL"]
+    B -- 是 --> C["執行正式轉譜"]
+    C --> D{"轉譜成功？"}
+    D -- 否 --> F
+    D -- 是 --> E["比較事件、Tempo、拍號"]
+    E --> H{"所有固定 gate 通過？"}
+    H -- 否 --> F
+    H -- 是 --> P["PASS"]
+```
+
+### 12.12 狀態圖
+
+```mermaid
+stateDiagram-v2
+    [*] --> Planned
+    Planned --> Running: manifest valid
+    Running --> Failed: transcription or metric failure
+    Running --> Evaluated: all songs completed
+    Evaluated --> Failed: gate not met
+    Evaluated --> Passed: gate met
+    Failed --> [*]
+    Passed --> [*]
+```
+
+### 12.13 Phase 1 驗收門檻
+
+- 第一個 Phase 1 self-check 使用人工建立的小型 MIDI，必須證明匹配、FP/FN 與固定 offset 行為正確。
+- 目前 V26 五首真實歌曲必須被驗證器判定為 FAIL；不得為了讓基線通過而降低門檻。
+- 初始 promotion gate 沿用現有六類規格：Macro F1 `>= 0.70` 且每類 F1 `>= 0.55`；HH articulation 在標註存在時各類 F1 `>= 0.80`。
+- `verify_current_solution.py` 仍是既有三類回歸 gate，但不得再被解讀為六類或商業完成證據。
+
+## 12. Phase 2 Hi-Hat 開合根因修復（2026-07-14）
+
+### 12.1 架構與選型
+
+- 保留現有 TCN 六類 onset 模型，不重新訓練、不修改 checkpoint。
+- Hi-Hat articulation 改由原始單聲道音訊的 `>= 5 kHz` STFT 能量包絡判定；禁止再將全曲 Z-score 標準化特徵當成 dB。
+- 只在有 `--model-rare` 時啟用 articulation，不影響現有三類路徑。
+
+### 12.2 資料模型與校準邊界
+
+- 訓練診斷樣本只來自 E-GMD 非 `eval_session` 音訊；`test_real_audio` 五首驗收歌曲不得用於選門檻。
+- E-GMD pitch 群組：閉合 `{22, 42}`、腳踩 `{44}`、開放 `{26, 46}`。
+- 六段非驗收 E-GMD 診斷共得到閉合 439、腳踩 43、開放 98 個有效衰減樣本。
+- 腳踩與閉合在單一衰減特徵上明顯重疊，三類訓練 Macro F1 僅 `0.4620`，本階段不假裝已解決 pedal。
+
+### 12.3 關鍵流程與虛擬碼
+
+```text
+hf_power = mean(STFT(audio)^2 where frequency >= 5000 Hz)
+for each final Hi-Hat event:
+    attack = max(hf_power from -10 ms to +20 ms around onset)
+    sustain = mean(hf_power from +40 ms to +160 ms)
+    truncate sustain 15 ms before the next Hi-Hat
+    if sustain window is unavailable: emit closed Hi-Hat conservatively
+    decay_db = 10 * log10(sustain / attack)
+    emit open pitch 46 when decay_db >= -9.5 dB, otherwise closed pitch 42
+```
+
+### 12.4 關係、序列、流程與狀態
+
+```mermaid
+flowchart LR
+    A["原始 WAV"] --> H["高頻能量包絡"]
+    M["TCN Hi-Hat onset"] --> D["最終事件"]
+    H --> C["衰減 dB 分類"]
+    D --> C
+    C --> P["MIDI 42 / 46"]
+```
+
+```mermaid
+sequenceDiagram
+    participant T as transcribe
+    participant A as Audio envelope
+    participant C as Articulation classifier
+    participant M as MIDI
+    T->>A: 計算一次高頻能量
+    T->>C: onset frame + next Hi-Hat frame
+    A-->>C: attack / sustain power
+    C-->>M: pitch 42 or 46
+```
+
+```mermaid
+stateDiagram-v2
+    [*] --> Insufficient
+    [*] --> Measured
+    Insufficient --> Closed: 保守 fallback
+    Measured --> Closed: decay < -9.5 dB
+    Measured --> Open: decay >= -9.5 dB
+```
+
+### 12.5 驗收條件與限制
+
+- 合成能量包絡 self-check 必須區分快速衰減與持續高頻，且無 sustain window 時回傳閉合。
+- 修改後必須通過 `verify_current_solution.py`，再用固定 manifest 重跑五首端到端 gate。
+- E-GMD 開放二分類校準的 open F1 為 `0.4683`、balanced accuracy 為 `0.7025`；這是比「全部開放」更好的有限修復，不是商業達標證明。
+- Pedal pitch 44 仍需獨立的人工標註音色資料或 articulation head，本階段不以不可靠規則補齊。
+
+### 12.6 Phase 2 實測結果
+
+- 既有三類 `verify_current_solution.py` 完整通過。
+- 五首端到端 Macro F1 維持 `0.1019`，因為這次只改 articulation，不改變六類 onset 時間與類別。
+- 閉合 Hi-Hat F1 由 `0.0000` 升至 `0.0799`，開放由 `0.0192` 升至 `0.0252`，pedal 維持 `0.0000`。
+- 輸出 articulation 數量由 V26 的 `42/44/46 = 0/0/2757` 改為 `745/0/2012`，確認「全部開放」錯誤已移除，但距商業 gate 仍遠。
+
+## 13. Phase 3A Tempo alias 候選修復（2026-07-14）
+
+> 實作結果：**REJECTED / REVERTED**。此方案保留為診斷記錄，不是目前執行時規格。
+
+### 13.1 架構與選型
+
+- 重用 `transcribe.py` 現有 tempo candidate、grid deviation 與 joint meter score，不新增第二套 beat tracker。
+- OTD 只處理真正的 `2×` octave alias；`1.5×` 與 `3×` 是複拍子/三連音可能的音樂語義，必須留給 joint score 比較。
+- tempo 候選上限由 `220` 改為 `300 BPM`，使 `172 × 1.5 = 258 BPM` 可進入評分；不改變 checkpoint 或 gate。
+
+### 13.2 資料、關鍵流程與虛擬碼
+
+- 診斷使用固定參考 MIDI 與正式模型 onset，不使用歌名特判。
+- Counting Stars 的 librosa raw tempo 為 `120 BPM`，但舊 OTD 在 joint score 前將 120 刪除，僅留 160/60。
+- Rosanna 的 raw tempo 為 `172 BPM`，預期 `258 BPM` 候選被舊 `220 BPM` 上限排除。
+
+```text
+candidates = raw tempo aliases within 45..300 BPM
+qualified = candidates close enough to the best onset-grid deviation
+remove candidate 2*T only when T and 2*T are both qualified
+joint-score every remaining candidate
+```
+
+```mermaid
+flowchart LR
+    A["Librosa raw tempo"] --> C["45..300 BPM aliases"]
+    C --> O["2x OTD only"]
+    O --> J["Existing joint tempo/meter score"]
+    J --> M["Selected MIDI tempo"]
+```
+
+### 13.3 驗收與狀態
+
+- 候選 self-check 必須證明 `80/120/160` 中 OTD 只移除 160，保留 120；`172/258` 兩者皆可進入 joint score。
+- 修改後必須先通過 `verify_current_solution.py`。若 gate 失敗立即停止，不進入 Phase 3B 拍號修復。
+- Phase 3A 只修候選範圍與誤剪枝；Blue `6/8` 不在本子任務。
+- 實際 regression gate 失敗：`basic_straight_8` 被改成 `105 BPM / 3/4`，`ghost_snare` 被改成約 `260 BPM`，Round4 first5 也由 `30/30` 降至 `24/30`。
+- 因此 `2×-only OTD + 300 BPM cap` 已完全撤回；下一版不得再單獨擴大候選集，必須同時建立可區分真實高速複拍與假高速 alias 的證據。
+
+## 14. Phase 4 Floating-BPM 音訊同步修復（2026-07-14）
+
+> 實作結果：**REJECTED / REVERTED**。前奏重複加算雖被移除，但固定五首 gate 退步，因此未接受為產品修復。
+
+### 14.1 架構與根因
+
+- 保留現有 librosa floating beat tracker 與量化流程，不新增對齊器。
+- `beat_times` 是 WAV 的絕對時間；floating-BPM 分支產生的 `quantized_times` 也是絕對時間。
+- 舊程式在 `sync_audio=True` 時仍設 `time_offset=first_onset`，最後再做 `midi_onset=quantized_onset+time_offset`，造成前奏時間被加兩次。
+
+### 14.2 資料模型與證據
+
+- 診斷只使用 `test_real_audio` 的 WAV、固定參考 MIDI 與 Phase 2 已產生 MIDI，不搜尋最佳預測 offset。
+- Counting Stars：參考首音 `20.000s`，產品輸出 `40.119s`。
+- Rolling In The Deep：參考首音 `22.857s`，產品輸出 `45.836s`。
+- 直接 WAV onset audit 顯示五首參考 MIDI 的相對延遲一致；E-GMD 已知同步樣本用來校正 onset-envelope 本身延遲。
+
+### 14.3 關鍵流程與虛擬碼
+
+```text
+if sync_audio and floating beat grid is active:
+    time_offset = 0       # quantized time is already absolute
+elif sync_audio:
+    time_offset = first_onset
+else:
+    time_offset = 0
+midi_onset = quantized_onset + time_offset
+```
+
+```mermaid
+flowchart LR
+    B["Absolute beat_times"] --> Q["Absolute quantized_times"]
+    Q --> O["time_offset = 0"]
+    O --> M["Physical MIDI onset"]
+```
+
+### 14.4 驗收與狀態
+
+- self-check 必須證明 floating+sync 回傳 `0.0`，static+sync 才回傳 `first_onset`。
+- 修改後先執行 `verify_current_solution.py`；若失敗就撤回並停止。
+- regression PASS 後，使用全新隔離目錄重跑同一份五首 manifest，不更改參考 offset 或 gate。
+- 實測 regression gate PASS，但五首 Macro F1 由 `0.1019` 降至 `0.0886`；KD/SD 上升為 `0.1026/0.2018`，HH 降至 `0.1412`。
+- 結論：問題不只是一個 `time_offset`，floating beat grid 的絕對相位、後續量化與參考 MIDI 小節相位必須一起診斷。
+- 無程式修改的 static-time 配置也已測試：關閉 `floating-bpm`、保留 `sync-audio` 後 Macro F1 降至 `0.0129`，因此關閉 floating tracker 不是可接受修復。
+
+## 15. Phase 5 共用輸出延遲校正（2026-07-15）
+
+### 15.1 架構與選型
+
+- 保留現有 floating beat tracker、模型、六類後處理與固定 50ms gate。
+- 修正 floating+sync 的重複 prefix offset，並在共用 MIDI 輸出邊界加入單一 `67ms` 推論延遲校正常數。
+- 校正只依物理時間作用，不讀取歌名、參考答案或類別；不得建立每首歌曲 offset。
+
+### 15.2 資料模型與關鍵流程
+
+- `quantized_onset`：floating 模式下的 WAV 絕對時間。
+- `base_offset`：floating+sync 為 `0`；static+sync 為 `first_onset`；notation 為 `0`。
+- `sync_latency`：音訊同步輸出固定減去 `0.067s`，notation 不校正。
+- MIDI onset 必須裁切到非負時間；floating tempo map 使用相同時間校正。
+
+```text
+base_offset = 0 if floating_sync else first_onset if static_sync else 0
+sync_latency = 0.067 if sync_audio else 0
+midi_time = max(0, quantized_time + base_offset - sync_latency)
+```
+
+```mermaid
+flowchart LR
+    A["Audio/model onset"] --> B["Floating quantized absolute time"]
+    B --> C["Remove duplicate prefix offset"]
+    C --> D["Subtract shared 67ms latency"]
+    D --> E["Clamp at zero and write MIDI"]
+```
+
+### 15.3 驗收
+
+- 小型 self-check 覆蓋 floating+sync、static+sync、notation 三種 offset。
+- 先通過 `verify_current_solution.py`，再以全新隔離目錄重跑原五首 manifest。
+- 不調整參考 offset、gate 容差、checkpoint、Tempo 或拍號邏輯。
+- 診斷掃描顯示修正雙重 prefix 後，全局提前 `30–100ms` 的最佳區間可將六類 Macro F1 從 `0.0886` 提升至約 `0.47`；正式結果仍以完整重跑為準。
+- 正式完整重跑結果為 Macro F1 `0.4710`：KD `0.9388`、SD `0.7435`、HH `0.5873` 已通過 `0.55` 類別門檻；TOM `0.0940`、CRASH `0.0714`、RIDE `0.3909` 仍失敗。
+- `verify_current_solution.py` PASS，因此時間校正保留為候選修復；整體商業 gate 仍為 FAIL，不得部署或宣稱達標。
+- 下一個獨立任務只處理 TOM/CRASH/RIDE 類別混淆與誤報，不同時修改 Tempo/拍號或 Hi-Hat articulation。
+
+## 16. Phase 6 罕見類別混淆診斷（2026-07-15）
+
+### 16.1 診斷邊界
+
+- 固定使用 `test_real_audio`、50ms gate、現有 base checkpoint 與 `six_class_tower_b_specialized.pth`。
+- 不調整參考 offset、不做歌曲特判、不修改 Tempo/拍號或 Hi-Hat articulation。
+- 先驗證 threshold 與 core/rare 競爭式互斥的理論上限；未達 `0.55` 就禁止加入新 heuristic。
+
+### 16.2 結果與根因
+
+- 單類 threshold 掃描最佳 F1：TOM `0.1337`、CRASH `0.0885`、RIDE `0.3528`。
+- 加入「rare 機率必須勝過同時 core 機率」後最佳 F1：TOM `0.1551`、CRASH `0.0356`、RIDE `0.3223`，仍遠低於 gate。
+- TOM 預測大量對應 KD/HH；CRASH 大量對應 KD/HH/SD；RIDE 大量對應 HH。這是 checkpoint 類別表徵混淆，不是後處理 threshold 問題。
+- 已存在但未驗收的 v15 候選在未修改 STAR held-out gate 得 `0.3551`；TOM/CRASH/RIDE 為 `0.0000/0.1053/0.1538`，因此拒絕且不進五首 gate。
+
+### 16.3 下一個候選規格
+
+- 稽核確認 v15 的 `4032 = 576 × 7` 排程已包含 core-only hard negatives，因此不得重複同一配方。
+- v16 在現有 adversarial core-frame negative mask 之外，只對「恰有一個 TOM/CRASH/RIDE 真值」的 frame 加入 rare 三類交叉熵，使模型學會罕見類別彼此區分；rare 同時擊打仍由原 multi-label BCE 處理。
+- 使用獨立 rare tower 候選，保留 base KD/SD/HH checkpoint、held-out split、threshold、tolerance 與五首商業資料完全不變。
+- 新 checkpoint 必須使用新候選檔名；先通過 STAR held-out gate，再允許進五首端到端 gate。
+
+```text
+base_loss = weighted multi-label BCE + velocity loss
+single_rare_mask = exactly one of TOM/CRASH/RIDE is positive
+competition_loss = CE(rare_logits[single_rare_mask], rare_target_class)
+loss = base_loss + competition_weight * competition_loss
+```
+## Phase 17：六類候選評估分層修正（2026-07-15）
+
+- 現有 `run_six_class_validation.py` 固定從 STAR `test` split 各挑一個類別窗口，但實際 6 筆選樣只有 3 個獨立物理窗口；其中同一個 0–2 秒窗口被 KD、SD、CRASH 重複累加，TOM 也只有 1 個事件，不能可靠代表泛化能力。
+- STAR metadata 已提供獨立 `train`、`validation`、`test`。後續模型資料分工固定為：`train` 只負責訓練、`validation` 負責候選選擇、`test` 只負責最後一次資料集驗收；五首 `test_real_audio` 仍是不可訓練的客戶商業 gate。
+- 驗證器新增 `--split` 與 `--per-class`：依類別、檔名及事件時間做確定性選樣，且相同音訊的重疊物理窗口只計一次。每個選入窗口內的所有六類事件都照實累加，不做歌曲或類別特判。
+- 聚合前須替每個窗口加入互不重疊的虛擬時間 offset，避免不同歌曲都落在 `0–4s` 後被一對一 matcher 錯誤交叉配對。
+- 舊的 `test + per-class=1` 報表保留作歷史證據，但不再作為唯一候選選擇依據；任何候選仍須通過完整五首 Macro F1 `>= 0.70` 且各類 F1 `>= 0.55` 才可上線。
+
+### 關鍵流程虛擬碼
+
+```text
+load STAR metadata
+filter requested split
+for each drum class:
+    sort labeled events deterministically
+    propose centered physical windows
+    skip a proposal when it overlaps an already selected window from the same audio
+    keep up to per_class unique windows
+run model once per unique window
+aggregate all six-class expected/predicted physical events
+write selection evidence and fixed-threshold metrics
+```
+
+### 評估狀態圖
+
+```mermaid
+stateDiagram-v2
+    [*] --> TrainOnly: STAR train
+    TrainOnly --> CandidateSelection: STAR validation
+    CandidateSelection --> Rejected: validation fail
+    CandidateSelection --> DatasetFinal: validation pass
+    DatasetFinal --> Rejected: STAR test fail
+    DatasetFinal --> CommercialGate: STAR test pass
+    CommercialGate --> Rejected: five-song fail
+    CommercialGate --> Ready: five-song pass
+```
+
+## Phase 18：v17 Rare Head-only Focal 候選（2026-07-15）
+
+- Phase 17 的 48-window validation 顯示 v12 / v15 / specialized / v16 Macro F1 分別為 `0.4195 / 0.3929 / 0.3249 / 0.3221`；v16 competition 使 recall 下降，正式拒絕。
+- v12 直接進固定五首只有 `0.4377`，低於 specialized 產品組合的 `0.4710`；CRASH 改善至 `0.1433`，但 RIDE 降至 `0.1267`，因此不可替換產品模型。
+- v17 以 specialized checkpoint 為起點，凍結完整 backbone，只更新六類 head tensor；loss 只讀 TOM/CRASH/RIDE 三欄，因此 KD/SD/HH head row 梯度必須為零。
+- onset 使用 numerically stable binary focal loss，降低大量容易負樣本主導梯度的問題；罕見類別正樣本權重可獨立設定。既有 core-hit adversarial negative 仍可套用，但不再加入已失敗的 rare competition loss。
+- 候選只使用 STAR train schedule；模型選擇使用 STAR validation 48 個不重疊窗口，test 與五首商業 gate 保持隔離。
+
+```text
+freeze(backbone)
+rare_logits = onset_logits[..., 3:6]
+rare_targets = onset_targets[..., 3:6]
+bce = BCEWithLogits(rare_logits, rare_targets)
+pt = target * sigmoid(logit) + (1-target) * (1-sigmoid(logit))
+focal = (1-pt)^gamma * bce * class_and_adversarial_weight
+loss = mean(focal) + rare_velocity_loss
+```
+
+## Phase 19：Rare Tower Percussive-domain 候選（2026-07-15）
+
+- v17 最佳 validation Macro F1 僅 `0.3060`，低於 specialized `0.3249`；head-only focal 方案拒絕。
+- STAR train schedule 稽核顯示各類 576 筆樣本具備 500–576 個不同音訊來源，資料排程並非重複窗口；主要差異是 STAR 鼓組 mix 與完整商業歌曲的 harmonic/vocal domain gap。
+- 新增 opt-in `rare_percussive`：base tower 維持原始 waveform 特徵；只有 rare tower 使用 `librosa.effects.percussive` 的時間對齊 percussive waveform 重新抽取相同 hybrid features。
+- 不修改 checkpoint、threshold、AME、Tempo、拍號或五首 reference。候選先通過既有 regression，再以全新五首輸出目錄比較；未改善就撤回，不設為預設。
+
+```mermaid
+flowchart LR
+    W["完整歌曲 waveform"] --> B["原始 features → base KD/SD/HH"]
+    W --> H["HPSS percussive waveform"]
+    H --> R["相同 features → rare TOM/CRASH/RIDE"]
+    B --> F["雙塔機率融合"]
+    R --> F
+```
+
+### Phase 19 實測與 Phase 20 matched-domain 限制
+
+- 直接把 raw-domain specialized 模型套到 HPSS 輸入，五首 Macro F1 降至 `0.4189`；TOM/CRASH/RIDE 為 `0.0516/0.0000/0.1922`，因此 unmatched 方案拒絕。
+- Phase 20 只允許測試 train、validation、inference 三者皆使用相同 HPSS percussive transform 的 matched-domain 候選；不得混用 raw-domain validation 排名。
+- `build_window` 與六類驗證器新增 opt-in percussive input，預設仍為 raw；訓練報表與 selected window 證據必須記錄 input domain。
+- 先用小型 schedule 建立候選並跑 percussive STAR validation。若未高於同域起始 checkpoint，就停止，不進五首。
+
+### Phase 20 最終結果（拒絕）
+
+- matched HPSS 候選最佳為 epoch 6：percussive STAR validation `0.3224`，高於同域起點 `0.2281`，因此依預設條件進一次五首 gate。
+- 固定五首結果僅 `0.4486 < 0.4710`；TOM/CRASH/RIDE 為 `0.0620/0.0202/0.3367`。候選拒絕，所有 percussive 產品 opt-in 程式碼撤回；checkpoint 與報表只保留為研究證據。
+- 現有資料與架構的最佳可重現產品結果仍為 `0.4710`。下一階段不得再用五首驗收歌曲訓練或選 threshold；必須新增獨立、已對齊的完整歌曲六類訓練/validation 資料，或引入經驗證的 drum source-separation/pretrained audio backbone。
+- 即使六類 Macro F1 達標，商業 gate 仍有獨立工作：HH closed/pedal/open articulation，以及 Blue/Counting Stars/Rosanna 的 Tempo/拍號錯誤；不得把 rare-class 修復誤稱為全部完成。
+
+## Phase 21：合法伴奏域增強候選（2026-07-15）
+
+- 本機 `accompaniment/` 已有既存 Phase 3 線上混音資料與公式，不新增依賴或下載資料。
+- `adele_bass/no_drums/other/vocals.wav` 對應固定五首 gate 的 Rolling In The Deep，全部禁止用於訓練、validation 或選 threshold。
+- 本輪唯一允許的伴奏是 `queen_no_drums.wav`；以不同物理片段及 `0.10–0.30` drum-peak 相對增益與 STAR train drum windows 線上混合。
+- 先以固定 `0.17` 增益建立 Queen-mixed STAR validation baseline；候選必須同時改善 mixed validation 且不讓 raw validation 明顯退化，才允許進固定五首。
+- 混音只改 waveform，事件時間與六類 target 完全沿用 STAR；checkpoint 使用全新候選目錄。
+
+```text
+accompaniment = queen_no_drums[random offset : offset + 4s]
+scaled = accompaniment / peak(accompaniment) * peak(drums) * uniform(0.10, 0.30)
+mixed = normalize_if_clipped(drums + scaled)
+features = existing extract_features(mixed)
+```
+
+### Phase 21 結果與 Phase 22 擴大排程
+
+- v19 最佳 mixed validation 為 epoch 7：`0.3362 > 0.3222`，raw validation `0.3262` 未崩潰；依規格進一次五首 gate。
+- 五首 Macro F1 `0.4680 < 0.4710`；TOM/CRASH/RIDE `0.0994/0.0526/0.3863`，候選拒絕。
+- v19 只使用每類 96 windows 且 rare positive weight 50；Phase 22 改為已驗證較穩定的 v15 配方：每類 576 windows、schedule-balanced positive weights capped at 12、完整模型極低學習率，再加入同一合法 Queen domain mix。
+- Phase 22 是本機現有資料能做的完整規模域增強；若仍未通過 STAR validation，後續必須新增非 gate accompaniment／商業混音資料，不再重複超參數掃描。
+- 啟動前 self-check 發現既有期望仍假設 6 類 schedule，但目前排程已是六類加 `NEG` 共 7 個 bucket；修正只更新自檢為 `7 × per_class`，不改訓練排程。
+
+### Phase 22 v20 最終結果（拒絕）
+
+- v20 使用每類 576 windows、10 epochs、schedule-balanced positive weights capped at 12、完整模型低學習率及合法 `queen_no_drums.wav` 的 `0.10–0.30` 隨機增益；沒有使用五首 gate 音訊或標註。
+- 10 個 checkpoint 的固定 Queen-mixed STAR validation 介於 `0.4181–0.4313`；最佳 epoch 10 為 Macro F1 `0.4313`，KD/SD/HH/TOM/CRASH/RIDE 分別為 `0.6465/0.6596/0.5052/0.2943/0.1519/0.3305`。
+- epoch 10 的 raw STAR validation 為 Macro F1 `0.4277`，六類分別為 `0.6589/0.6564/0.5057/0.2934/0.1091/0.3427`；域增強沒有造成 raw 能力崩潰，但四類仍未達 `0.55`。
+- v20 未通過 STAR promotion gate（Macro F1 `>=0.70` 且各類 `>=0.55`），因此依預先規格停止，不執行五首 gate、不替換產品模型。
+- 現有單一合法伴奏能改善 STAR 域泛化，但無法補足 TOM/CRASH/RIDE 及 HH 的分類邊界。下一步不得繼續同資料超參數掃描；需新增不含 gate 的完整歌曲六類對齊訓練/validation 資料，並保留歌曲級隔離。
+
+## Phase D0–D5：DCNN + 小型 Conformer 接力規格（2026-07-15）
+
+### 架構與選型
+
+- 新候選固定採雙分支 DCNN frontend：Log-Mel 音色分支與真正 SuperFlux 瞬態分支各自擁有獨立卷積權重，於相同時間解析度做 late fusion。
+- Phase D2 先沿用既有 TCN，隔離驗證 DCNN 的效果；只有 DCNN 同時改善 matched Queen-mixed 與 raw STAR validation，Phase D4 才允許把時序層替換為 2–4 層小型 Conformer。
+- 禁止純 Transformer 候選。Conformer 必須保留局部卷積模組與 frame-level 對齊，不得降低 onset 時間解析度。
+- 舊 checkpoint 只移植形狀與語意相容的權重；新增分支與 fusion 使用新參數。所有輸出皆為新 candidate，不覆蓋產品 checkpoint。
+
+### 資料模型與隔離
+
+- 訓練只使用 STAR train、既有非 gate 訓練資料與合法 `queen_no_drums.wav`；STAR validation 用於候選選擇，STAR test 只用於 promotion。
+- `test_real_audio` 固定五首不得進入訓練、選 epoch、選 threshold、特徵參數或架構挑選。
+- 每份訓練報告至少記錄 architecture、feature mode、split、seed、checkpoint source、event counts、loss 與候選路徑。
+
+### 關鍵流程與虛擬碼
+
+```text
+phase D0: audit existing changes -> regression + loop audit -> commit/push baseline
+phase D1: implement true SuperFlux opt-in -> self-check + regression -> commit/push
+phase D2: implement DCNN frontend -> reuse existing TCN -> self-check + regression -> commit/push
+phase D3: train DCNN+TCN -> compare fixed mixed/raw STAR validation -> commit/push evidence
+if DCNN does not improve both matched baselines: reject and stop architecture escalation
+phase D4: replace only temporal encoder with small Conformer -> self-check + regression -> commit/push
+phase D5: train candidate -> STAR validation -> STAR test -> fixed five-song gate only after promotion
+```
+
+### Phase D1 True SuperFlux 公式
+
+- `extract_features(..., use_true_superflux=False)` 預設維持既有 Mel 正向差分，確保產品與舊 checkpoint 完全不變。
+- opt-in 路徑先對 Mel power 做 `log1p`，再對前一個延遲 frame 沿頻率軸做寬度 3 的 maximum filter；目前 frame 減去 filtered reference，負值截為零。
+- 固定 lag 為 2 frames，輸出前補零保持 `[frequency, time]` shape 與 onset frame 對齊，之後沿用既有獨立 Z-score normalization。
+- 最小測試必須證明：shape 不變、靜態頻譜為零、鄰近頻率漂移被抑制、真正寬頻瞬態保留正值、非法 lag/max-size 被拒絕。
+
+```text
+log_energy = log1p(mel_power * 1000)
+reference = frequency_max_filter(log_energy, width=3)
+superflux[:, lag:] = max(0, log_energy[:, lag:] - reference[:, :-lag])
+superflux[:, :lag] = 0
+```
+
+### Phase D2 DCNN + TCN 模型與權重移植
+
+- `SharedCNNBackbone(input_channels=2)` 只參數化第一層輸入通道；預設 `2` 必須保持舊 checkpoint state key 與 tensor shape 不變。
+- `DCNNBackbone` 內含兩個獨立的 `SharedCNNBackbone(input_channels=1)`：timbre 只讀 feature channel 0，transient 只讀 channel 1。
+- 兩分支各輸出 `[B,64,T]`，concatenate 後以 `Conv1d(128,64,1)` late fusion；fusion 初始值為同索引兩分支各 `0.5`，bias 為零。
+- `DCNNDrumTCN` 沿用既有 onset/velocity TCN 與六類 heads，D2 不改 loss、threshold 或事件解碼。
+- 從六類 Symmetric checkpoint 移植時，timbre 第一層只複製舊 `conv1` 的 input channel 0，transient 只複製 channel 1；其餘 backbone tensor 複製到兩分支，TCN/head 只複製 shape 相容 tensor。
+- D2 self-check 必須驗證舊模型第一層仍為 2 channels、DCNN 輸出 shape、兩分支參數獨立、首層語意切分、TCN/head 精確移植與非法輸入拒絕。
+
+### Phase D3 訓練與驗證控制
+
+- 既有 `train_six_class_candidate.py` 與 `run_six_class_validation.py` 新增 `--architecture symmetric|dcnn-tcn`，預設 `symmetric`，不得另建重複 trainer/validator。
+- `dcnn-tcn` 自動使用 True SuperFlux 並以 `transfer_symmetric_state` 從 v12 六類 checkpoint 移植；候選重新載入時必須還原兩分支 legacy projection 狀態。
+- D3 固定複用 v20 配方：STAR train、576 windows/類、10 epochs、batch 12、head LR `1e-4`、backbone LR `1e-6`、balanced positive weight cap 12、freeze BN、Queen accompaniment `0.10–0.30`、seed 1337。
+- 模型選擇只看固定 Queen-mixed STAR validation；最佳 epoch 再跑 raw STAR validation。matched baselines 為 mixed `0.4313`、raw `0.4277`。
+- 只有 mixed 與 raw Macro F1 均高於各自 baseline，且沒有任一類 F1 下降超過 `0.03`，才允許進 D4 Conformer；否則提交失敗證據並停止架構升級。
+
+### Phase D3 最終結果（拒絕）
+
+- 14-window smoke training 與正式 validator reload PASS；完整候選使用 4,032 windows、10 epochs，成功移植 220 個 tensor，train loss 由 `0.3217` 降至 `0.0959`。
+- 十個 Queen-mixed STAR validation checkpoint 由 `0.3180` 逐步升至 epoch 10 的最佳 `0.3937`，仍低於 matched baseline `0.4313`。
+- mixed epoch 10 的 KD/SD/HH/TOM/CRASH/RIDE F1 為 `0.5627/0.6245/0.4904/0.2718/0.1311/0.2820`。
+- raw epoch 10 Macro F1 `0.3951 < 0.4277`；六類為 `0.5745/0.6198/0.4938/0.2765/0.1235/0.2825`。
+- D3 未同時改善 mixed/raw baseline，且多類退步超過 `0.03`，因此依預先 gate 拒絕；不跑固定五首、不替換產品模型、不解鎖 D4 Conformer。
+- 結果顯示簡單拆分共享 CNN 會損失 Log-Mel 與瞬態特徵的早期交互；訓練 loss 收斂但 held-out F1 退步，不屬於訓練未執行或 checkpoint reload 錯誤。
+
+### 模組關係圖
+
+```mermaid
+flowchart LR
+    A["44.1 kHz 音訊"] --> M["Log-Mel"]
+    A --> S["True SuperFlux"]
+    M --> C1["Timbre CNN"]
+    S --> C2["Transient CNN"]
+    C1 --> F["Late fusion"]
+    C2 --> F
+    F --> B["TCN baseline / Small Conformer candidate"]
+    B --> O["Six-class onset head"]
+    B --> V["Six-class velocity head"]
+```
+
+### 序列與狀態
+
+```mermaid
+stateDiagram-v2
+    [*] --> DCNNTCN
+    DCNNTCN --> Rejected: mixed 或 raw validation 未改善
+    DCNNTCN --> Conformer: mixed 與 raw validation 均改善
+    Conformer --> Rejected: STAR validation fail
+    Conformer --> StarTest: STAR validation pass
+    StarTest --> Rejected: STAR test fail
+    StarTest --> FiveSong: STAR test pass
+    FiveSong --> Rejected: commercial gate fail
+    FiveSong --> Ready: Macro F1 >= 0.70 且各類 >= 0.55
+```
+
+### Phase D3R 根因修復規格
+
+- D3 同時改變 CNN 拓撲與特徵差分，且把新 DCNN/fusion 與既有 TCN 一起放在 `1e-6` 學習率；因此 D3 不能單獨歸因於 DCNN，也不足以判定過擬合。
+- D3R 新增 `dcnn-residual-tcn`：完整保留來源 shared CNN，另加雙分支 DCNN correction，輸出為 `shared + gate * correction`；`gate` 初始化為零，轉移後必須在 eval mode 與來源模型逐值相同。
+- trainer/validator 將 feature mode 與 architecture 分離為 `legacy-diff|true-superflux`。D3R 第一個候選固定使用 `legacy-diff`，只測拓撲與優化修復，不同時更換前端特徵。
+- full-model optimizer 分成三組：heads 使用 `--lr`，新 DCNN correction/gate 使用 `--new-module-lr`，既有 shared CNN/TCN 使用 `--backbone-lr`。新模組不得再落入 `1e-6` 群組。
+- D3R 先跑最小 transfer/optimizer/backward self-check 與完整三類 regression；再以固定 STAR train/validation、Queen augmentation、seed 1337 評估。不得使用固定五首歌曲選模型。
+- promotion 仍須同時高於 mixed `0.4313` 與 raw `0.4277`，且任一類不得下降超過 `0.03`；未通過則保留證據、停止，不進 D4 Conformer。
+
+### 協作、部署與回退
+
+- 每個 Phase 必須先更新文件、完成規定測試，再以單一目的 commit 並 push 至 `origin/codex`；測試失敗不得標記完成或進下一 Phase。
+- 其他 AI 接手時必須先 fetch `origin/codex`，閱讀 `AGENTS.md`、`spec.md`、`todolist.md`、`current_status.md`，並依本節的資料隔離、架構順序及 gate 繼續。
+- 任何改用純 Transformer、使用五首調參、降低門檻、覆蓋 checkpoint 或跳過 Phase 的提案，都必須先記錄證據並取得使用者明確確認。
+- 部署前保留目前產品模型與設定作為回退；DCNN/Conformer 候選未通過完整 gate 前不得成為預設。
+
+### Phase D3R 最終結果（架構修復通過，商業 gate 未通過）
+
+- 4,032 windows、10 epochs 的 residual DCNN + legacy diff 候選由 mixed `0.4235` 穩定升至 epoch 10 的 `0.4500`，高於 v20 `0.4313` 與原 D3 `0.3937`。
+- epoch 10 raw STAR Macro F1 為 `0.4520`，高於 v20 `0.4277` 與原 D3 `0.3951`；mixed/raw 均改善，且沒有類別 F1 下降超過 `0.03`，因此 D3R conditional architecture gate 通過並解鎖 D4。
+- mixed KD/SD/HH/TOM/CRASH/RIDE 為 `0.6984/0.6992/0.5036/0.3032/0.1384/0.3570`；raw 為 `0.7062/0.6990/0.4945/0.3038/0.1367/0.3720`。
+- 商業 STAR gate 仍 FAIL：Macro F1 未達 `0.70`，HH/TOM/CRASH/RIDE 未達 `0.55`。不執行固定五首、不替換產品模型；D4 只能測小型 Conformer 是否改善時間建模，不能宣稱資料不足問題已解決。
+
+### Phase D4 小型 Conformer 規格
+
+- 新候選固定為 `dcnn-conformer`：沿用 D3R residual DCNN backbone 與 legacy diff，僅把 onset/velocity 的 TCN temporal encoders 換成兩套相同的小型 Conformer encoders。
+- 每套 encoder 使用 2 層、`d_model=64`、4-head self-attention、FFN expansion 2、depthwise convolution kernel 15；輸入輸出均為 `[B,64,T]`，不得降採樣或改變 onset frame 對齊。
+- 每個 Conformer block 使用 Macaron half-step FFN、multi-head self-attention、GLU pointwise + depthwise convolution、第二個 half-step FFN 與 final LayerNorm；只使用 PyTorch 現有元件，不新增依賴。
+- 來源 checkpoint 固定為 D3R mixed 最佳 epoch 10。只移植 shape 相容的 residual DCNN backbone 與 onset/velocity heads；TCN tensor 不得語意冒充 Conformer tensor。
+- optimizer 維持三組：heads `1e-4`、既有 residual DCNN `1e-6`、新 Conformer `5e-5`。資料、4,032-window schedule、Queen `0.10–0.30`、seed、loss、threshold 與驗證窗口全部不變。
+- 先通過 shape、有限值、時間長度、checkpoint reload、backward 與參數分組 self-check，再跑完整 regression。正式訓練後只以 mixed STAR 選 epoch，最佳者再跑一次 raw STAR。
+- D4 promotion 必須 mixed 高於 D3R `0.4500`、raw 高於 D3R `0.4520`，且任一類不得下降超過 `0.03`；否則拒絕 Conformer，不跑固定五首、不替換產品模型。
+
+### Phase D4 最終結果（拒絕）
+
+- 完整候選使用 4,032 windows、10 epochs、batch 12 與 D3R 完全相同的資料/增強/loss；train loss 由 `0.4096` 降至 `0.0824`，證明 Conformer 可訓練且非 reload/NaN/OOM 問題。
+- mixed STAR 由 epoch 1 `0.3579` 升至 epoch 10 最佳 `0.4501`，只比 D3R `0.4500` 高 `0.0001`；raw epoch 10 為 `0.4538`，只比 D3R `0.4520` 高 `0.0018`，沒有實質整體改善。
+- mixed KD/SD/HH/TOM/CRASH/RIDE 為 `0.6550/0.7185/0.5024/0.2801/0.1392/0.4053`；raw 為 `0.6745/0.7187/0.5080/0.2770/0.1438/0.4008`。
+- mixed KD 相對 D3R 下降 `0.0434`，raw KD 下降 `0.0317`，均超過允許的 `0.03`；TOM 亦退步。D4 promotion FAIL，D5 不解鎖，不跑 STAR test/固定五首、不替換產品模型。
+- 結論：小型 Conformer 改善 SD/RIDE，但未解決 HH/TOM/CRASH 類別邊界，且犧牲 KD。現有資料下，時間模型替換不是到達 `0.70` 的主解法。
+
+### Phase D4R gated TCN-Conformer 修復規格
+
+- D4R 不再刪除已訓練 TCN；onset/velocity temporal path 改為 `TCN(x) + gate * Conformer(x)`，`gate` 初始化為零。載入 D3R epoch 10 後，eval 輸出必須與 D3R 逐值相同。
+- Conformer correction 沿用 D4 的 2 層、64 維、4-head、kernel 15 配置；TCN 與 Conformer 均保持 `[B,64,T]`，不得改變 frame alignment。
+- D3R residual DCNN、TCN、heads 全部語意移植；新 Conformer 與 gate 為新參數。optimizer 使用 heads `1e-4`、新 Conformer/gate `5e-5`、其餘繼承參數 `1e-6`。
+- 訓練資料、4,032-window schedule、10 epochs、batch 12、Queen augmentation、seed、loss、threshold 與驗證窗口全部不變；不得使用固定五首選擇 gate、LR 或 epoch。
+- promotion gate 固定為 mixed `>0.4500`、raw `>0.4520`，且任一類別相對 D3R 不得下降超過 `0.03`。未通過即拒絕，不進 D5、不替換產品模型。
+
+### Phase D4R 最終結果（相對改善通過；商業 gate 失敗）
+
+- exact-output、兩階段 backward、optimizer 分組、checkpoint reload、trainer/validator self-check 與完整 `verify_current_solution.py` 全部 PASS；零 gate 初始化確實保留 D3R 輸出。
+- 完整訓練使用固定 4,032 windows、10 epochs、batch 12、Queen augmentation、seed 與 loss；train loss `0.0803 -> 0.0721`，沒有 NaN、OOM 或純 Conformer 的初期崩塌。
+- 依 mixed STAR 比較 epoch 1–10，epoch 10 最佳 Macro F1 `0.4599`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.7010/0.7142/0.5174/0.3062/0.1413/0.3791`。
+- 只對 mixed 最佳 epoch 10 執行一次 raw STAR，Macro F1 `0.4685`；六類為 `0.7166/0.7221/0.5151/0.3043/0.1600/0.3929`。
+- 相對 D3R，mixed/raw 分別增加 `0.0099/0.0165`，六類皆未下降超過 `0.03`，因此 D4R 架構改善 gate 通過並保留為後續研究基線。
+- 商業 STAR gate 仍 FAIL：Macro F1 距 `0.70` 尚差 `0.2315`（以較佳 raw 計），且 HH/TOM/CRASH/RIDE 未達單類 `0.55`。不得替換產品模型、不得部署，也不得用固定五首反覆選 checkpoint/threshold。
+- 結論：保留 TCN 再以 gated Conformer 學殘差，比直接替換 TCN 有效；但架構改善幅度不足以補足稀有類資料與 false-positive 邊界問題。下一步應先補歌曲隔離、非 gate、具授權且含 TOM/CRASH/RIDE 的真實音訊與標註，再做一次預先鎖定的訓練。
+
+### Phase D4D 現有資料覆蓋修復規格
+
+- 不更換 D4R 架構、loss、threshold 或驗證器；來源 checkpoint 固定為 D4R mixed 最佳 epoch 10。唯一實驗變因是把本機既有 E-GMD TOM/CRASH/RIDE 與更多 STAR train 窗口加入候選訓練。
+- E-GMD 六類映射固定為 TOM `41/43/45/47/48/50`、CRASH `49/52/55/57`、RIDE `51/53/59`；保留既有 KD/SD/HH 映射。只讀原始 train MIDI，輸出新的 rare metadata，不覆蓋 `processed_data/egmd_meta.json`。
+- E-GMD 以 `groove_key` 去重，每個 groove 最多一個 kit；只選含 TOM/CRASH/RIDE 的 train item。與 `processed_data/star_meta.json` 合併時，遇到重複 key 必須失敗，不得靜默覆蓋。
+- 固定每類 `1,152` windows 加 `1,152` NEG，共 `8,064` windows；訓練 `5` epochs、batch `12`，總計 `3,360` batches，與 D4R 的總更新步數相同。Queen augmentation、seed、heads/inherited/new-module LR `1e-4/1e-6/5e-5` 全部不變。
+- 必須先輸出 schedule 來源分布，確認 TOM/CRASH/RIDE 都實際包含 E-GMD 與 STAR；否則停止，不允許以「已合併」名義訓練。
+- 正式候選只訓練一次。依 mixed STAR 選 epoch 1–5，最佳者只跑一次 raw STAR；promotion 必須 mixed `>0.4599`、raw `>0.4685`，且任一類相對 D4R 不得下降超過 `0.03`。
+- `test_real_audio`、STAR validation/test 與其衍生輸出不得進入訓練或選參。未達商業 gate（Macro F1 `>=0.70` 且每類 `>=0.55`）時，不替換產品模型、不部署。
+
+### Phase D4D 最終結果（技術 gate 通過；效果不足以商用）
+
+- E-GMD rare metadata 共 `716` 個去重 groove；事件為 TOM `18,000`、CRASH `2,565`、RIDE `31,543`。新檔與 STAR 無 key 衝突，舊 `egmd_meta.json` 未覆蓋。
+- 8,064-window schedule 確認三類同時含 STAR/E-GMD：TOM `1,041/111`、CRASH `1,097/55`、RIDE `721/431`；正式訓練內實際三類事件為 `26,177/8,993/18,634`。
+- D4R epoch 10 已完整續載 `383` 個 tensors；5 epochs、3,360 batches 正常完成，loss `0.2337 -> 0.0694`，沒有 NaN/OOM。
+- mixed STAR 最佳為 epoch 2，Macro F1 `0.4601`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`。
+- raw STAR 只測 epoch 2，Macro F1 `0.4692`；六類為 `0.7127/0.7177/0.5245/0.3132/0.1556/0.3912`。
+- 相對 D4R mixed/raw 只增加 `0.0002/0.0007`，且沒有類別下降超過 `0.03`，因此預先定義的技術 promotion gate 通過；但幅度沒有實務意義，不足以宣稱資料問題已解決。
+- 商業 gate 仍 FAIL，產品模型、固定五首與部署狀態不變。結論是既有 E-GMD rare mapping 可用，但自然比例下 CRASH 新窗口太少，且電子鼓/合成鼓域仍無法補足真實歌曲的類別邊界。
+
+### Phase D4S rare source-balance 修復規格
+
+- 唯一變因是 TOM/CRASH/RIDE 的來源配額；D4R 架構、legacy diff、loss、threshold、Queen augmentation、seed、LR 與驗證器全部不變。
+- 來源 checkpoint 固定為 D4R epoch 10，不從 D4D epoch 2 繼續，避免把前一輪自然比例訓練疊加進來。
+- `build_schedule` 新增 opt-in `--balance-rare-sources`；預設關閉並保持舊排程行為。啟用後固定 50/50，使每個 weak class 的 1,152 windows 精確分成 STAR `576` + E-GMD `576`。
+- source 判定只允許 metadata 的 `source == "egmd_pitch_weighted"`；不得依測試檔名、歌曲名稱或預期答案分類。若任一來源不足 quota，必須立即失敗，不得靜默回退。
+- KD/SD/HH/NEG 維持既有自然比例排程；總計仍為 8,064 windows、5 epochs、batch 12、3,360 batches，與 D4D/D4R 比較保持等預算。
+- 必須先以 self-check 驗證預設相容、50/50 精確配額與不足來源拒絕，再輸出正式 schedule 來源分布；未達精確配額不訓練。
+- 正式候選只訓練一次。依 mixed STAR 選 epoch 1–5，最佳者只跑一次 raw；promotion 必須 mixed `>0.4601`、raw `>0.4692`，且任一類相對 D4D 不得下降超過 `0.03`。
+- 未達商業 gate（Macro F1 `>=0.70` 且每類 `>=0.55`）時，不跑固定五首、不替換產品 checkpoint、不部署。
+
+### Phase D4S 最終結果（拒絕）
+
+- schedule self-check、預設相容、來源不足拒絕與正式分布稽核全部 PASS；TOM/CRASH/RIDE 均精確使用 STAR `576` + E-GMD `576`，KD/SD/HH/NEG 維持既有自然比例。
+- 從 D4R epoch 10 完整續載 `383` tensors；8,064 windows、5 epochs、3,360 batches 正常完成。loss `0.1895 -> 0.1290`，明顯高於 D4D，顯示 50% E-GMD 帶來強烈來源域衝突。
+- mixed STAR 最佳為 epoch 1，Macro F1 `0.4594 < 0.4601`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.6780/0.7037/0.5621/0.2958/0.1603/0.3564`。
+- raw STAR epoch 1 為 `0.4716 > 0.4692`；六類為 `0.6887/0.7066/0.5604/0.2965/0.1878/0.3894`。HH/CRASH 改善，但 KD/TOM/RIDE 與 mixed 整體付出代價。
+- 因 mixed gate 下降，D4S promotion FAIL；保留 opt-in scheduler 與候選作研究證據，但不得成為新基線、不得跑固定五首、不得替換產品模型或部署。
+- 結論：E-GMD 對 HH/CRASH 有可見訊號，但 50/50 比例過高。不得把下一步變成無限制比例 sweep；在新增真實授權 full-song 六類資料前，D4D 仍是現有資料路線的較安全研究基線。
+
+### Phase D5A MDB Drums 研究資料匯入規格
+
+- 以 shallow clone 將 `CarlSouthall/MDBDrums` 原樣下載至專案根目錄 `MDBDrums/`，不得覆蓋既有資料或 checkpoint。
+- 本階段只驗證下載完整性、資料結構與授權文件；不得訓練、調參或將內容放入 `test_real_audio/`。
+- MDB Drums 為 CC BY-NC-SA 4.0 研究資料，後續若使用只能作非商業方向驗證，不得直接宣稱商業模型可使用。
+- 下載結果鎖定官方 `master` commit `b29e2d63c3a023506f4bf353c5b2e8a558eed135`：362 個追蹤檔、268 個 WAV、46 個文字標註，總大小 `2,010,349,446` bytes；沒有小於 1 KB 的 WAV。
+
+### Phase D5B MDB Drums 六類 metadata 規格
+
+- 新增單一 builder，將 `MDBDrums/MDB Drums/audio/full_mix` 與 `annotations/subclass` 轉成現有 `audio_path/duration/split/source/events` schema；不建立另一套 dataset/trainer。
+- 六類映射固定為：`KD→KD`；`SD/SDB/SDD/SDF/SDG/SDNS/SST→SD`；`CHH/OHH/PHH→HH`；`HIT/MHT/HFT/LFT→TOM`；`CRC/CHC/SPC→CRASH`；`RDC/RDB→RIDE`。`TMB` tambourine 忽略。
+- 依官方 MIREX 2017 split 保留 12 首 train 與 11 首 test；README 的 `Zepplin` 拼字錯誤須正規化為實際檔名 `Zeppelin`。同一歌曲的 full mix、drum-only、stems 不得跨 split；本階段只使用 full mix。
+- 每個事件沒有力度標註，沿用現有 `build_window` 的預設 velocity `100`；輸出新檔 `processed_data/mdbdrums_six_class_meta_d5b.json` 與 `validation_runs/mdbdrums_d5b_audit.json`，不得覆蓋既有 metadata。
+- builder 必須拒絕缺音訊、缺標註、未知 subclass、時間超出音訊、歌曲重複或 train/test 數量不是 12/11；self-check 至少驗證官方映射、未知標籤拒絕與 split 隔離。
+- 虛擬碼：`for song in full_mix -> parse subclass -> map supported labels -> validate times -> assign official split -> write metadata + aggregate audit`。
+- D5B 只做資料接入與稽核，不訓練。只有 train split 同時覆蓋六類且 TOM/CRASH/RIDE 事件數公開記錄後，才可預先鎖定 D5C 的唯一訓練配方。
+- MDB Drums 為 CC BY-NC-SA 4.0；所有 D5 結果只能作非商業研究證據，不得成為商業部署權重。
+
+### Phase D5B 最終結果（資料接入通過；訓練覆蓋不足）
+
+- builder syntax/self-check PASS；建立 23 首 full-mix metadata，官方 split 為 train/test `12/11`，兩側均覆蓋六類，未知 subclass、缺檔、超時事件與 split 數量均 fail-fast。
+- train 事件為 KD/SD/HH/TOM/CRASH/RIDE `661/1310/1603/15/57/210`；test 為 `878/1382/1036/75/94/641`。train 的 TOM 只有 15 個，不能合理支撐既有每類 1,152-window 配方或宣稱解決資料 blocker。
+- 以 D4D epoch 2、固定 threshold `0.50`、tolerance `50 ms`、官方 MDB test、每類 8 個互不重疊窗口做零調參診斷：Macro F1 `0.4478`；六類 `0.6411/0.5995/0.4180/0.3136/0.1436/0.5708`。
+- MDB test 診斷顯示 HH/TOM/CRASH 的主要錯誤仍是 false positives：分別 `423/140/134`。官方 11 首 test 不得回流訓練；不以僅 15 個 train TOM 啟動過度重複的 D5C 候選。
+- 完整 `verify_current_solution.py` PASS；舊三類產品路徑、固定五首與產品 checkpoint 均未改動。
+
+### Phase D5C MDB 真實局部 hard-negative 規格
+
+- 根因是 D4D 在 MDB test 的 HH/TOM/CRASH false positives 為 `423/140/134`；D5C 不重複稀少 MDB 正例，只把 NEG bucket 改為 MDB train full-mix 中窗口內沒有 TOM/CRASH/RIDE 的真實混音。
+- `build_schedule` 新增預設關閉的 `negative_source`。未指定時逐值保留既有「整首無 rare」邏輯；指定 `mdbdrums_full_mix` 時只接受 `split=negative_train`、來源相符、以 KD/SD/HH 為中心且實體四秒窗口內無 rare 事件的 anchor。
+- D5B builder 新增 opt-in base metadata 合併：保留 `processed_data/star_egmd_six_class_d4d.json` 全部內容，只複製 MDB 官方 train 12 首並改為 `negative_train`，加 `mdb_negative_` key prefix；MDB 官方 test 11 首不得進 combined metadata。
+- 輸出全新 `processed_data/star_egmd_mdb_negative_d5c.json`；碰到 key collision、來源或 split 不符必須失敗，不覆蓋 D4D/D5B metadata。
+- D5C 從 D4R epoch 10 起點重跑與 D4D 相同正樣本配方：每類 `1,152` + NEG `1,152`，總 `8,064` windows、5 epochs、batch 12、3,360 batches；架構 `dcnn-tcn-conformer`、legacy diff、seed、Queen augmentation、LR `1e-4/1e-6/5e-5`、weight cap 12 全部不變。唯一變因是 NEG 來源。
+- self-check 必須證明預設 schedule 不變、指定來源時排除窗口內 rare、來源不足 fail-fast；正式 schedule 必須精確有 1,152 個 `mdbdrums_full_mix` NEG 且正樣本不得來自 MDB。
+- 每 epoch 只跑既有 mixed STAR validation；選最佳者後各跑一次 raw STAR 與 MDB 官方 test。promotion 必須 mixed `>=0.4601`、raw `>=0.4692`、MDB Macro F1 `>0.4478`，且 MDB HH/TOM/CRASH FP 合計 `<697`，任一 STAR/MDB 類別 F1 不得下降超過 `0.03`。
+- 未通過全部技術 gate 時立即拒絕；不得跑固定五首、不得替換產品 checkpoint。MDB 授權為非商業，D5C 即使通過也只能證明資料方向，不能部署。
+
+### Phase D5C 最終結果（拒絕）
+
+- builder 與 scheduler self-check、語法、正式 metadata/schedule 稽核及完整 regression 全部 PASS；combined metadata 共 `6,455` items，僅加入 MDB 官方 train 12 首，正式 NEG 為 `1,152` 個 `mdbdrums_full_mix` windows，MDB 正樣本與官方 test 均未進訓練。
+- 從 D4R epoch 10 完整續載 `383` tensors；8,064 windows、5 epochs、3,360 batches 正常完成，loss `0.2418 -> 0.0875`，沒有 NaN、OOM 或 checkpoint 中斷。
+- mixed STAR 五個 epoch 為 `0.4503/0.4496/0.4476/0.4438/0.4410`，最佳 epoch 1 仍低於 D4D `0.4601`；最佳六類為 `0.6859/0.7114/0.4960/0.3122/0.1377/0.3588`，HH 相對 D4D 下降 `0.0334`，超過安全上限。
+- raw STAR epoch 1 為 `0.4570 < 0.4692`；六類為 `0.7044/0.7115/0.4878/0.3079/0.1402/0.3902`。
+- MDB 官方 test epoch 1 為 `0.4390 < 0.4478`；六類為 `0.6385/0.5939/0.3663/0.3304/0.1290/0.5759`。HH/TOM/CRASH false positives 為 `522/128/140`，合計 `790`，比 D4D 的 `697` 增加 `93`；MDB HH F1 下降 `0.0517`。
+- D5C 所有 promotion gate 均未同時通過，且訓練越久 mixed 表現越差，因此候選拒絕；不跑固定五首、不替換產品 checkpoint、不部署。結論是直接把真實混音負樣本完全替換 NEG，未能建立足夠精確的類別邊界，反而犧牲 HH；不得在同一資料上繼續比例或 threshold sweep。

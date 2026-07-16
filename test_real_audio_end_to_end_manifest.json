@@ -1,0 +1,44 @@
+{
+  "songs": [
+    {
+      "name": "Blue",
+      "audio": "test_real_audio/blue-yung-kai.wav",
+      "reference_midi": "test_real_audio/blue-yung-kai-drum-sheet-music.mid",
+      "reference_offset_sec": 0.0,
+      "expected_tempo_bpm": 97.5,
+      "expected_time_signature": "6/8"
+    },
+    {
+      "name": "Counting Stars",
+      "audio": "test_real_audio/counting-stars.wav",
+      "reference_midi": "test_real_audio/counting-stars.mid",
+      "reference_offset_sec": 0.0,
+      "expected_tempo_bpm": 120.0,
+      "expected_time_signature": "4/4"
+    },
+    {
+      "name": "Payphone",
+      "audio": "test_real_audio/payphone.wav",
+      "reference_midi": "test_real_audio/payphone.mid",
+      "reference_offset_sec": 0.0,
+      "expected_tempo_bpm": 110.0,
+      "expected_time_signature": "4/4"
+    },
+    {
+      "name": "Rolling In The Deep",
+      "audio": "test_real_audio/rolling-in-the-deep.wav",
+      "reference_midi": "test_real_audio/rolling-in-the-deep-adele-drum-sheet-music.mid",
+      "reference_offset_sec": 0.0,
+      "expected_tempo_bpm": 105.0,
+      "expected_time_signature": "4/4"
+    },
+    {
+      "name": "Rosanna",
+      "audio": "test_real_audio/toto-rosanna.wav",
+      "reference_midi": "test_real_audio/toto-rosanna.mid",
+      "reference_offset_sec": 0.0,
+      "expected_tempo_bpm": 258.0,
+      "expected_time_signature": "12/8"
+    }
+  ]
+}

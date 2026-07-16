@@ -11,6 +11,7 @@ audio/
 annotations/
 annotation_xml/
 accompaniment/
+MDBDrums/
 
 # 虛擬環境
 .venv/
