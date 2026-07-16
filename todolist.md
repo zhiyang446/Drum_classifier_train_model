@@ -4,6 +4,16 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D7 D4D 最多 20 epochs 與 patience=5 Early Stopping（完成；無提升）** (2026-07-17)
+    *   [x] 讀取 `todolist.md`、`spec.md`、`current_status.md`、`loop-constraints.md`，並確認本輪為使用者明確授權的手動訓練。
+    *   [x] 鎖定 D4R epoch 10 起點、D4D 訓練配方、STAR mixed validation 與既有六類門檻，不使用 `test_real_audio`。
+    *   [x] 重用共用 validation 邏輯，讓 trainer 每個 epoch 輸出六類 F1。
+    *   [x] 加入最大 20 epochs 與連續 5 次未創新高即停止，保存獨立 best candidate。
+    *   [x] 執行 self-check、語法檢查與 `verify_current_solution.py`；Raw/Notation 5/5、hard 4/4、Round4 30/30 與 6/6 全部 PASS。
+    *   [x] 正式訓練完成 7/20 epochs；epoch 3–7 連續未創新高，在 epoch 7 正確 early stop，best 為 epoch 2。
+    *   [x] best reload 為 KD/SD/HH/TOM/CRASH/RIDE `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`，Macro `0.4601`，與 D4D baseline 相同、沒有提升。
+    *   [x] 更新 `spec.md`、`todolist.md`、`current_status.md`；商業 gate 仍 FAIL，不跑 STAR test／固定五首、不替換產品模型。
+
 *   [x] **V25 速度軌與音符時間軸相位補正方案落地** (2026-07-13)
     *   [x] 修正 Notation 模式下量化音符的 `quantized_times` 減法平移。
     -   [x] 修正 MIDI 寫入時 `tempo_times` 速度軌時間戳平移。

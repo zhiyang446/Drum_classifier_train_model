@@ -1816,3 +1816,28 @@ stateDiagram-v2
 - original_mix STAR epoch 5 為 `0.3961 < 0.4030`；六類為 `0.5698/0.6330/0.4371/0.2057/0.0282/0.5029`。HH 有改善，但整體與 CRASH 均退步，未解決真實域 gate。
 - MDB test epoch 5 為 `0.4185 < 0.4478`；六類為 `0.6011/0.6392/0.3968/0.2765/0.1154/0.4818`。HH/TOM/CRASH FP 合計雖由 `697` 降至 `581`，但 KD/RIDE F1 分別下降 `0.0400/0.0890`，屬於抑制預測換取的代價，不符合類別安全 gate。
 - D6 所有整體 promotion gate 均失敗，候選拒絕；不跑固定五首、不替換產品 checkpoint、不部署。結論是 STAR original_mix 有研究價值，但完全替換重新合成 mix 會造成域遺忘；不得在相同資料上掃混合比例，下一個 materially different 方案需先取得人工標註稽核或商業授權的真實資料。
+
+### Phase D7 D4D 長訓練與 Early Stopping 規格
+
+- 目的：確認 D4D 現有資料配方由 5 epochs 提升至最多 20 epochs 是否真的改善，而不是只觀察 train loss。
+- 起點固定為 D4R epoch 10；訓練資料、每類 `1,152` windows、batch `12`、D4D STAR+E-GMD 自然來源比例、Queen `0.10–0.30` augmentation、`dcnn-tcn-conformer`、legacy diff、學習率與 positive-weight cap 全部不變。
+- 每個 epoch 後在未進訓練的 STAR `validation` mixed gate 評估；固定 threshold `0.50`、tolerance `50 ms`、每類 8 個互不重疊窗口。
+- 每個 epoch 必須保存並輸出 KD、SD、HH、TOM、CRASH、RIDE 個別 validation F1；Macro F1 只作為統一的 checkpoint 選擇與 early-stopping 指標。
+- 最大 `20` epochs。若連續 `5` 個 epoch 的 Macro F1 都沒有嚴格超過本輪歷史最高值，立即停止；保存全新 best candidate，不覆蓋任何既有 `.pth` 或產品模型。
+- 先通過 trainer/validator self-check、語法檢查與 `verify_current_solution.py`，才可開始正式訓練。最佳候選只與 D4D mixed 基線 `0.4601` 及其六類 F1 比較；未通過不得進 STAR test、固定五首或部署。
+
+### Phase D7 最終結果（Early Stopping 正常；無提升）
+
+| Epoch | KD | SD | HH | TOM | CRASH | RIDE | Macro | 改善 |
+|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
+| 1 | 0.7014 | 0.7148 | 0.5180 | 0.3086 | 0.1412 | 0.3679 | 0.4587 | 是 |
+| 2 | 0.7046 | 0.7151 | 0.5294 | 0.3125 | 0.1390 | 0.3600 | 0.4601 | 是 |
+| 3 | 0.6993 | 0.7213 | 0.5227 | 0.3118 | 0.1487 | 0.3480 | 0.4586 | 否 |
+| 4 | 0.7024 | 0.7239 | 0.5183 | 0.3114 | 0.1387 | 0.3400 | 0.4558 | 否 |
+| 5 | 0.7060 | 0.7228 | 0.5180 | 0.3079 | 0.1343 | 0.3346 | 0.4539 | 否 |
+| 6 | 0.6988 | 0.7239 | 0.5173 | 0.3068 | 0.1405 | 0.3371 | 0.4541 | 否 |
+| 7 | 0.6968 | 0.7279 | 0.5130 | 0.3079 | 0.1356 | 0.3433 | 0.4541 | 否 |
+
+- epoch 3–7 連續五次未嚴格超過 epoch 2 的 `0.4601`，因此在 epoch 7 正確觸發 early stopping；實際完成 7/20 epochs、4,704 batches。
+- 磁碟 best checkpoint reload 後逐類與 Macro F1 完整重現 epoch 2。相對舊 D4D 最佳沒有提升，證明單純延長相同資料與配方無效。
+- KD/SD 通過 `0.55`，HH `0.5294`、TOM `0.3125`、CRASH `0.1390`、RIDE `0.3600` 仍失敗；Macro `0.4601 < 0.70`。候選不可商用、不跑 STAR test 或固定五首、不替換產品 checkpoint。

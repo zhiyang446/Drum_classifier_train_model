@@ -740,3 +740,10 @@ Older sections below describe previous failed attempts and are kept as history; 
 - MDB HH/TOM/CRASH FP 從 `697` 降至 `581`，但 KD/RIDE F1 下降 `0.0400/0.0890`；原始真實鼓域本身也由 `0.4030` 降至 `0.3961`，因此不是可接受的 precision/recall 交換。
 - D6 候選拒絕，未跑固定五首、未碰 `test_real_audio`、未替換產品模型。STAR original_mix 可作研究資料，但其自動標註與混合授權未滿足商業部署要求。
 - D6 opt-in 實作與完整拒絕證據已由 commit `3fe8a3b` push 至 `origin/codex`；其他 AI 不得把 partial epoch 1–4 或完整候選誤標為新基線。
+
+## 2026-07-17 Phase D7 D4D 20-epoch 上限與 Early Stopping（完成；無提升）
+
+- trainer 已重用共用 STAR validator，每個 epoch 輸出 KD/SD/HH/TOM/CRASH/RIDE 個別 F1；最大 20 epochs，Macro F1 連續 5 次未創新高即停止。
+- D4D 原配方從 D4R epoch 10 重跑；epoch 1–7 Macro 為 `0.4587/0.4601/0.4586/0.4558/0.4539/0.4541/0.4541`，epoch 3–7 連續五次未改善，因此 epoch 7 early stop。
+- 最佳 epoch 2 reload 為 `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`，Macro `0.4601`，與舊 D4D 完全相同。延長相同資料與配方沒有提升，後期 HH/TOM/CRASH/RIDE 整體惡化。
+- 商業 gate 仍 FAIL；新 candidate 僅保留研究證據，未跑 STAR test／固定五首、未碰 `test_real_audio`、未替換產品 checkpoint、未部署。

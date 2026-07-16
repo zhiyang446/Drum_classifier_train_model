@@ -20,6 +20,21 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-17T03:40:00+08:00",
+  "pattern": "manual-d7-d4d-earlystop20",
+  "level": "human-approved",
+  "duration_s": 2100,
+  "items_found": 1,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 30000,
+  "outcome": "no-improvement",
+  "notes": "Added per-epoch six-class validation and patience-5 early stopping, completed 7 of 20 epochs, and stopped after epochs 3-7 failed to beat epoch 2. Best mixed STAR remained 0.4601 with KD/SD/HH/TOM/CRASH/RIDE 0.7046/0.7151/0.5294/0.3125/0.1390/0.3600. Product and fixed-five gates were untouched."
+}
+```
+
+```json
+{
   "run_id": "2026-07-15T23:58:11+08:00",
   "pattern": "manual-d5b-mdbdrums-ingest",
   "level": "human-approved",
