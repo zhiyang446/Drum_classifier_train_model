@@ -20,6 +20,66 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-17T22:40:00+08:00",
+  "pattern": "manual-d10-safe-true-superflux-specaugment",
+  "level": "human-approved",
+  "duration_s": 7200,
+  "items_found": 2,
+  "actions_taken": 5,
+  "escalations": 0,
+  "tokens_estimate": 30000,
+  "outcome": "rejected",
+  "notes": "Added opt-in synchronized 0-12-bin training-only frequency masking, completed 20 epochs with 2048 FFT Log-Mel plus True SuperFlux on 6GB VRAM, independently reproduced best macro F1 0.4584, and rejected D10 because it stayed below D7 0.4601 while KD fell by 0.0737. Product and fixed-five gates were untouched."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-17T03:40:00+08:00",
+  "pattern": "manual-d7-d4d-earlystop20",
+  "level": "human-approved",
+  "duration_s": 2100,
+  "items_found": 1,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 30000,
+  "outcome": "no-improvement",
+  "notes": "Added per-epoch six-class validation and patience-5 early stopping, completed 7 of 20 epochs, and stopped after epochs 3-7 failed to beat epoch 2. Best mixed STAR remained 0.4601 with KD/SD/HH/TOM/CRASH/RIDE 0.7046/0.7151/0.5294/0.3125/0.1390/0.3600. Product and fixed-five gates were untouched."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-17T04:10:00+08:00",
+  "pattern": "manual-d8-six-class-confusion",
+  "level": "human-approved",
+  "duration_s": 600,
+  "items_found": 1,
+  "actions_taken": 3,
+  "escalations": 0,
+  "tokens_estimate": 12000,
+  "outcome": "diagnostic-complete",
+  "notes": "Generated a row-normalized 6x6 confusion matrix for D7 best on the unchanged STAR mixed validation. Largest within-class confusions were CRASH-to-SD 20.00%, CRASH-to-HH 20.00%, RIDE-to-HH 16.28%, and TOM-to-KD 13.46%; rare-class extra prediction rates remained 61.28%-83.33%. No training or product changes."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-17T04:35:00+08:00",
+  "pattern": "manual-d9-auto-confusion-report",
+  "level": "human-approved",
+  "duration_s": 900,
+  "items_found": 1,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 16000,
+  "outcome": "implemented",
+  "notes": "Integrated best-checkpoint confusion reporting into every six-class fine-tune with held-out validation. Added F1-sorted class_health.csv and verified the full path with an isolated one-batch candidate. Runs without validation metadata do not claim a quality report."
+}
+```
+
+```json
+{
   "run_id": "2026-07-15T23:58:11+08:00",
   "pattern": "manual-d5b-mdbdrums-ingest",
   "level": "human-approved",
@@ -237,5 +297,20 @@ Append one entry per loop run. Keep entries concise.
   "tokens_estimate": 20000,
   "outcome": "rejected",
   "notes": "Added opt-in MDB full-mix hard-negative scheduling, trained one equal-budget five-epoch candidate, and rejected it because mixed/raw/MDB were 0.4503/0.4570/0.4390 while HH-TOM-CRASH false positives increased from 697 to 790. Product and fixed-five gates were untouched."
+}
+```
+
+```json
+{
+  "run_id": "2026-07-16T15:10:00+08:00",
+  "pattern": "manual-d6-star-original-mix",
+  "level": "human-approved",
+  "duration_s": 5400,
+  "items_found": 1,
+  "actions_taken": 5,
+  "escalations": 0,
+  "tokens_estimate": 30000,
+  "outcome": "rejected",
+  "notes": "Added opt-in STAR original_mix metadata, measured the locked D4D real-mix baseline, completed one equal-budget five-epoch restart after an external terminal interruption, and rejected D6 because mixed/raw/original_mix/MDB were 0.4282/0.4240/0.3961/0.4185. Product and fixed-five gates were untouched."
 }
 ```

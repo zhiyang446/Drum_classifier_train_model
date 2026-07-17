@@ -757,3 +757,40 @@ Older sections below describe previous failed attempts and are kept as history; 
 - D5C 拒絕，D4D 仍為現有資料研究基線；未碰 `test_real_audio`、固定五首或產品 checkpoint。MDB 權重也受非商業授權限制，不能部署。
 - 下一個合理資料投資不是在相同 12 首上掃比例或 threshold，而是新增具有商業授權、歌曲級隔離且含足量 TOM/CRASH/RIDE 的真實完整歌曲，並保留獨立 validation/test。
 - D5C 程式、驗證結果與拒絕證據已由 commit `2908524` push 至 `origin/codex`，其他 AI 不得把此候選誤標為可晉級模型。
+
+## 2026-07-16 Phase D6 STAR original_mix 真實鼓域（拒絕）
+
+- `preprocess_star.py` 新增預設關閉的 `--audio-kind original_mix`，只改 STAR 音訊來源；原 annotation、split、六類映射、D4R 起點、D4D 等預算配方與 gate 不變。
+- 新 metadata 為 STAR `5,727` + E-GMD `716` items；8,064-window schedule 有 `7,213` 個 STAR original_mix windows，validation/test 進入訓練的數量為 0。
+- D4D 在 original_mix held-out baseline 為 `0.4030`。D6 完整 5-epoch 最佳 mixed/raw/original_mix/MDB 分別為 `0.4282/0.4240/0.3961/0.4185`，均未達預先 gate。
+- MDB HH/TOM/CRASH FP 從 `697` 降至 `581`，但 KD/RIDE F1 下降 `0.0400/0.0890`；原始真實鼓域本身也由 `0.4030` 降至 `0.3961`，因此不是可接受的 precision/recall 交換。
+- D6 候選拒絕，未跑固定五首、未碰 `test_real_audio`、未替換產品模型。STAR original_mix 可作研究資料，但其自動標註與混合授權未滿足商業部署要求。
+- D6 opt-in 實作與完整拒絕證據已由 commit `3fe8a3b` push 至 `origin/codex`；其他 AI 不得把 partial epoch 1–4 或完整候選誤標為新基線。
+
+## 2026-07-17 Phase D7 D4D 20-epoch 上限與 Early Stopping（完成；無提升）
+
+- trainer 已重用共用 STAR validator，每個 epoch 輸出 KD/SD/HH/TOM/CRASH/RIDE 個別 F1；最大 20 epochs，Macro F1 連續 5 次未創新高即停止。
+- D4D 原配方從 D4R epoch 10 重跑；epoch 1–7 Macro 為 `0.4587/0.4601/0.4586/0.4558/0.4539/0.4541/0.4541`，epoch 3–7 連續五次未改善，因此 epoch 7 early stop。
+- 最佳 epoch 2 reload 為 `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`，Macro `0.4601`，與舊 D4D 完全相同。延長相同資料與配方沒有提升，後期 HH/TOM/CRASH/RIDE 整體惡化。
+- 商業 gate 仍 FAIL；新 candidate 僅保留研究證據，未跑 STAR test／固定五首、未碰 `test_real_audio`、未替換產品 checkpoint、未部署。
+
+## 2026-07-17 Phase D8 六類比例混淆矩陣（完成）
+
+- D7 best 的 STAR mixed validation 已產生 row-normalized 6×6；列為真實、欄為預測，同類 TP 優先後再配對 50ms 內跨類事件。
+- 主要類別內混淆為 CRASH→SD `20.00%`、CRASH→HH `20.00%`、RIDE→HH `16.28%`、TOM→KD `13.46%`；按錯誤數量最多為 SD→KD `23`，其次 RIDE→HH、SD→HH、TOM→KD 各 `21`。
+- 更嚴重的是 unmatched：TOM/CRASH/RIDE extra prediction 為 `76.81%/83.33%/61.28%`，CRASH/RIDE missed 為 `42.62%/40.00%`。因此問題不只類別互相混淆，主要仍是 rare-class precision 與 recall 同時不足。
+- 本輪只新增診斷與全新 validation outputs；未訓練、未調 threshold、未碰產品 checkpoint 或固定五首。
+
+## 2026-07-17 Phase D9 每次微調自動報告（完成）
+
+- 六類 trainer 只要收到 held-out `--validation-meta`，就會在訓練／early stopping 後重新載入本輪 best checkpoint，自動生成 `<candidate>/best_confusion/`。
+- 固定輸出 6×6 計數／比例、錯誤配對、unmatched 比例、完整 JSON，以及按 F1 由低到高的 `class_health.csv`；train report 保存摘要路徑。
+- D7 best 的問題排序已固定為 CRASH→TOM→RIDE→HH→KD→SD；隔離 1-batch smoke 證明自動流程完整可用，但 smoke 權重不作 promotion。
+- 沒有 validation metadata 的 run 不生成品質報告，避免用 train split 或 smoke 結果假裝 held-out 證據。
+
+## 2026-07-17 Phase D10 安全版 True SuperFlux + Frequency Mask（完成並拒絕）
+
+- D7 best 直接切換 True SuperFlux 的 zero-tune Macro 只有 `0.2201`，因此 D10 以相同 D4D schedule 從 D7 best 正式微調；2048 FFT Log-Mel + 2048 FFT True SuperFlux、batch 12、同步 frequency mask `0–12` bins 在 6GB VRAM 穩定完成。
+- 20/20 epochs 全部完成，epoch 20 最佳且獨立 reload 為 KD/SD/HH/TOM/CRASH/RIDE `0.6309/0.7370/0.5129/0.3315/0.1613/0.3766`，Macro `0.4584`。由於最終仍創新高，patience 5 未觸發是預期行為。
+- 相對 D7，TOM/CRASH/RIDE 均改善，但 Macro `0.4584 < 0.4601`，且 KD 從 `0.7046` 降至 `0.6309`（`-0.0737`），promotion FAIL。D7 繼續作為現有研究基線。
+- 自動報告顯示 CRASH/TOM extra prediction `81.82%/77.11%`、RIDE missed `46.05%`；主要誤配為 CRASH→SD `16.67%`、TOM→KD `13.38%`、RIDE→HH `12.07%`。候選不可商用，未跑 raw/test/固定五首、未碰 `test_real_audio`、未替換產品 checkpoint、未部署。

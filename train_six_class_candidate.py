@@ -12,6 +12,8 @@ import torch.nn.functional as F
 from model_dcnn import DCNNDrumTCN, ResidualDCNNDrumTCN, transfer_residual_state, transfer_symmetric_state
 from model_conformer import ResidualDCNNDrumConformer, ResidualDCNNDrumHybridConformer, transfer_d3r_hybrid_state, transfer_d3r_state
 from run_six_class_smoke import CHUNK_FRAMES, LABELS, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_compatible_weights
+from run_six_class_confusion import evaluate_confusion
+from run_six_class_validation import evaluate_model
 from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
 
@@ -138,6 +140,21 @@ def gaussian_smooth_targets(targets):
     return torch.clamp(torch.cat(smoothed, dim=1).transpose(1, 2), 0.0, 1.0)
 
 
+def apply_frequency_mask(features, max_bins, superflux_only=False):
+    """中文註解：對 train sample 套用連續 Mel 遮罩，可只增強 True SuperFlux 通道。"""
+    if max_bins <= 0:
+        return features
+    if features.ndim != 4 or max_bins > features.shape[2]:
+        raise ValueError('frequency mask requires [batch, channel, frequency, time] and max_bins <= frequency bins')
+    for sample in features:
+        width = int(np.random.randint(0, max_bins + 1))
+        if width:
+            start = int(np.random.randint(0, sample.shape[1] - width + 1))
+            channels = sample[1:2] if superflux_only else sample
+            channels[:, start:start + width, :] = 0.0
+    return features
+
+
 def balanced_positive_weight(event_count, window_count):
     """中文註解：以反比密度的平方根平衡稀有類別，避免線性權重造成假陽性爆增。"""
     return float(np.sqrt(CHUNK_FRAMES / max(event_count / window_count, 1e-6)))
@@ -218,6 +235,16 @@ def run_self_check():
     targets = torch.zeros(1, 8, len(LABELS))
     targets[0, 4, 5] = 1.0
     assert gaussian_smooth_targets(targets)[0, 4, 5].item() == 1.0
+    mask_input = np.ones((2, 2, 16, 4), dtype=np.float32)
+    np.random.seed(1337)
+    masked = apply_frequency_mask(mask_input, 12)
+    assert np.array_equal(masked[:, 0] == 0.0, masked[:, 1] == 0.0)
+    assert all(np.count_nonzero(sample[0, :, 0] == 0.0) <= 12 for sample in masked)
+    np.random.seed(1337)
+    superflux_masked = apply_frequency_mask(np.ones((2, 2, 16, 4), dtype=np.float32), 12, superflux_only=True)
+    assert np.all(superflux_masked[:, 0] == 1.0)
+    assert np.any(superflux_masked[:, 1] == 0.0)
+    assert np.all(apply_frequency_mask(np.ones((1, 2, 4, 4), dtype=np.float32), 0) == 1.0)
     print('Self-check passed.')
 
 
@@ -305,6 +332,11 @@ def main():
     parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn', 'dcnn-conformer', 'dcnn-tcn-conformer'), default='symmetric')
     parser.add_argument('--feature-mode', choices=('legacy-diff', 'true-superflux'))
     parser.add_argument('--new-module-lr', type=float, help='Residual DCNN correction/gate learning rate; defaults to --lr')
+    parser.add_argument('--validation-meta', help='每個 epoch 使用的 held-out STAR validation metadata')
+    parser.add_argument('--validation-per-class', type=int, default=8)
+    parser.add_argument('--early-stopping-patience', type=int, default=0, help='連續未刷新 validation Macro F1 的停止次數；0 表示停用')
+    parser.add_argument('--frequency-mask-max-bins', type=int, default=0, help='訓練期同步遮罩兩通道的最大連續 Mel bins；0 表示停用')
+    parser.add_argument('--frequency-mask-superflux-only', action='store_true', help='只遮 True SuperFlux，完整保留 Log-Mel')
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
     args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
@@ -317,12 +349,22 @@ def main():
         parser.error('--meta is required unless --self-check is used')
     if args.per_class <= 0 or args.batch_size <= 0 or args.epochs <= 0 or args.log_every <= 0:
         parser.error('--per-class, --batch-size, --epochs, and --log-every must be positive')
+    if args.validation_per_class <= 0 or args.early_stopping_patience < 0 or args.frequency_mask_max_bins < 0:
+        parser.error('--validation-per-class must be positive; patience and frequency mask cannot be negative')
+    if args.early_stopping_patience and not args.validation_meta:
+        parser.error('--early-stopping-patience requires --validation-meta')
+    if args.frequency_mask_superflux_only and (args.feature_mode != 'true-superflux' or args.frequency_mask_max_bins <= 0):
+        parser.error('--frequency-mask-superflux-only requires True SuperFlux and a positive mask width')
     if not 0.0 <= args.accompaniment_gain_min <= args.accompaniment_gain_max:
         parser.error('accompaniment gain range is invalid')
     torch.manual_seed(1337)
     np.random.seed(1337)
     with open(args.meta, encoding='utf-8') as handle:
         metadata = json.load(handle)
+    validation_metadata = None
+    if args.validation_meta:
+        with open(args.validation_meta, encoding='utf-8') as handle:
+            validation_metadata = json.load(handle)
     schedule = build_schedule(
         metadata, args.per_class,
         balance_rare_sources=args.balance_rare_sources,
@@ -355,6 +397,11 @@ def main():
         optimizer = torch.optim.Adam((parameter for parameter in model.parameters() if parameter.requires_grad), lr=args.lr)
         optimizer_parameter_counts = None
     losses = []
+    validation_history = []
+    best_macro_f1 = -1.0
+    best_epoch = None
+    epochs_without_improvement = 0
+    early_stopped = False
     positive_weight = torch.tensor([class_weights[label] for label in LABELS], dtype=torch.float32, device=device).view(1, 1, -1)
     batches_per_epoch = len(schedule) // args.batch_size
     for epoch in range(1, args.epochs + 1):
@@ -367,6 +414,10 @@ def main():
                 accompaniment_pool=accompaniment_pool,
                 gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
                 use_true_superflux=args.feature_mode == 'true-superflux',
+            )
+            feature = apply_frequency_mask(
+                feature, args.frequency_mask_max_bins,
+                superflux_only=args.frequency_mask_superflux_only,
             )
             x = torch.from_numpy(feature).float().to(device)
             onset_target = torch.from_numpy(onset).float().to(device)
@@ -400,11 +451,48 @@ def main():
         # 中文註解：儲存每個 Epoch 的獨立候選權重以供自動篩選哨兵進行測試
         epoch_cand_name = f"{os.path.splitext(args.candidate_name)[0]}_epoch{epoch}.pth"
         torch.save(model.state_dict(), os.path.join(args.output_dir, epoch_cand_name))
+        if validation_metadata is not None:
+            rows, gate = evaluate_model(
+                model, validation_metadata, os.path.join(args.output_dir, f'validation_epoch{epoch}'),
+                per_class=args.validation_per_class, accompaniment=accompaniment_pool[0] if accompaniment_pool else None,
+                accompaniment_path=args.accompaniment, architecture=args.architecture,
+                feature_mode=args.feature_mode, device=device,
+            )
+            class_f1 = {row['inst']: float(row['f1']) for row in rows}
+            macro_f1 = float(gate['macro_f1'])
+            improved = macro_f1 > best_macro_f1
+            validation_history.append({'epoch': epoch, 'macro_f1': macro_f1, 'per_class_f1': class_f1, 'improved': improved})
+            print('validation ' + ' '.join(f'{label}={class_f1[label]:.4f}' for label in LABELS) + f' macro={macro_f1:.4f}', flush=True)
+            if improved:
+                best_macro_f1 = macro_f1
+                best_epoch = epoch
+                epochs_without_improvement = 0
+                torch.save(model.state_dict(), os.path.join(args.output_dir, args.candidate_name))
+            else:
+                epochs_without_improvement += 1
+                if args.early_stopping_patience and epochs_without_improvement >= args.early_stopping_patience:
+                    early_stopped = True
+                    print(f'early_stopping epoch={epoch} best_epoch={best_epoch} best_macro_f1={best_macro_f1:.4f}', flush=True)
+                    break
     candidate_path = os.path.join(args.output_dir, args.candidate_name)
-    torch.save(model.state_dict(), candidate_path)
+    if validation_metadata is None:
+        torch.save(model.state_dict(), candidate_path)
+    confusion_report = None
+    if validation_metadata is not None:
+        model.load_state_dict(torch.load(candidate_path, map_location=device, weights_only=False))
+        confusion_dir = os.path.join(args.output_dir, 'best_confusion')
+        evaluate_confusion(
+            model, validation_metadata, confusion_dir,
+            accompaniment=accompaniment_pool[0] if accompaniment_pool else None,
+            accompaniment_gain=0.17, per_class=args.validation_per_class,
+            feature_mode=args.feature_mode, device=device,
+        )
+        confusion_report = os.path.abspath(os.path.join(confusion_dir, 'confusion_summary.json'))
     report = {
         'status': 'pass', 'labels': LABELS, 'schedule_windows': len(schedule),
-        'per_class': args.per_class, 'batch_size': args.batch_size, 'epochs': args.epochs, 'batches': len(losses),
+        'per_class': args.per_class, 'batch_size': args.batch_size, 'epochs': args.epochs,
+        'epochs_completed': len(validation_history) if validation_metadata is not None else args.epochs,
+        'batches': len(losses),
         'head_learning_rate': args.lr, 'backbone_learning_rate': args.backbone_lr if args.full_model else None,
         'new_module_learning_rate': args.new_module_lr if args.full_model and args.architecture in ('dcnn-residual-tcn', 'dcnn-conformer', 'dcnn-tcn-conformer') else None,
         'optimizer_parameter_counts': optimizer_parameter_counts,
@@ -417,6 +505,18 @@ def main():
         'accompaniment_gain_range': [args.accompaniment_gain_min, args.accompaniment_gain_max],
         'architecture': args.architecture,
         'feature_mode': f'log_mel+{args.feature_mode.replace("-", "_")}',
+        'frequency_mask_max_bins': args.frequency_mask_max_bins,
+        'frequency_mask_scope': (
+            'true_superflux_only' if args.frequency_mask_superflux_only
+            else 'all_channels' if args.frequency_mask_max_bins else 'disabled'
+        ),
+        'time_mask_max_frames': 0,
+        'validation_meta': os.path.abspath(args.validation_meta) if args.validation_meta else None,
+        'validation_per_class': args.validation_per_class if args.validation_meta else None,
+        'early_stopping_patience': args.early_stopping_patience,
+        'early_stopped': early_stopped, 'best_epoch': best_epoch, 'best_macro_f1': best_macro_f1 if best_epoch else None,
+        'validation_history': validation_history,
+        'best_confusion_report': confusion_report,
         'transferred_compatible_tensors': transferred, 'candidate': os.path.abspath(candidate_path),
     }
     with open(os.path.join(args.output_dir, 'train_report.json'), 'w', encoding='utf-8') as handle:

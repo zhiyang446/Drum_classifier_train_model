@@ -140,6 +140,43 @@ def run_self_check():
     print('Self-check passed.')
 
 
+def evaluate_model(
+    model, metadata, output_dir, split='validation', per_class=8,
+    accompaniment=None, accompaniment_path=None, accompaniment_gain=0.17,
+    architecture='symmetric', feature_mode='legacy-diff', device=None,
+):
+    """中文註解：以已載入模型執行共用六類驗證，供 CLI 與逐 epoch 訓練共用。"""
+    device = device or next(model.parameters()).device
+    model.eval()
+    aggregate = {label: ([], []) for label in LABELS}
+    selected_rows = []
+    window_seconds = CHUNK_FRAMES * HOP_LENGTH / float(SR)
+    for window_index, selected in enumerate(select_windows(metadata, split, per_class)):
+        accompaniment_offset = window_index * TARGET_SAMPLES
+        features, _, _, start_sec = build_window(
+            selected['item'], selected['anchor'], accompaniment=accompaniment,
+            accompaniment_gain=accompaniment_gain, accompaniment_offset=accompaniment_offset,
+            use_true_superflux=feature_mode == 'true-superflux',
+        )
+        with torch.no_grad():
+            logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
+        predicted = local_maxima(torch.sigmoid(logits).squeeze(0).cpu().numpy())
+        expected = expected_events(selected['item'], start_sec)
+        aggregate_offset = window_index * (window_seconds + 1.0)
+        for label in LABELS:
+            aggregate[label][0].extend(time + aggregate_offset for time in expected[label])
+            aggregate[label][1].extend(time + aggregate_offset for time in predicted[label])
+        selected_rows.append({
+            'label': selected['label'], 'key': selected['key'], 'anchor': selected['anchor'],
+            'window_start': start_sec, 'audio_path': selected['item']['audio_path'],
+            'split': split, 'aggregate_offset': aggregate_offset,
+            'accompaniment': accompaniment_path, 'accompaniment_gain': accompaniment_gain,
+            'architecture': architecture, 'feature_mode': feature_mode,
+            'expected_counts': {label: len(expected[label]) for label in LABELS},
+        })
+    return write_outputs(selected_rows, aggregate, output_dir)
+
+
 def resolve_feature_mode(architecture, feature_mode):
     """將驗證特徵明確綁定到報告，而不是由架構隱式決定。"""
     if feature_mode:
@@ -185,36 +222,13 @@ def main():
     else:
         model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
         load_six_class_checkpoint(model, args.model, device)
-    model.eval()
     accompaniment = load_accompaniment(args.accompaniment) if args.accompaniment else None
-    aggregate = {label: ([], []) for label in LABELS}
-    selected_rows = []
-    window_seconds = CHUNK_FRAMES * HOP_LENGTH / float(SR)
-    for window_index, selected in enumerate(select_windows(metadata, args.split, args.per_class)):
-        accompaniment_offset = window_index * TARGET_SAMPLES
-        features, _, _, start_sec = build_window(
-            selected['item'], selected['anchor'], accompaniment=accompaniment,
-            accompaniment_gain=args.accompaniment_gain, accompaniment_offset=accompaniment_offset,
-            use_true_superflux=args.feature_mode == 'true-superflux',
-        )
-        with torch.no_grad():
-            logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
-        predicted = local_maxima(torch.sigmoid(logits).squeeze(0).cpu().numpy())
-        expected = expected_events(selected['item'], start_sec)
-        aggregate_offset = window_index * (window_seconds + 1.0)
-        for label in LABELS:
-            aggregate[label][0].extend(time + aggregate_offset for time in expected[label])
-            aggregate[label][1].extend(time + aggregate_offset for time in predicted[label])
-        selected_rows.append({
-            'label': selected['label'], 'key': selected['key'], 'anchor': selected['anchor'],
-            'window_start': start_sec, 'audio_path': selected['item']['audio_path'],
-            'split': args.split, 'aggregate_offset': aggregate_offset,
-            'accompaniment': args.accompaniment, 'accompaniment_gain': args.accompaniment_gain,
-            'architecture': args.architecture,
-            'feature_mode': args.feature_mode,
-            'expected_counts': {label: len(expected[label]) for label in LABELS},
-        })
-    rows, gate = write_outputs(selected_rows, aggregate, args.output_dir)
+    rows, gate = evaluate_model(
+        model, metadata, args.output_dir, split=args.split, per_class=args.per_class,
+        accompaniment=accompaniment, accompaniment_path=args.accompaniment,
+        accompaniment_gain=args.accompaniment_gain, architecture=args.architecture,
+        feature_mode=args.feature_mode, device=device,
+    )
     print(json.dumps({'gate': gate, 'rows': rows}, indent=2))
 
 

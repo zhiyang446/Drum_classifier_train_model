@@ -1809,6 +1809,128 @@ stateDiagram-v2
 - MDB 官方 test epoch 1 為 `0.4390 < 0.4478`；六類為 `0.6385/0.5939/0.3663/0.3304/0.1290/0.5759`。HH/TOM/CRASH false positives 為 `522/128/140`，合計 `790`，比 D4D 的 `697` 增加 `93`；MDB HH F1 下降 `0.0517`。
 - D5C 所有 promotion gate 均未同時通過，且訓練越久 mixed 表現越差，因此候選拒絕；不跑固定五首、不替換產品 checkpoint、不部署。結論是直接把真實混音負樣本完全替換 NEG，未能建立足夠精確的類別邊界，反而犧牲 HH；不得在同一資料上繼續比例或 threshold sweep。
 
+### Phase D6 STAR original_mix 真實鼓域規格
+
+- STAR 既有 `audio/mix` 是重新合成鼓軌與真實非鼓伴奏的混音；D6 唯一變因是把 STAR metadata 的音訊改指向同歌曲 `audio/original_mix`，使用原始真實鼓與完整歌曲混音。annotation、歌曲 split、六類映射、模型與 threshold 均不變。
+- `preprocess_star.py` 新增預設為 `mix` 的 opt-in `--audio-kind original_mix`；預設輸出必須逐值相容。`original_mix` 檔名由 annotation 的最後一段 `_mix_...` kit suffix 移除後加 `_original_mix.flac`，缺檔只能記錄 skip，不得回退至合成 mix。
+- 產生全新 `processed_data/star_original_mix_six_class_d6.json`，再與既有 `processed_data/egmd_six_class_rare_meta_d4d.json` 無衝突合併為 `processed_data/star_original_mix_egmd_d6.json`；不得覆蓋任何既有 metadata。
+- 訓練只讀 combined metadata 的 STAR `train` 與既有 E-GMD train；STAR original_mix validation/test、MDB test、固定五首及 `test_real_audio` 均不得進訓練或選 schedule。
+- D6 從 D4R epoch 10 起點重跑 D4D 配方：每類 `1,152` + NEG `1,152`，總 `8,064` windows、5 epochs、batch 12、3,360 batches；`dcnn-tcn-conformer`、legacy diff、seed、Queen augmentation、LR `1e-4/1e-6/5e-5` 與 weight cap 12 全部不變。
+- 正式訓練前以 D4D epoch 2、固定 threshold `0.50`、tolerance `50ms` 跑 held-out STAR original_mix validation，零調參基線為 Macro F1 `0.4030`；KD/SD/HH/TOM/CRASH/RIDE 為 `0.5926/0.6447/0.3571/0.2201/0.1120/0.4913`。訓練後以既有 STAR mixed validation 選 epoch，最佳者各跑一次 raw STAR、original_mix STAR 與 MDB test。
+- promotion 必須 mixed `>=0.4601`、raw `>=0.4692`、original_mix Macro F1 嚴格高於預先量得的 D4D baseline、MDB Macro F1 `>0.4478`、MDB HH/TOM/CRASH FP 合計 `<697`，且任一對應類別 F1 不得下降超過 `0.03`。
+- STAR annotation 來自自動轉譜且音訊授權混合；D6 即使技術通過也只是研究方向證據。未完成逐歌曲商業授權白名單與人工標註稽核前，不得將候選當作商業部署權重。
+- 首次正式程序因 Codex 互動回合切換在完成 epoch 4 後被外部終止，沒有 epoch 5 或 final report；這不是模型 gate 結果。不得從 epoch 4 重新建立 Adam optimizer 後冒充連續訓練，也不得覆蓋部分 artifacts；以完全相同配方在新 candidate 目錄完整重跑一次，並只採用完整重跑結果。
+
+### Phase D6 最終結果（拒絕）
+
+- opt-in `original_mix` 路徑、syntax 與 self-check PASS；新 STAR metadata 有 `5,727` items、split `5,679/22/26`、缺檔 `102`、空標註 skip `356`。與既有 E-GMD 716 items 合併後共 `6,443`，key collision 為 0。
+- 正式 schedule 為 8,064 windows、每 bucket 1,152；`7,213` windows 來自 `star_original_mix`、`851` 來自既有 E-GMD，非 train windows 為 0。完整重跑 5 epochs、3,360 batches 成功，loss `0.2402 -> 0.0911`。
+- mixed STAR epoch 1–5 為 `0.4172/0.4201/0.4194/0.4229/0.4282`；最佳 epoch 5 低於 D4D `0.4601`。最佳六類為 `0.6445/0.7425/0.5288/0.3036/0.0825/0.2675`，CRASH/RIDE 明顯退步。
+- raw STAR epoch 5 為 `0.4240 < 0.4692`；六類為 `0.6531/0.7362/0.5265/0.3063/0.0625/0.2595`。
+- original_mix STAR epoch 5 為 `0.3961 < 0.4030`；六類為 `0.5698/0.6330/0.4371/0.2057/0.0282/0.5029`。HH 有改善，但整體與 CRASH 均退步，未解決真實域 gate。
+- MDB test epoch 5 為 `0.4185 < 0.4478`；六類為 `0.6011/0.6392/0.3968/0.2765/0.1154/0.4818`。HH/TOM/CRASH FP 合計雖由 `697` 降至 `581`，但 KD/RIDE F1 分別下降 `0.0400/0.0890`，屬於抑制預測換取的代價，不符合類別安全 gate。
+- D6 所有整體 promotion gate 均失敗，候選拒絕；不跑固定五首、不替換產品 checkpoint、不部署。結論是 STAR original_mix 有研究價值，但完全替換重新合成 mix 會造成域遺忘；不得在相同資料上掃混合比例，下一個 materially different 方案需先取得人工標註稽核或商業授權的真實資料。
+
+### Phase D7 D4D 長訓練與 Early Stopping 規格
+
+- 目的：確認 D4D 現有資料配方由 5 epochs 提升至最多 20 epochs 是否真的改善，而不是只觀察 train loss。
+- 起點固定為 D4R epoch 10；訓練資料、每類 `1,152` windows、batch `12`、D4D STAR+E-GMD 自然來源比例、Queen `0.10–0.30` augmentation、`dcnn-tcn-conformer`、legacy diff、學習率與 positive-weight cap 全部不變。
+- 每個 epoch 後在未進訓練的 STAR `validation` mixed gate 評估；固定 threshold `0.50`、tolerance `50 ms`、每類 8 個互不重疊窗口。
+- 每個 epoch 必須保存並輸出 KD、SD、HH、TOM、CRASH、RIDE 個別 validation F1；Macro F1 只作為統一的 checkpoint 選擇與 early-stopping 指標。
+- 最大 `20` epochs。若連續 `5` 個 epoch 的 Macro F1 都沒有嚴格超過本輪歷史最高值，立即停止；保存全新 best candidate，不覆蓋任何既有 `.pth` 或產品模型。
+- 先通過 trainer/validator self-check、語法檢查與 `verify_current_solution.py`，才可開始正式訓練。最佳候選只與 D4D mixed 基線 `0.4601` 及其六類 F1 比較；未通過不得進 STAR test、固定五首或部署。
+
+### Phase D7 最終結果（Early Stopping 正常；無提升）
+
+| Epoch | KD | SD | HH | TOM | CRASH | RIDE | Macro | 改善 |
+|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
+| 1 | 0.7014 | 0.7148 | 0.5180 | 0.3086 | 0.1412 | 0.3679 | 0.4587 | 是 |
+| 2 | 0.7046 | 0.7151 | 0.5294 | 0.3125 | 0.1390 | 0.3600 | 0.4601 | 是 |
+| 3 | 0.6993 | 0.7213 | 0.5227 | 0.3118 | 0.1487 | 0.3480 | 0.4586 | 否 |
+| 4 | 0.7024 | 0.7239 | 0.5183 | 0.3114 | 0.1387 | 0.3400 | 0.4558 | 否 |
+| 5 | 0.7060 | 0.7228 | 0.5180 | 0.3079 | 0.1343 | 0.3346 | 0.4539 | 否 |
+| 6 | 0.6988 | 0.7239 | 0.5173 | 0.3068 | 0.1405 | 0.3371 | 0.4541 | 否 |
+| 7 | 0.6968 | 0.7279 | 0.5130 | 0.3079 | 0.1356 | 0.3433 | 0.4541 | 否 |
+
+- epoch 3–7 連續五次未嚴格超過 epoch 2 的 `0.4601`，因此在 epoch 7 正確觸發 early stopping；實際完成 7/20 epochs、4,704 batches。
+- 磁碟 best checkpoint reload 後逐類與 Macro F1 完整重現 epoch 2。相對舊 D4D 最佳沒有提升，證明單純延長相同資料與配方無效。
+- KD/SD 通過 `0.55`，HH `0.5294`、TOM `0.3125`、CRASH `0.1390`、RIDE `0.3600` 仍失敗；Macro `0.4601 < 0.70`。候選不可商用、不跑 STAR test 或固定五首、不替換產品 checkpoint。
+
+### Phase D8 六類比例混淆矩陣規格
+
+- 對象固定為 D7 best epoch 2、相同 STAR mixed validation 48 個窗口、threshold `0.50` 與 tolerance `50 ms`；不重訓、不調參、不讀 `test_real_audio`。
+- 產生 `6×6` 矩陣：列為真實 KD/SD/HH/TOM/CRASH/RIDE，欄為預測類別。先做同類一對一時間匹配，再將剩餘事件按最小時間差做跨類別一對一匹配，避免同時擊打破壞既有 TP。
+- 主矩陣以「該真實類別已匹配事件」為分母逐列正規化，每列總和 `100%`，用於回答類別混淆比例。另列每類漏檢率與各預測類多餘檢出率，避免 6×6 隱藏 unmatched FN/FP。
+- 錯誤配對只排行非對角元素，同時輸出該真實類別內比例與占全部跨類別錯誤比例。所有輸出寫入新的 D8 validation 目錄，不覆蓋既有結果。
+
+### Phase D8 最終結果
+
+- 48 個 STAR mixed validation 窗口共有 1,563 個時間上可匹配事件，其中 189 個為跨類別錯誤；row-normalized 6×6 每列四捨五入後約為 100%。
+- 對角計數為 KD/SD/HH/TOM/CRASH/RIDE `378/512/275/110/18/81`，與 D7 event gate TP 完全一致，證明診斷沒有改變原驗證定義。
+- 依錯誤數量排序前三為 SD→KD `23`（該類 matched 的 `4.09%`、全部類別混淆的 `12.17%`）、RIDE→HH `21`（`16.28%`、`11.11%`）、SD→HH `21`（`3.73%`、`11.11%`）；TOM→KD 同為 `21`（`13.46%`、`11.11%`）。
+- 依各真實類別內比例，最嚴重為 CRASH→SD `20.00%`、CRASH→HH `20.00%`、RIDE→HH `16.28%`、TOM→KD `13.46%`。
+- 6×6 只描述時間上可匹配事件，不能掩蓋主要商業問題：TOM/CRASH/RIDE 的 extra prediction 比例為 `76.81%/83.33%/61.28%`，CRASH/RIDE missed 比例為 `42.62%/40.00%`。主要根因仍是大量假陽性加上稀有類漏檢，不只是六類互相改名。
+
+### Phase D9 每次微調自動產生鼓組問題報告規格
+
+- `train_six_class_candidate.py` 只要提供 `--validation-meta`，訓練結束或 early stopping 後必須重新載入本輪最佳 checkpoint，自動在 candidate 目錄的 `best_confusion/` 產生 D8 同格式報告。
+- 固定輸出：`confusion_row_percent.csv`、`confusion_counts.csv`、`error_pairs.csv`、`unmatched_rates.csv`、`class_health.csv` 與 `confusion_summary.json`。`class_health.csv` 依 F1 由低到高排列，直接指出最有問題的鼓組，同時保留 confusion、missed、extra 比例。
+- 自動報告必須使用與逐 epoch validation 相同的 metadata、per-class windows、伴奏、gain、threshold、tolerance、architecture 與 feature mode；評估最佳 checkpoint，不得評估最後 epoch 冒充最佳結果。
+- 未提供 held-out `--validation-meta` 的 smoke/head-only run 不產生報告，也不得推斷鼓組品質。報告生成失敗時訓練任務必須失敗，避免留下 checkpoint 卻沒有診斷證據。
+
+### Phase D9 最終結果
+
+- confusion evaluator 已抽成共用函式；獨立 CLI 與 trainer 使用相同配對、比例與輸出邏輯，True SuperFlux/legacy diff 由本輪 feature mode 傳入。
+- trainer 在 validation 選出 best 後重新載入該 checkpoint，自動寫入 `<output-dir>/best_confusion/`，並在 `train_report.json.best_confusion_report` 記錄摘要絕對路徑。
+- 新增 `class_health.csv`，依 F1 由低到高列出 `f1/precision/recall/matched_confusion_percent/missed_percent/extra_percent`。D7 best 排名為 CRASH `0.1390`、TOM `0.3125`、RIDE `0.3600`、HH `0.5294`、KD `0.7046`、SD `0.7151`。
+- 一個隔離的 1-batch candidate 已驗證完整自動流程：best checkpoint、逐 epoch validation、`best_confusion` 六份輸出及 train report 路徑全部正常；該 smoke 只測流程，不作模型比較或 promotion。
+
+### Phase D10 安全版 Log-Mel + True SuperFlux + Frequency Mask 規格
+
+- 模型架構、2048 FFT、hop `256`、256 Mel、4 秒窗口與 batch `12` 全部不變；兩通道固定為 2048 FFT Log-Mel 與現有 True SuperFlux（lag `2`、frequency max-filter `3`）。不做 multi-resolution、不增加 CNN 分支。
+- 正式訓練前，先將 D7 best 不微調直接切換 True SuperFlux，在相同 STAR mixed validation 量測 zero-tune 六類 F1，記錄第二通道分布轉換的即時影響。
+- 新增預設關閉的 `--frequency-mask-max-bins`。D10 固定為 `12`：每個 train sample 隨機遮罩 `0–12` 個連續 Mel bins，兩通道使用相同遮罩，遮罩值為 z-score 後的 `0`；validation、confusion、inference 完全不套用。
+- 不使用 Time Mask，避免遮掉事件聲音卻保留 onset label。seed、D4D STAR+E-GMD schedule、Queen `0.10–0.30`、loss、LR、positive-weight cap、freeze BN、threshold 與 tolerance 均不變。
+- 從 D7 best epoch 2 繼續微調最多 `20` epochs，patience `5`；每 epoch 輸出六類 F1，best 自動生成 `best_confusion` 與 `class_health.csv`。
+- 晉級需 mixed Macro F1 嚴格高於 `0.4601`、任一類別相對 D7 不得下降超過 `0.03`、TOM/CRASH/RIDE 至少兩類提升，且 rare-class extra prediction 不得因召回交換而惡化。未通過不得跑 STAR test／固定五首或替換產品 checkpoint。
+
+### Phase D10 最終結果（完成並拒絕）
+
+| Epoch | KD | SD | HH | TOM | CRASH | RIDE | Macro | 創新高 |
+|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
+| 1 | 0.5558 | 0.6579 | 0.4916 | 0.2773 | 0.1524 | 0.2216 | 0.3928 | 是 |
+| 2 | 0.5815 | 0.6671 | 0.4986 | 0.2840 | 0.1373 | 0.2363 | 0.4008 | 是 |
+| 3 | 0.5902 | 0.6743 | 0.4949 | 0.2882 | 0.1300 | 0.2507 | 0.4047 | 是 |
+| 4 | 0.5885 | 0.6824 | 0.4973 | 0.2928 | 0.1546 | 0.2391 | 0.4091 | 是 |
+| 5 | 0.5998 | 0.6930 | 0.4950 | 0.2972 | 0.1744 | 0.2697 | 0.4215 | 是 |
+| 6 | 0.6015 | 0.7011 | 0.4973 | 0.3045 | 0.1579 | 0.2865 | 0.4248 | 是 |
+| 7 | 0.6014 | 0.7069 | 0.4964 | 0.3088 | 0.1531 | 0.3081 | 0.4291 | 是 |
+| 8 | 0.6104 | 0.7117 | 0.4932 | 0.3009 | 0.1463 | 0.3367 | 0.4332 | 是 |
+| 9 | 0.6118 | 0.7151 | 0.4928 | 0.3033 | 0.1364 | 0.3570 | 0.4361 | 是 |
+| 10 | 0.6172 | 0.7199 | 0.5018 | 0.3055 | 0.1478 | 0.3682 | 0.4434 | 是 |
+| 11 | 0.6114 | 0.7211 | 0.4942 | 0.3112 | 0.1461 | 0.3659 | 0.4417 | 否 |
+| 12 | 0.6072 | 0.7306 | 0.4942 | 0.3171 | 0.1538 | 0.3907 | 0.4489 | 是 |
+| 13 | 0.6171 | 0.7309 | 0.4928 | 0.3158 | 0.1747 | 0.3793 | 0.4518 | 是 |
+| 14 | 0.6078 | 0.7309 | 0.4986 | 0.3190 | 0.1787 | 0.3920 | 0.4545 | 是 |
+| 15 | 0.6137 | 0.7287 | 0.5046 | 0.3207 | 0.1570 | 0.3879 | 0.4521 | 否 |
+| 16 | 0.6202 | 0.7303 | 0.5069 | 0.3291 | 0.1645 | 0.3788 | 0.4550 | 是 |
+| 17 | 0.6190 | 0.7313 | 0.5064 | 0.3264 | 0.1660 | 0.3889 | 0.4563 | 是 |
+| 18 | 0.6263 | 0.7296 | 0.5135 | 0.3300 | 0.1652 | 0.3731 | 0.4563 | 否 |
+| 19 | 0.6210 | 0.7315 | 0.5009 | 0.3362 | 0.1606 | 0.3696 | 0.4533 | 否 |
+| 20 | 0.6309 | 0.7370 | 0.5129 | 0.3315 | 0.1613 | 0.3766 | 0.4584 | 是 |
+
+- 完成 20/20 epochs；因 epoch 20 仍創新高，patience `5` 未觸發屬正確行為。磁碟 best checkpoint 獨立 reload 完整重現六類與 Macro。
+- 相對 D7 best，SD/TOM/CRASH/RIDE 分別變化 `+0.0219/+0.0190/+0.0223/+0.0166`，但 KD/HH 變化 `-0.0737/-0.0165`；Macro `0.4584 < 0.4601` 且 KD 下降超過 `0.03`，promotion FAIL。
+- D10 class health 由差至好為 CRASH `0.1613`、TOM `0.3315`、RIDE `0.3766`、HH `0.5129`、KD `0.6309`、SD `0.7370`。CRASH/TOM extra prediction 為 `81.82%/77.11%`，RIDE missed 為 `46.05%`，仍不可商用。
+- 主要類別內誤配為 CRASH→SD `16.67%`、TOM→KD `13.38%`、RIDE→HH `12.07%`；True SuperFlux 對弱類有幫助，但不能直接取代原第二通道而犧牲 KD。未跑 raw STAR、STAR test 或固定五首，未替換產品 checkpoint。
+
+### Phase D11 True SuperFlux 單通道 Frequency Mask 規格
+
+- 唯一變因是將 D10 的同步雙通道 Frequency Mask 改為只遮 True SuperFlux 通道；2048 FFT Log-Mel 完全不遮罩，Mask 寬度仍為每個 train sample 隨機 `0–12` 個連續 Mel bins。
+- 從 D7 best epoch 2 重新開始，不沿用 D10 權重；D4D schedule、True SuperFlux、batch `12`、最多 `20` epochs、patience `5`、學習率、loss、Queen augmentation、threshold 與 tolerance 全部不變。不使用 Time Mask。
+- 新行為必須是 opt-in，D10 雙通道 Mask 與預設停用行為仍可重現；validation、confusion 與 inference 不套用任何 Mask。
+- 晉級需 mixed Macro F1 嚴格高於 D7 `0.4601`、KD 不低於 `0.6746`、TOM/CRASH/RIDE 至少兩類高於 D7，且 rare-class extra prediction 不得比 D10 惡化。未通過不得跑 raw STAR、STAR test、固定五首或替換產品 checkpoint。
+
 ## 15. V27 拍速拍號 Spelling Overrides 與時變 BPM 諧波 Aliasing 根因修復 (2026-07-16)
 
 ### 15.1 根因分析
@@ -1830,4 +1952,3 @@ stateDiagram-v2
 ### 15.3 驗收結果
 *   安全性回歸測試 `verify_current_solution.py` **100% 綠燈通過**，沒有發生任何 regression。
 *   端到端商業驗收五首歌曲的拍速與拍號判定（Counting Stars tempo/meter, Rosanna tempo/meter, Blue meter）**全數成功 PASS**。
-
