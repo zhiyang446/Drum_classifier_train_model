@@ -4,6 +4,15 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D10 安全版 Log-Mel + True SuperFlux + Frequency Mask（完成並拒絕）** (2026-07-17)
+    *   [x] 鎖定單一 2048 FFT、兩通道、batch 12；不做 multi-resolution 或 Time Mask。
+    *   [x] D7 best True SuperFlux zero-tune Macro `0.2201`；KD/TOM/CRASH 輸出近乎崩潰，確認存在嚴重特徵分布轉換。
+    *   [x] 新增 opt-in 同步 Frequency Mask `0–12` Mel bins，僅在 train batch 生效；預設 0 保持舊流程。
+    *   [x] self-check、語法、True SuperFlux test、1-batch 整合 smoke 與完整 regression 全部 PASS。
+    *   [x] 從 D7 best 完成 20 epochs；最佳 epoch 20 Macro `0.4584`，六類 `0.6309/0.7370/0.5129/0.3315/0.1613/0.3766`，獨立 reload 完整重現。
+    *   [x] 相對 D7，TOM/CRASH/RIDE 改善但 Macro `0.4584 < 0.4601`、KD 下降 `0.0737`；promotion FAIL，不跑 raw/test/固定五首、不替換產品模型。
+    *   [x] best confusion/class health 已生成；更新文件並 commit/push `codex` 供其他 AI 接力。
+
 *   [x] **Phase D9 每次微調自動產生鼓組問題報告（完成）** (2026-07-17)
     *   [x] 鎖定規則：僅有 held-out validation 的微調，在最佳 checkpoint 產生報告。
     *   [x] 抽出可重用 confusion evaluator，新增依 F1 排列的 `class_health.csv`。

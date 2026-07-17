@@ -761,3 +761,10 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 固定輸出 6×6 計數／比例、錯誤配對、unmatched 比例、完整 JSON，以及按 F1 由低到高的 `class_health.csv`；train report 保存摘要路徑。
 - D7 best 的問題排序已固定為 CRASH→TOM→RIDE→HH→KD→SD；隔離 1-batch smoke 證明自動流程完整可用，但 smoke 權重不作 promotion。
 - 沒有 validation metadata 的 run 不生成品質報告，避免用 train split 或 smoke 結果假裝 held-out 證據。
+
+## 2026-07-17 Phase D10 安全版 True SuperFlux + Frequency Mask（完成並拒絕）
+
+- D7 best 直接切換 True SuperFlux 的 zero-tune Macro 只有 `0.2201`，因此 D10 以相同 D4D schedule 從 D7 best 正式微調；2048 FFT Log-Mel + 2048 FFT True SuperFlux、batch 12、同步 frequency mask `0–12` bins 在 6GB VRAM 穩定完成。
+- 20/20 epochs 全部完成，epoch 20 最佳且獨立 reload 為 KD/SD/HH/TOM/CRASH/RIDE `0.6309/0.7370/0.5129/0.3315/0.1613/0.3766`，Macro `0.4584`。由於最終仍創新高，patience 5 未觸發是預期行為。
+- 相對 D7，TOM/CRASH/RIDE 均改善，但 Macro `0.4584 < 0.4601`，且 KD 從 `0.7046` 降至 `0.6309`（`-0.0737`），promotion FAIL。D7 繼續作為現有研究基線。
+- 自動報告顯示 CRASH/TOM extra prediction `81.82%/77.11%`、RIDE missed `46.05%`；主要誤配為 CRASH→SD `16.67%`、TOM→KD `13.38%`、RIDE→HH `12.07%`。候選不可商用，未跑 raw/test/固定五首、未碰 `test_real_audio`、未替換產品 checkpoint、未部署。

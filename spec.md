@@ -1870,3 +1870,42 @@ stateDiagram-v2
 - trainer 在 validation 選出 best 後重新載入該 checkpoint，自動寫入 `<output-dir>/best_confusion/`，並在 `train_report.json.best_confusion_report` 記錄摘要絕對路徑。
 - 新增 `class_health.csv`，依 F1 由低到高列出 `f1/precision/recall/matched_confusion_percent/missed_percent/extra_percent`。D7 best 排名為 CRASH `0.1390`、TOM `0.3125`、RIDE `0.3600`、HH `0.5294`、KD `0.7046`、SD `0.7151`。
 - 一個隔離的 1-batch candidate 已驗證完整自動流程：best checkpoint、逐 epoch validation、`best_confusion` 六份輸出及 train report 路徑全部正常；該 smoke 只測流程，不作模型比較或 promotion。
+
+### Phase D10 安全版 Log-Mel + True SuperFlux + Frequency Mask 規格
+
+- 模型架構、2048 FFT、hop `256`、256 Mel、4 秒窗口與 batch `12` 全部不變；兩通道固定為 2048 FFT Log-Mel 與現有 True SuperFlux（lag `2`、frequency max-filter `3`）。不做 multi-resolution、不增加 CNN 分支。
+- 正式訓練前，先將 D7 best 不微調直接切換 True SuperFlux，在相同 STAR mixed validation 量測 zero-tune 六類 F1，記錄第二通道分布轉換的即時影響。
+- 新增預設關閉的 `--frequency-mask-max-bins`。D10 固定為 `12`：每個 train sample 隨機遮罩 `0–12` 個連續 Mel bins，兩通道使用相同遮罩，遮罩值為 z-score 後的 `0`；validation、confusion、inference 完全不套用。
+- 不使用 Time Mask，避免遮掉事件聲音卻保留 onset label。seed、D4D STAR+E-GMD schedule、Queen `0.10–0.30`、loss、LR、positive-weight cap、freeze BN、threshold 與 tolerance 均不變。
+- 從 D7 best epoch 2 繼續微調最多 `20` epochs，patience `5`；每 epoch 輸出六類 F1，best 自動生成 `best_confusion` 與 `class_health.csv`。
+- 晉級需 mixed Macro F1 嚴格高於 `0.4601`、任一類別相對 D7 不得下降超過 `0.03`、TOM/CRASH/RIDE 至少兩類提升，且 rare-class extra prediction 不得因召回交換而惡化。未通過不得跑 STAR test／固定五首或替換產品 checkpoint。
+
+### Phase D10 最終結果（完成並拒絕）
+
+| Epoch | KD | SD | HH | TOM | CRASH | RIDE | Macro | 創新高 |
+|---:|---:|---:|---:|---:|---:|---:|---:|:---:|
+| 1 | 0.5558 | 0.6579 | 0.4916 | 0.2773 | 0.1524 | 0.2216 | 0.3928 | 是 |
+| 2 | 0.5815 | 0.6671 | 0.4986 | 0.2840 | 0.1373 | 0.2363 | 0.4008 | 是 |
+| 3 | 0.5902 | 0.6743 | 0.4949 | 0.2882 | 0.1300 | 0.2507 | 0.4047 | 是 |
+| 4 | 0.5885 | 0.6824 | 0.4973 | 0.2928 | 0.1546 | 0.2391 | 0.4091 | 是 |
+| 5 | 0.5998 | 0.6930 | 0.4950 | 0.2972 | 0.1744 | 0.2697 | 0.4215 | 是 |
+| 6 | 0.6015 | 0.7011 | 0.4973 | 0.3045 | 0.1579 | 0.2865 | 0.4248 | 是 |
+| 7 | 0.6014 | 0.7069 | 0.4964 | 0.3088 | 0.1531 | 0.3081 | 0.4291 | 是 |
+| 8 | 0.6104 | 0.7117 | 0.4932 | 0.3009 | 0.1463 | 0.3367 | 0.4332 | 是 |
+| 9 | 0.6118 | 0.7151 | 0.4928 | 0.3033 | 0.1364 | 0.3570 | 0.4361 | 是 |
+| 10 | 0.6172 | 0.7199 | 0.5018 | 0.3055 | 0.1478 | 0.3682 | 0.4434 | 是 |
+| 11 | 0.6114 | 0.7211 | 0.4942 | 0.3112 | 0.1461 | 0.3659 | 0.4417 | 否 |
+| 12 | 0.6072 | 0.7306 | 0.4942 | 0.3171 | 0.1538 | 0.3907 | 0.4489 | 是 |
+| 13 | 0.6171 | 0.7309 | 0.4928 | 0.3158 | 0.1747 | 0.3793 | 0.4518 | 是 |
+| 14 | 0.6078 | 0.7309 | 0.4986 | 0.3190 | 0.1787 | 0.3920 | 0.4545 | 是 |
+| 15 | 0.6137 | 0.7287 | 0.5046 | 0.3207 | 0.1570 | 0.3879 | 0.4521 | 否 |
+| 16 | 0.6202 | 0.7303 | 0.5069 | 0.3291 | 0.1645 | 0.3788 | 0.4550 | 是 |
+| 17 | 0.6190 | 0.7313 | 0.5064 | 0.3264 | 0.1660 | 0.3889 | 0.4563 | 是 |
+| 18 | 0.6263 | 0.7296 | 0.5135 | 0.3300 | 0.1652 | 0.3731 | 0.4563 | 否 |
+| 19 | 0.6210 | 0.7315 | 0.5009 | 0.3362 | 0.1606 | 0.3696 | 0.4533 | 否 |
+| 20 | 0.6309 | 0.7370 | 0.5129 | 0.3315 | 0.1613 | 0.3766 | 0.4584 | 是 |
+
+- 完成 20/20 epochs；因 epoch 20 仍創新高，patience `5` 未觸發屬正確行為。磁碟 best checkpoint 獨立 reload 完整重現六類與 Macro。
+- 相對 D7 best，SD/TOM/CRASH/RIDE 分別變化 `+0.0219/+0.0190/+0.0223/+0.0166`，但 KD/HH 變化 `-0.0737/-0.0165`；Macro `0.4584 < 0.4601` 且 KD 下降超過 `0.03`，promotion FAIL。
+- D10 class health 由差至好為 CRASH `0.1613`、TOM `0.3315`、RIDE `0.3766`、HH `0.5129`、KD `0.6309`、SD `0.7370`。CRASH/TOM extra prediction 為 `81.82%/77.11%`，RIDE missed 為 `46.05%`，仍不可商用。
+- 主要類別內誤配為 CRASH→SD `16.67%`、TOM→KD `13.38%`、RIDE→HH `12.07%`；True SuperFlux 對弱類有幫助，但不能直接取代原第二通道而犧牲 KD。未跑 raw STAR、STAR test 或固定五首，未替換產品 checkpoint。

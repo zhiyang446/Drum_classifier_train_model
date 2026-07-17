@@ -20,6 +20,21 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-17T22:40:00+08:00",
+  "pattern": "manual-d10-safe-true-superflux-specaugment",
+  "level": "human-approved",
+  "duration_s": 7200,
+  "items_found": 2,
+  "actions_taken": 5,
+  "escalations": 0,
+  "tokens_estimate": 30000,
+  "outcome": "rejected",
+  "notes": "Added opt-in synchronized 0-12-bin training-only frequency masking, completed 20 epochs with 2048 FFT Log-Mel plus True SuperFlux on 6GB VRAM, independently reproduced best macro F1 0.4584, and rejected D10 because it stayed below D7 0.4601 while KD fell by 0.0737. Product and fixed-five gates were untouched."
+}
+```
+
+```json
+{
   "run_id": "2026-07-17T03:40:00+08:00",
   "pattern": "manual-d7-d4d-earlystop20",
   "level": "human-approved",

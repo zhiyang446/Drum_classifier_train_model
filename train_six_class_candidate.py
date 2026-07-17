@@ -140,6 +140,20 @@ def gaussian_smooth_targets(targets):
     return torch.clamp(torch.cat(smoothed, dim=1).transpose(1, 2), 0.0, 1.0)
 
 
+def apply_frequency_mask(features, max_bins):
+    """中文註解：對每個 train sample 的兩通道套用相同連續 Mel 遮罩。"""
+    if max_bins <= 0:
+        return features
+    if features.ndim != 4 or max_bins > features.shape[2]:
+        raise ValueError('frequency mask requires [batch, channel, frequency, time] and max_bins <= frequency bins')
+    for sample in features:
+        width = int(np.random.randint(0, max_bins + 1))
+        if width:
+            start = int(np.random.randint(0, sample.shape[1] - width + 1))
+            sample[:, start:start + width, :] = 0.0
+    return features
+
+
 def balanced_positive_weight(event_count, window_count):
     """中文註解：以反比密度的平方根平衡稀有類別，避免線性權重造成假陽性爆增。"""
     return float(np.sqrt(CHUNK_FRAMES / max(event_count / window_count, 1e-6)))
@@ -220,6 +234,12 @@ def run_self_check():
     targets = torch.zeros(1, 8, len(LABELS))
     targets[0, 4, 5] = 1.0
     assert gaussian_smooth_targets(targets)[0, 4, 5].item() == 1.0
+    mask_input = np.ones((2, 2, 16, 4), dtype=np.float32)
+    np.random.seed(1337)
+    masked = apply_frequency_mask(mask_input, 12)
+    assert np.array_equal(masked[:, 0] == 0.0, masked[:, 1] == 0.0)
+    assert all(np.count_nonzero(sample[0, :, 0] == 0.0) <= 12 for sample in masked)
+    assert np.all(apply_frequency_mask(np.ones((1, 2, 4, 4), dtype=np.float32), 0) == 1.0)
     print('Self-check passed.')
 
 
@@ -310,6 +330,7 @@ def main():
     parser.add_argument('--validation-meta', help='每個 epoch 使用的 held-out STAR validation metadata')
     parser.add_argument('--validation-per-class', type=int, default=8)
     parser.add_argument('--early-stopping-patience', type=int, default=0, help='連續未刷新 validation Macro F1 的停止次數；0 表示停用')
+    parser.add_argument('--frequency-mask-max-bins', type=int, default=0, help='訓練期同步遮罩兩通道的最大連續 Mel bins；0 表示停用')
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
     args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
@@ -322,8 +343,8 @@ def main():
         parser.error('--meta is required unless --self-check is used')
     if args.per_class <= 0 or args.batch_size <= 0 or args.epochs <= 0 or args.log_every <= 0:
         parser.error('--per-class, --batch-size, --epochs, and --log-every must be positive')
-    if args.validation_per_class <= 0 or args.early_stopping_patience < 0:
-        parser.error('--validation-per-class must be positive and --early-stopping-patience cannot be negative')
+    if args.validation_per_class <= 0 or args.early_stopping_patience < 0 or args.frequency_mask_max_bins < 0:
+        parser.error('--validation-per-class must be positive; patience and frequency mask cannot be negative')
     if args.early_stopping_patience and not args.validation_meta:
         parser.error('--early-stopping-patience requires --validation-meta')
     if not 0.0 <= args.accompaniment_gain_min <= args.accompaniment_gain_max:
@@ -386,6 +407,7 @@ def main():
                 gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
                 use_true_superflux=args.feature_mode == 'true-superflux',
             )
+            feature = apply_frequency_mask(feature, args.frequency_mask_max_bins)
             x = torch.from_numpy(feature).float().to(device)
             onset_target = torch.from_numpy(onset).float().to(device)
             velocity_target = torch.from_numpy(velocity).float().to(device)
@@ -472,6 +494,8 @@ def main():
         'accompaniment_gain_range': [args.accompaniment_gain_min, args.accompaniment_gain_max],
         'architecture': args.architecture,
         'feature_mode': f'log_mel+{args.feature_mode.replace("-", "_")}',
+        'frequency_mask_max_bins': args.frequency_mask_max_bins,
+        'time_mask_max_frames': 0,
         'validation_meta': os.path.abspath(args.validation_meta) if args.validation_meta else None,
         'validation_per_class': args.validation_per_class if args.validation_meta else None,
         'early_stopping_patience': args.early_stopping_patience,
