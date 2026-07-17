@@ -1909,3 +1909,10 @@ stateDiagram-v2
 - 相對 D7 best，SD/TOM/CRASH/RIDE 分別變化 `+0.0219/+0.0190/+0.0223/+0.0166`，但 KD/HH 變化 `-0.0737/-0.0165`；Macro `0.4584 < 0.4601` 且 KD 下降超過 `0.03`，promotion FAIL。
 - D10 class health 由差至好為 CRASH `0.1613`、TOM `0.3315`、RIDE `0.3766`、HH `0.5129`、KD `0.6309`、SD `0.7370`。CRASH/TOM extra prediction 為 `81.82%/77.11%`，RIDE missed 為 `46.05%`，仍不可商用。
 - 主要類別內誤配為 CRASH→SD `16.67%`、TOM→KD `13.38%`、RIDE→HH `12.07%`；True SuperFlux 對弱類有幫助，但不能直接取代原第二通道而犧牲 KD。未跑 raw STAR、STAR test 或固定五首，未替換產品 checkpoint。
+
+### Phase D11 True SuperFlux 單通道 Frequency Mask 規格
+
+- 唯一變因是將 D10 的同步雙通道 Frequency Mask 改為只遮 True SuperFlux 通道；2048 FFT Log-Mel 完全不遮罩，Mask 寬度仍為每個 train sample 隨機 `0–12` 個連續 Mel bins。
+- 從 D7 best epoch 2 重新開始，不沿用 D10 權重；D4D schedule、True SuperFlux、batch `12`、最多 `20` epochs、patience `5`、學習率、loss、Queen augmentation、threshold 與 tolerance 全部不變。不使用 Time Mask。
+- 新行為必須是 opt-in，D10 雙通道 Mask 與預設停用行為仍可重現；validation、confusion 與 inference 不套用任何 Mask。
+- 晉級需 mixed Macro F1 嚴格高於 D7 `0.4601`、KD 不低於 `0.6746`、TOM/CRASH/RIDE 至少兩類高於 D7，且 rare-class extra prediction 不得比 D10 惡化。未通過不得跑 raw STAR、STAR test、固定五首或替換產品 checkpoint。

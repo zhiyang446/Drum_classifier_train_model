@@ -4,6 +4,14 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [ ] **Phase D11 True SuperFlux 單通道 Frequency Mask** (2026-07-17)
+    *   [x] 讀取 constraints、budget、規格、狀態並同步 `origin/codex`；確認人工授權且 kill switch 關閉。
+    *   [x] 鎖定唯一變因：Log-Mel 不遮罩，僅 True SuperFlux 使用 `0–12` Mel bins Frequency Mask；其餘沿用 D10。
+    *   [x] 實作 opt-in 單通道 Mask 與最小 self-check，保留 D10／預設行為。
+    *   [x] 語法、self-check、True SuperFlux test 與完整 regression PASS；Raw/Notation 5/5、hard 4/4、Round4 30/30 與 6/6。
+    *   [ ] 從 D7 best 訓練最多 20 epochs、patience 5，保存逐類 F1 與 best confusion 報告。
+    *   [ ] 比較 D7/D10 gate，更新文件並 commit/push `codex`。
+
 *   [x] **Phase D10 安全版 Log-Mel + True SuperFlux + Frequency Mask（完成並拒絕）** (2026-07-17)
     *   [x] 鎖定單一 2048 FFT、兩通道、batch 12；不做 multi-resolution 或 Time Mask。
     *   [x] D7 best True SuperFlux zero-tune Macro `0.2201`；KD/TOM/CRASH 輸出近乎崩潰，確認存在嚴重特徵分布轉換。

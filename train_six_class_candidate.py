@@ -140,8 +140,8 @@ def gaussian_smooth_targets(targets):
     return torch.clamp(torch.cat(smoothed, dim=1).transpose(1, 2), 0.0, 1.0)
 
 
-def apply_frequency_mask(features, max_bins):
-    """中文註解：對每個 train sample 的兩通道套用相同連續 Mel 遮罩。"""
+def apply_frequency_mask(features, max_bins, superflux_only=False):
+    """中文註解：對 train sample 套用連續 Mel 遮罩，可只增強 True SuperFlux 通道。"""
     if max_bins <= 0:
         return features
     if features.ndim != 4 or max_bins > features.shape[2]:
@@ -150,7 +150,8 @@ def apply_frequency_mask(features, max_bins):
         width = int(np.random.randint(0, max_bins + 1))
         if width:
             start = int(np.random.randint(0, sample.shape[1] - width + 1))
-            sample[:, start:start + width, :] = 0.0
+            channels = sample[1:2] if superflux_only else sample
+            channels[:, start:start + width, :] = 0.0
     return features
 
 
@@ -239,6 +240,10 @@ def run_self_check():
     masked = apply_frequency_mask(mask_input, 12)
     assert np.array_equal(masked[:, 0] == 0.0, masked[:, 1] == 0.0)
     assert all(np.count_nonzero(sample[0, :, 0] == 0.0) <= 12 for sample in masked)
+    np.random.seed(1337)
+    superflux_masked = apply_frequency_mask(np.ones((2, 2, 16, 4), dtype=np.float32), 12, superflux_only=True)
+    assert np.all(superflux_masked[:, 0] == 1.0)
+    assert np.any(superflux_masked[:, 1] == 0.0)
     assert np.all(apply_frequency_mask(np.ones((1, 2, 4, 4), dtype=np.float32), 0) == 1.0)
     print('Self-check passed.')
 
@@ -331,6 +336,7 @@ def main():
     parser.add_argument('--validation-per-class', type=int, default=8)
     parser.add_argument('--early-stopping-patience', type=int, default=0, help='連續未刷新 validation Macro F1 的停止次數；0 表示停用')
     parser.add_argument('--frequency-mask-max-bins', type=int, default=0, help='訓練期同步遮罩兩通道的最大連續 Mel bins；0 表示停用')
+    parser.add_argument('--frequency-mask-superflux-only', action='store_true', help='只遮 True SuperFlux，完整保留 Log-Mel')
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
     args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
@@ -347,6 +353,8 @@ def main():
         parser.error('--validation-per-class must be positive; patience and frequency mask cannot be negative')
     if args.early_stopping_patience and not args.validation_meta:
         parser.error('--early-stopping-patience requires --validation-meta')
+    if args.frequency_mask_superflux_only and (args.feature_mode != 'true-superflux' or args.frequency_mask_max_bins <= 0):
+        parser.error('--frequency-mask-superflux-only requires True SuperFlux and a positive mask width')
     if not 0.0 <= args.accompaniment_gain_min <= args.accompaniment_gain_max:
         parser.error('accompaniment gain range is invalid')
     torch.manual_seed(1337)
@@ -407,7 +415,10 @@ def main():
                 gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
                 use_true_superflux=args.feature_mode == 'true-superflux',
             )
-            feature = apply_frequency_mask(feature, args.frequency_mask_max_bins)
+            feature = apply_frequency_mask(
+                feature, args.frequency_mask_max_bins,
+                superflux_only=args.frequency_mask_superflux_only,
+            )
             x = torch.from_numpy(feature).float().to(device)
             onset_target = torch.from_numpy(onset).float().to(device)
             velocity_target = torch.from_numpy(velocity).float().to(device)
@@ -495,6 +506,10 @@ def main():
         'architecture': args.architecture,
         'feature_mode': f'log_mel+{args.feature_mode.replace("-", "_")}',
         'frequency_mask_max_bins': args.frequency_mask_max_bins,
+        'frequency_mask_scope': (
+            'true_superflux_only' if args.frequency_mask_superflux_only
+            else 'all_channels' if args.frequency_mask_max_bins else 'disabled'
+        ),
         'time_mask_max_frames': 0,
         'validation_meta': os.path.abspath(args.validation_meta) if args.validation_meta else None,
         'validation_per_class': args.validation_per_class if args.validation_meta else None,
