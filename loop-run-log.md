@@ -35,6 +35,21 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-17T04:10:00+08:00",
+  "pattern": "manual-d8-six-class-confusion",
+  "level": "human-approved",
+  "duration_s": 600,
+  "items_found": 1,
+  "actions_taken": 3,
+  "escalations": 0,
+  "tokens_estimate": 12000,
+  "outcome": "diagnostic-complete",
+  "notes": "Generated a row-normalized 6x6 confusion matrix for D7 best on the unchanged STAR mixed validation. Largest within-class confusions were CRASH-to-SD 20.00%, CRASH-to-HH 20.00%, RIDE-to-HH 16.28%, and TOM-to-KD 13.46%; rare-class extra prediction rates remained 61.28%-83.33%. No training or product changes."
+}
+```
+
+```json
+{
   "run_id": "2026-07-15T23:58:11+08:00",
   "pattern": "manual-d5b-mdbdrums-ingest",
   "level": "human-approved",

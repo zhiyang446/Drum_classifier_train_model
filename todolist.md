@@ -4,6 +4,12 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D8 D7-best 六類比例混淆矩陣（完成）** (2026-07-17)
+    *   [x] 讀取規格、狀態與限制，鎖定 D7 best、STAR mixed validation、50ms 一對一匹配。
+    *   [x] 新增最小可重現診斷：同類 TP 優先，再配對剩餘跨類事件。
+    *   [x] 輸出 row-normalized 6×6 比例、unmatched FN/FP 比例與最大錯誤類別配對。
+    *   [x] 語法與 self-check PASS；正式診斷對角 TP 與 D7 完全一致，完整 regression 亦 PASS，結果已更新至規格與狀態文件。
+
 *   [x] **Phase D7 D4D 最多 20 epochs 與 patience=5 Early Stopping（完成；無提升）** (2026-07-17)
     *   [x] 讀取 `todolist.md`、`spec.md`、`current_status.md`、`loop-constraints.md`，並確認本輪為使用者明確授權的手動訓練。
     *   [x] 鎖定 D4R epoch 10 起點、D4D 訓練配方、STAR mixed validation 與既有六類門檻，不使用 `test_real_audio`。

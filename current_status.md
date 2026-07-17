@@ -747,3 +747,10 @@ Older sections below describe previous failed attempts and are kept as history; 
 - D4D 原配方從 D4R epoch 10 重跑；epoch 1–7 Macro 為 `0.4587/0.4601/0.4586/0.4558/0.4539/0.4541/0.4541`，epoch 3–7 連續五次未改善，因此 epoch 7 early stop。
 - 最佳 epoch 2 reload 為 `0.7046/0.7151/0.5294/0.3125/0.1390/0.3600`，Macro `0.4601`，與舊 D4D 完全相同。延長相同資料與配方沒有提升，後期 HH/TOM/CRASH/RIDE 整體惡化。
 - 商業 gate 仍 FAIL；新 candidate 僅保留研究證據，未跑 STAR test／固定五首、未碰 `test_real_audio`、未替換產品 checkpoint、未部署。
+
+## 2026-07-17 Phase D8 六類比例混淆矩陣（完成）
+
+- D7 best 的 STAR mixed validation 已產生 row-normalized 6×6；列為真實、欄為預測，同類 TP 優先後再配對 50ms 內跨類事件。
+- 主要類別內混淆為 CRASH→SD `20.00%`、CRASH→HH `20.00%`、RIDE→HH `16.28%`、TOM→KD `13.46%`；按錯誤數量最多為 SD→KD `23`，其次 RIDE→HH、SD→HH、TOM→KD 各 `21`。
+- 更嚴重的是 unmatched：TOM/CRASH/RIDE extra prediction 為 `76.81%/83.33%/61.28%`，CRASH/RIDE missed 為 `42.62%/40.00%`。因此問題不只類別互相混淆，主要仍是 rare-class precision 與 recall 同時不足。
+- 本輪只新增診斷與全新 validation outputs；未訓練、未調 threshold、未碰產品 checkpoint 或固定五首。

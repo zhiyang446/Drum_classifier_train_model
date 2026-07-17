@@ -1841,3 +1841,18 @@ stateDiagram-v2
 - epoch 3–7 連續五次未嚴格超過 epoch 2 的 `0.4601`，因此在 epoch 7 正確觸發 early stopping；實際完成 7/20 epochs、4,704 batches。
 - 磁碟 best checkpoint reload 後逐類與 Macro F1 完整重現 epoch 2。相對舊 D4D 最佳沒有提升，證明單純延長相同資料與配方無效。
 - KD/SD 通過 `0.55`，HH `0.5294`、TOM `0.3125`、CRASH `0.1390`、RIDE `0.3600` 仍失敗；Macro `0.4601 < 0.70`。候選不可商用、不跑 STAR test 或固定五首、不替換產品 checkpoint。
+
+### Phase D8 六類比例混淆矩陣規格
+
+- 對象固定為 D7 best epoch 2、相同 STAR mixed validation 48 個窗口、threshold `0.50` 與 tolerance `50 ms`；不重訓、不調參、不讀 `test_real_audio`。
+- 產生 `6×6` 矩陣：列為真實 KD/SD/HH/TOM/CRASH/RIDE，欄為預測類別。先做同類一對一時間匹配，再將剩餘事件按最小時間差做跨類別一對一匹配，避免同時擊打破壞既有 TP。
+- 主矩陣以「該真實類別已匹配事件」為分母逐列正規化，每列總和 `100%`，用於回答類別混淆比例。另列每類漏檢率與各預測類多餘檢出率，避免 6×6 隱藏 unmatched FN/FP。
+- 錯誤配對只排行非對角元素，同時輸出該真實類別內比例與占全部跨類別錯誤比例。所有輸出寫入新的 D8 validation 目錄，不覆蓋既有結果。
+
+### Phase D8 最終結果
+
+- 48 個 STAR mixed validation 窗口共有 1,563 個時間上可匹配事件，其中 189 個為跨類別錯誤；row-normalized 6×6 每列四捨五入後約為 100%。
+- 對角計數為 KD/SD/HH/TOM/CRASH/RIDE `378/512/275/110/18/81`，與 D7 event gate TP 完全一致，證明診斷沒有改變原驗證定義。
+- 依錯誤數量排序前三為 SD→KD `23`（該類 matched 的 `4.09%`、全部類別混淆的 `12.17%`）、RIDE→HH `21`（`16.28%`、`11.11%`）、SD→HH `21`（`3.73%`、`11.11%`）；TOM→KD 同為 `21`（`13.46%`、`11.11%`）。
+- 依各真實類別內比例，最嚴重為 CRASH→SD `20.00%`、CRASH→HH `20.00%`、RIDE→HH `16.28%`、TOM→KD `13.46%`。
+- 6×6 只描述時間上可匹配事件，不能掩蓋主要商業問題：TOM/CRASH/RIDE 的 extra prediction 比例為 `76.81%/83.33%/61.28%`，CRASH/RIDE missed 比例為 `42.62%/40.00%`。主要根因仍是大量假陽性加上稀有類漏檢，不只是六類互相改名。
