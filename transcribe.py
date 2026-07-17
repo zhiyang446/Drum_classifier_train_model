@@ -1108,7 +1108,7 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
 
     return onset_decisions
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None, use_multi_log_mel=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     
@@ -1194,7 +1194,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     
     # 3. Model Inference on entire track
     print("Extracting custom hybrid 2-channel features for the entire track...")
-    features = extract_features(y, sr=sr, hop_length=hop_length, n_mels=n_mels)
+    features = extract_features(y, sr=sr, hop_length=hop_length, n_mels=n_mels, use_multi_log_mel=use_multi_log_mel)
     features_tensor = torch.from_numpy(features).float().unsqueeze(0).to(device)
     
     print("Running Sequence TCN Inference...")
@@ -3490,6 +3490,7 @@ def main():
     parser.add_argument('--adaptive-snare', action='store_true', help="Enable dynamic Snare thresholding")
     parser.add_argument('--floating-bpm', action='store_true', help="Enable dynamic time-varying BPM beat tracking and tempo mapping")
     parser.add_argument('--config', type=str, default=None, help="Path to custom post-processing config JSON file")
+    parser.add_argument('--use-multi-log-mel', action='store_true', help="Use multi-resolution Log-Mel feature extraction")
     
     args = parser.parse_args()
     
@@ -3573,7 +3574,8 @@ def main():
             model_rare_path=args.model_rare,
             adaptive_snare=args.adaptive_snare,
             floating_bpm=args.floating_bpm,
-            config_path=args.config
+            config_path=args.config,
+            use_multi_log_mel=args.use_multi_log_mel
         )
     else:
         print(f"[Batch Mode] Found {len(wav_files)} WAV files to process in parallel.")
@@ -3618,7 +3620,8 @@ def main():
                     model_rare_path=args.model_rare,
                     adaptive_snare=args.adaptive_snare,
                     floating_bpm=args.floating_bpm,
-                    config_path=args.config
+                    config_path=args.config,
+                    use_multi_log_mel=args.use_multi_log_mel
                 )
                 print(f"[Worker-{idx}] Finished {os.path.basename(wav_path)} -> {out_midi}")
                 return wav_path, True

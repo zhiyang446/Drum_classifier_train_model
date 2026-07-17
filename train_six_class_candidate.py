@@ -107,7 +107,7 @@ def freeze_for_head_training(model):
 
 def batch_from_schedule(
     schedule, metadata, start, batch_size, accompaniment_pool=None,
-    gain_range=(0.10, 0.30), use_true_superflux=False,
+    gain_range=(0.10, 0.30), use_true_superflux=False, use_multi_log_mel=False,
 ):
     """中文註解：依固定 schedule 建立一個不含測試資料的訓練 batch。"""
     features, onsets, velocities = [], [], []
@@ -124,6 +124,7 @@ def batch_from_schedule(
             item, row['anchor'], accompaniment=accompaniment,
             accompaniment_gain=gain, accompaniment_offset=offset,
             use_true_superflux=use_true_superflux,
+            use_multi_log_mel=use_multi_log_mel,
         )
         features.append(feature)
         onsets.append(onset)
@@ -160,8 +161,8 @@ def balanced_positive_weight(event_count, window_count):
     return float(np.sqrt(CHUNK_FRAMES / max(event_count / window_count, 1e-6)))
 
 
-def schedule_positive_weights(schedule, metadata):
-    """中文註解：依固定窗口內每類實際正事件密度計算平方根平衡 onset 權重。"""
+def schedule_positive_weights(schedule, metadata, class_balanced_beta=0.0, max_positive_weight=12.0):
+    """中文註解：依固定窗口內每類實際正事件密度計算平方根或 Class-Balanced BCE 平衡 onset 權重。"""
     counts = {label: 0 for label in LABELS}
     info_cache = {}
     for row in schedule:
@@ -179,7 +180,20 @@ def schedule_positive_weights(schedule, metadata):
             label = event.get('inst')
             if label in counts and start_sec <= float(event['time']) < end_sec:
                 counts[label] += 1
-    weights = {label: balanced_positive_weight(counts[label], len(schedule)) for label in LABELS}
+                
+    if class_balanced_beta > 0.0:
+        beta = min(max(class_balanced_beta, 0.0), 0.999999)
+        hh_count = max(counts.get('HH', 1), 1)
+        numerator = 1.0 - (beta ** hh_count)
+        weights = {}
+        for label in LABELS:
+            c = max(counts[label], 1)
+            denominator = 1.0 - (beta ** c)
+            scaled = (numerator / (denominator + 1e-12)) * 8.0
+            clipped = min(scaled, max_positive_weight)
+            weights[label] = float(clipped)
+    else:
+        weights = {label: balanced_positive_weight(counts[label], len(schedule)) for label in LABELS}
     return weights, counts
 
 
@@ -337,6 +351,8 @@ def main():
     parser.add_argument('--early-stopping-patience', type=int, default=0, help='連續未刷新 validation Macro F1 的停止次數；0 表示停用')
     parser.add_argument('--frequency-mask-max-bins', type=int, default=0, help='訓練期同步遮罩兩通道的最大連續 Mel bins；0 表示停用')
     parser.add_argument('--frequency-mask-superflux-only', action='store_true', help='只遮 True SuperFlux，完整保留 Log-Mel')
+    parser.add_argument('--class-balanced-beta', type=float, default=0.0, help='Class-Balanced BCE beta parameter (e.g. 0.9999)')
+    parser.add_argument('--use-multi-log-mel', action='store_true', help='Use multi-resolution Log-Mel feature extraction')
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
     args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
@@ -377,7 +393,11 @@ def main():
     with open(os.path.join(args.output_dir, 'train_schedule.json'), 'w', encoding='utf-8') as handle:
         json.dump(schedule, handle, indent=2)
     if args.schedule_balanced_weights:
-        class_weights, class_event_counts = schedule_positive_weights(schedule, metadata)
+        class_weights, class_event_counts = schedule_positive_weights(
+            schedule, metadata,
+            class_balanced_beta=args.class_balanced_beta,
+            max_positive_weight=args.max_positive_weight or 12.0
+        )
     else:
         class_weights = {label: args.positive_weight for label in LABELS}
         class_event_counts = None
@@ -414,6 +434,7 @@ def main():
                 accompaniment_pool=accompaniment_pool,
                 gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
                 use_true_superflux=args.feature_mode == 'true-superflux',
+                use_multi_log_mel=args.use_multi_log_mel,
             )
             feature = apply_frequency_mask(
                 feature, args.frequency_mask_max_bins,
@@ -457,6 +478,7 @@ def main():
                 per_class=args.validation_per_class, accompaniment=accompaniment_pool[0] if accompaniment_pool else None,
                 accompaniment_path=args.accompaniment, architecture=args.architecture,
                 feature_mode=args.feature_mode, device=device,
+                use_multi_log_mel=args.use_multi_log_mel,
             )
             class_f1 = {row['inst']: float(row['f1']) for row in rows}
             macro_f1 = float(gate['macro_f1'])
@@ -486,6 +508,7 @@ def main():
             accompaniment=accompaniment_pool[0] if accompaniment_pool else None,
             accompaniment_gain=0.17, per_class=args.validation_per_class,
             feature_mode=args.feature_mode, device=device,
+            use_multi_log_mel=args.use_multi_log_mel,
         )
         confusion_report = os.path.abspath(os.path.join(confusion_dir, 'confusion_summary.json'))
     report = {
@@ -506,6 +529,8 @@ def main():
         'architecture': args.architecture,
         'feature_mode': f'log_mel+{args.feature_mode.replace("-", "_")}',
         'frequency_mask_max_bins': args.frequency_mask_max_bins,
+        'class_balanced_beta': args.class_balanced_beta,
+        'use_multi_log_mel': args.use_multi_log_mel,
         'frequency_mask_scope': (
             'true_superflux_only' if args.frequency_mask_superflux_only
             else 'all_channels' if args.frequency_mask_max_bins else 'disabled'

@@ -4,6 +4,13 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [/] **Phase D12-B Class-Balanced BCE 梯度平衡優化** (2026-07-18)
+    *   [x] 實作 `dsp_utils.py` 多解析度 Log-Mel 特徵（預設關閉以控制變因）。
+    *   [x] 實作 `train_six_class_candidate.py` 的動態 Class-Balanced BCE 權重計算與 Clip 限制。
+    *   [x] 語法、自檢 `train_six_class_candidate.py --self-check` 與 100% 完璧 regression 測試全數 PASS。
+    *   [/] 啟動 D12-B 僅 Class-Balanced BCE 的背景訓練，設定 `--class-balanced-beta 0.9999` (正在背景進行中)。
+    *   [ ] 評估 D12-B 最佳 epoch 的 class_health 報告，檢視大鼓 KD 性能是否修復。
+
 *   [x] **Phase D11 True SuperFlux 單通道 Frequency Mask（完成並拒絕）** (2026-07-17)
     *   [x] 讀取 constraints、budget、規格、狀態並同步 `origin/codex`；確認人工授權且 kill switch 關閉。
     *   [x] 鎖定唯一變因：Log-Mel 不遮罩，僅 True SuperFlux 使用 `0–12` Mel bins Frequency Mask；其餘沿用 D10。
