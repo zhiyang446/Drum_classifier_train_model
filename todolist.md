@@ -4,6 +4,13 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D9 每次微調自動產生鼓組問題報告（完成）** (2026-07-17)
+    *   [x] 鎖定規則：僅有 held-out validation 的微調，在最佳 checkpoint 產生報告。
+    *   [x] 抽出可重用 confusion evaluator，新增依 F1 排列的 `class_health.csv`。
+    *   [x] trainer 自動生成 `best_confusion/` 並把路徑記入 `train_report.json`。
+    *   [x] 以 D7 best 重建 `class_health.csv`，並以隔離 1-batch candidate 驗證 trainer 自動產生完整報告。
+    *   [x] 完整 regression PASS；Raw/Notation 5/5、hard 4/4、Round4 30/30 與 6/6，文件與 D9 交付內容已完成。
+
 *   [x] **Phase D8 D7-best 六類比例混淆矩陣（完成）** (2026-07-17)
     *   [x] 讀取規格、狀態與限制，鎖定 D7 best、STAR mixed validation、50ms 一對一匹配。
     *   [x] 新增最小可重現診斷：同類 TP 優先，再配對剩餘跨類事件。

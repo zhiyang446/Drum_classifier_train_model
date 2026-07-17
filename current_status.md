@@ -754,3 +754,10 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 主要類別內混淆為 CRASH→SD `20.00%`、CRASH→HH `20.00%`、RIDE→HH `16.28%`、TOM→KD `13.46%`；按錯誤數量最多為 SD→KD `23`，其次 RIDE→HH、SD→HH、TOM→KD 各 `21`。
 - 更嚴重的是 unmatched：TOM/CRASH/RIDE extra prediction 為 `76.81%/83.33%/61.28%`，CRASH/RIDE missed 為 `42.62%/40.00%`。因此問題不只類別互相混淆，主要仍是 rare-class precision 與 recall 同時不足。
 - 本輪只新增診斷與全新 validation outputs；未訓練、未調 threshold、未碰產品 checkpoint 或固定五首。
+
+## 2026-07-17 Phase D9 每次微調自動報告（完成）
+
+- 六類 trainer 只要收到 held-out `--validation-meta`，就會在訓練／early stopping 後重新載入本輪 best checkpoint，自動生成 `<candidate>/best_confusion/`。
+- 固定輸出 6×6 計數／比例、錯誤配對、unmatched 比例、完整 JSON，以及按 F1 由低到高的 `class_health.csv`；train report 保存摘要路徑。
+- D7 best 的問題排序已固定為 CRASH→TOM→RIDE→HH→KD→SD；隔離 1-batch smoke 證明自動流程完整可用，但 smoke 權重不作 promotion。
+- 沒有 validation metadata 的 run 不生成品質報告，避免用 train split 或 smoke 結果假裝 held-out 證據。

@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from model_dcnn import DCNNDrumTCN, ResidualDCNNDrumTCN, transfer_residual_state, transfer_symmetric_state
 from model_conformer import ResidualDCNNDrumConformer, ResidualDCNNDrumHybridConformer, transfer_d3r_hybrid_state, transfer_d3r_state
 from run_six_class_smoke import CHUNK_FRAMES, LABELS, SR, TARGET_SAMPLES, build_window, load_accompaniment, load_compatible_weights
+from run_six_class_confusion import evaluate_confusion
 from run_six_class_validation import evaluate_model
 from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
@@ -443,6 +444,17 @@ def main():
     candidate_path = os.path.join(args.output_dir, args.candidate_name)
     if validation_metadata is None:
         torch.save(model.state_dict(), candidate_path)
+    confusion_report = None
+    if validation_metadata is not None:
+        model.load_state_dict(torch.load(candidate_path, map_location=device, weights_only=False))
+        confusion_dir = os.path.join(args.output_dir, 'best_confusion')
+        evaluate_confusion(
+            model, validation_metadata, confusion_dir,
+            accompaniment=accompaniment_pool[0] if accompaniment_pool else None,
+            accompaniment_gain=0.17, per_class=args.validation_per_class,
+            feature_mode=args.feature_mode, device=device,
+        )
+        confusion_report = os.path.abspath(os.path.join(confusion_dir, 'confusion_summary.json'))
     report = {
         'status': 'pass', 'labels': LABELS, 'schedule_windows': len(schedule),
         'per_class': args.per_class, 'batch_size': args.batch_size, 'epochs': args.epochs,
@@ -465,6 +477,7 @@ def main():
         'early_stopping_patience': args.early_stopping_patience,
         'early_stopped': early_stopped, 'best_epoch': best_epoch, 'best_macro_f1': best_macro_f1 if best_epoch else None,
         'validation_history': validation_history,
+        'best_confusion_report': confusion_report,
         'transferred_compatible_tensors': transferred, 'candidate': os.path.abspath(candidate_path),
     }
     with open(os.path.join(args.output_dir, 'train_report.json'), 'w', encoding='utf-8') as handle:

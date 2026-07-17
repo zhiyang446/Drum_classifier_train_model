@@ -1856,3 +1856,17 @@ stateDiagram-v2
 - 依錯誤數量排序前三為 SD→KD `23`（該類 matched 的 `4.09%`、全部類別混淆的 `12.17%`）、RIDE→HH `21`（`16.28%`、`11.11%`）、SD→HH `21`（`3.73%`、`11.11%`）；TOM→KD 同為 `21`（`13.46%`、`11.11%`）。
 - 依各真實類別內比例，最嚴重為 CRASH→SD `20.00%`、CRASH→HH `20.00%`、RIDE→HH `16.28%`、TOM→KD `13.46%`。
 - 6×6 只描述時間上可匹配事件，不能掩蓋主要商業問題：TOM/CRASH/RIDE 的 extra prediction 比例為 `76.81%/83.33%/61.28%`，CRASH/RIDE missed 比例為 `42.62%/40.00%`。主要根因仍是大量假陽性加上稀有類漏檢，不只是六類互相改名。
+
+### Phase D9 每次微調自動產生鼓組問題報告規格
+
+- `train_six_class_candidate.py` 只要提供 `--validation-meta`，訓練結束或 early stopping 後必須重新載入本輪最佳 checkpoint，自動在 candidate 目錄的 `best_confusion/` 產生 D8 同格式報告。
+- 固定輸出：`confusion_row_percent.csv`、`confusion_counts.csv`、`error_pairs.csv`、`unmatched_rates.csv`、`class_health.csv` 與 `confusion_summary.json`。`class_health.csv` 依 F1 由低到高排列，直接指出最有問題的鼓組，同時保留 confusion、missed、extra 比例。
+- 自動報告必須使用與逐 epoch validation 相同的 metadata、per-class windows、伴奏、gain、threshold、tolerance、architecture 與 feature mode；評估最佳 checkpoint，不得評估最後 epoch 冒充最佳結果。
+- 未提供 held-out `--validation-meta` 的 smoke/head-only run 不產生報告，也不得推斷鼓組品質。報告生成失敗時訓練任務必須失敗，避免留下 checkpoint 卻沒有診斷證據。
+
+### Phase D9 最終結果
+
+- confusion evaluator 已抽成共用函式；獨立 CLI 與 trainer 使用相同配對、比例與輸出邏輯，True SuperFlux/legacy diff 由本輪 feature mode 傳入。
+- trainer 在 validation 選出 best 後重新載入該 checkpoint，自動寫入 `<output-dir>/best_confusion/`，並在 `train_report.json.best_confusion_report` 記錄摘要絕對路徑。
+- 新增 `class_health.csv`，依 F1 由低到高列出 `f1/precision/recall/matched_confusion_percent/missed_percent/extra_percent`。D7 best 排名為 CRASH `0.1390`、TOM `0.3125`、RIDE `0.3600`、HH `0.5294`、KD `0.7046`、SD `0.7151`。
+- 一個隔離的 1-batch candidate 已驗證完整自動流程：best checkpoint、逐 epoch validation、`best_confusion` 六份輸出及 train report 路徑全部正常；該 smoke 只測流程，不作模型比較或 promotion。

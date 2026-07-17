@@ -50,6 +50,21 @@ Append one entry per loop run. Keep entries concise.
 
 ```json
 {
+  "run_id": "2026-07-17T04:35:00+08:00",
+  "pattern": "manual-d9-auto-confusion-report",
+  "level": "human-approved",
+  "duration_s": 900,
+  "items_found": 1,
+  "actions_taken": 4,
+  "escalations": 0,
+  "tokens_estimate": 16000,
+  "outcome": "implemented",
+  "notes": "Integrated best-checkpoint confusion reporting into every six-class fine-tune with held-out validation. Added F1-sorted class_health.csv and verified the full path with an isolated one-batch candidate. Runs without validation metadata do not claim a quality report."
+}
+```
+
+```json
+{
   "run_id": "2026-07-15T23:58:11+08:00",
   "pattern": "manual-d5b-mdbdrums-ingest",
   "level": "human-approved",

@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import os
+import tempfile
 
 import numpy as np
 import torch
@@ -114,11 +115,29 @@ def write_outputs(matrix, expected_totals, predicted_totals, missed, extra, outp
         writer = csv.DictWriter(handle, fieldnames=list(unmatched[0].keys()))
         writer.writeheader()
         writer.writerows(unmatched)
+
+    class_health = []
+    for index, label in enumerate(LABELS):
+        tp = int(matrix[index, index])
+        precision = tp / predicted_totals[label] if predicted_totals[label] else 0.0
+        recall = tp / expected_totals[label] if expected_totals[label] else 0.0
+        f1 = 2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
+        class_health.append({
+            'class': label, 'f1': round(f1, 4), 'precision': round(precision, 4), 'recall': round(recall, 4),
+            'matched_confusion_percent': round(100.0 * (row_totals[index] - tp) / row_totals[index], 2) if row_totals[index] else 0.0,
+            'missed_percent': next(row['missed_percent'] for row in unmatched if row['class'] == label),
+            'extra_percent': next(row['extra_percent'] for row in unmatched if row['class'] == label),
+        })
+    class_health.sort(key=lambda row: (row['f1'], row['class']))
+    with open(os.path.join(output_dir, 'class_health.csv'), 'w', newline='', encoding='utf-8') as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(class_health[0].keys()))
+        writer.writeheader()
+        writer.writerows(class_health)
     summary = {
         'labels': list(LABELS), 'normalization': 'row_percent_among_temporally_matched_events',
         'tolerance_seconds': TOLERANCE, 'total_temporally_matched': int(matrix.sum()),
         'total_class_confusions': total_confusions, 'matrix_row_percent': percentages.round(2).tolist(),
-        'error_pairs': pairs, 'unmatched': unmatched,
+        'error_pairs': pairs, 'unmatched': unmatched, 'class_health': class_health,
     }
     with open(os.path.join(output_dir, 'confusion_summary.json'), 'w', encoding='utf-8') as handle:
         json.dump(summary, handle, indent=2)
@@ -135,7 +154,46 @@ def run_self_check():
     assert matrix[LABELS.index('KD'), LABELS.index('KD')] == 1
     assert matrix[LABELS.index('SD'), LABELS.index('HH')] == 1
     assert missed['RIDE'] == 1 and extra['CRASH'] == 1
+    expected_totals = {label: len(expected[label]) for label in LABELS}
+    predicted_totals = {label: len(predicted[label]) for label in LABELS}
+    with tempfile.TemporaryDirectory() as output_dir:
+        summary = write_outputs(matrix, expected_totals, predicted_totals, missed, extra, output_dir)
+        kd = next(row for row in summary['class_health'] if row['class'] == 'KD')
+        assert kd['f1'] == 1.0 and os.path.exists(os.path.join(output_dir, 'class_health.csv'))
     print('Self-check passed.')
+
+
+def evaluate_confusion(
+    model, metadata, output_dir, accompaniment=None, accompaniment_gain=0.17,
+    per_class=8, feature_mode='legacy-diff', device=None,
+):
+    """中文註解：以已載入的最佳模型產生完整六類問題報告。"""
+    device = device or next(model.parameters()).device
+    model.eval()
+    matrix = np.zeros((len(LABELS), len(LABELS)), dtype=np.int64)
+    expected_totals = {label: 0 for label in LABELS}
+    predicted_totals = {label: 0 for label in LABELS}
+    missed = {label: 0 for label in LABELS}
+    extra = {label: 0 for label in LABELS}
+    for window_index, selected in enumerate(select_windows(metadata, 'validation', per_class)):
+        features, _, _, start_sec = build_window(
+            selected['item'], selected['anchor'], accompaniment=accompaniment,
+            accompaniment_gain=accompaniment_gain,
+            accompaniment_offset=window_index * TARGET_SAMPLES,
+            use_true_superflux=feature_mode == 'true-superflux',
+        )
+        with torch.no_grad():
+            logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
+        predicted = local_maxima(torch.sigmoid(logits).squeeze(0).cpu().numpy())
+        expected = expected_events(selected['item'], start_sec)
+        window_matrix, window_missed, window_extra = match_window(expected, predicted)
+        matrix += window_matrix
+        for label in LABELS:
+            expected_totals[label] += len(expected[label])
+            predicted_totals[label] += len(predicted[label])
+            missed[label] += window_missed[label]
+            extra[label] += window_extra[label]
+    return write_outputs(matrix, expected_totals, predicted_totals, missed, extra, output_dir)
 
 
 def main():
@@ -160,31 +218,11 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = ResidualDCNNDrumHybridConformer(num_classes=len(LABELS)).to(device)
     load_hybrid_conformer_checkpoint(model, args.model, device)
-    model.eval()
     accompaniment = load_accompaniment(args.accompaniment) if args.accompaniment else None
-    matrix = np.zeros((len(LABELS), len(LABELS)), dtype=np.int64)
-    expected_totals = {label: 0 for label in LABELS}
-    predicted_totals = {label: 0 for label in LABELS}
-    missed = {label: 0 for label in LABELS}
-    extra = {label: 0 for label in LABELS}
-    for window_index, selected in enumerate(select_windows(metadata, 'validation', args.per_class)):
-        features, _, _, start_sec = build_window(
-            selected['item'], selected['anchor'], accompaniment=accompaniment,
-            accompaniment_gain=args.accompaniment_gain,
-            accompaniment_offset=window_index * TARGET_SAMPLES,
-        )
-        with torch.no_grad():
-            logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
-        predicted = local_maxima(torch.sigmoid(logits).squeeze(0).cpu().numpy())
-        expected = expected_events(selected['item'], start_sec)
-        window_matrix, window_missed, window_extra = match_window(expected, predicted)
-        matrix += window_matrix
-        for label in LABELS:
-            expected_totals[label] += len(expected[label])
-            predicted_totals[label] += len(predicted[label])
-            missed[label] += window_missed[label]
-            extra[label] += window_extra[label]
-    summary = write_outputs(matrix, expected_totals, predicted_totals, missed, extra, args.output_dir)
+    summary = evaluate_confusion(
+        model, metadata, args.output_dir, accompaniment=accompaniment,
+        accompaniment_gain=args.accompaniment_gain, per_class=args.per_class, device=device,
+    )
     print(json.dumps(summary, indent=2))
 
 
