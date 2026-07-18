@@ -4,6 +4,11 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D14 合併後檔名特判死碼清理（完成）** (2026-07-18)
+    *   [x] 已確認特判旗標固定為 `False`，無 caller 需要保留。
+    *   [x] 已刪除檔名旗標與不可到達分支，回復純泛用 tempo/grid 流程。
+    *   [x] 完整 `verify_current_solution.py` PASS：blind Raw/Notation 5/5、hard 4/4、Round 4 30/30 與 6/6。
+
 *   [x] **Phase D13 D7 後處理優化與五類合併閾值尋優（完成並晉級）** (2026-07-18)
     *   [x] 修改 `transcribe.py` 與 `run_blind_test.py`、`run_egmd_round4_validation.py`，打通 TOM/CRASH/RIDE 的 6 類解碼閾值與動態架構傳參。
     *   [x] 實作 `search_thresholds.py` 進行逐類別座標上升尋優，並執行 7 組單類別消融實驗 (A0-A6)，定位出 KD 閾值拉高為唯一退步源。

@@ -1477,15 +1477,9 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     # onset_times_tempo = np.array(merged_times_tempo)
     # onset_frames_tempo = merged_frames_tempo
     
-    # Detect specific commercial gate validation tracks from filename to apply spelling corrections
-    # [Removal Notice] Hand-tuned commercial gates are permanently disabled/removed to enforce generalizability.
-    is_counting_stars = False
-    is_rosanna = False
-    is_blue = False
-
     # Estimate tempo and grid adaptively if not specified
     if tempo is None:
-        tempo_max = 300.0 if is_rosanna else 220.0
+        tempo_max = 220.0
 
         try:
             raw_estimated_tempo = librosa.feature.tempo(y=y, sr=sr, hop_length=hop_length)[0]
@@ -1560,8 +1554,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             best_cand_init = min(candidates, key=lambda x: x['dev_sec'])
             t_best = best_cand_init['tempo']
             
-            # Filter candidates within tolerance of the minimum
-            tolerance_sec = 0.015 if is_counting_stars else 0.005
+            # Filter candidates within a 5ms tolerance of the minimum.
+            tolerance_sec = 0.005
             qualified = [c for c in candidates if c['dev_sec'] <= min_dev + tolerance_sec]
             
             # Explicitly qualify subharmonics of the best candidate if they align well musically (< 0.020s dev)
@@ -1639,22 +1633,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             
         estimated_tempo = best_tempo
         detected_grid = best_grid
-        if is_counting_stars:
-            estimated_tempo = 120.0
-            auto_detected_ts = '4/4'
-            detected_grid = '16th'
-            print("[Spelling Override] Forced Counting Stars to 120.0 BPM 4/4 16th.")
-        elif is_rosanna:
-            estimated_tempo = 258.0
-            auto_detected_ts = '12/8'
-            detected_grid = 'triplet'
-            print("[Spelling Override] Forced Rosanna to 258.0 BPM 12/8 triplet.")
-        elif is_blue:
-            estimated_tempo = 97.5
-            auto_detected_ts = '6/8'
-            detected_grid = 'triplet'
-            print("[Spelling Override] Forced Blue to 97.5 BPM 6/8 triplet.")
-        elif 115.0 <= estimated_tempo <= 125.0 and auto_detected_ts == '12/8' and len(hh_peaks_tempo) >= 48:
+        if 115.0 <= estimated_tempo <= 125.0 and auto_detected_ts == '12/8' and len(hh_peaks_tempo) >= 48:
             estimated_tempo = estimated_tempo / 2.0
             detected_grid = '16th'
             auto_detected_ts = '4/4'
@@ -1862,10 +1841,6 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     elif detected_grid == 'triplet' and detected_ts == '12/8' and 85.0 <= estimated_tempo <= 95.0:
         detected_ts = '4/4'
         print("[Shuffle Detect] Keeping selected triplet tempo and spelling as 4/4 shuffle.")
-        
-    if detected_ts == '12/8' and is_blue:
-        detected_ts = '6/8'
-        print(f"[Tempo Spelling] Rewriting 12/8 compound meter to 6/8 for Blue. (estimated_tempo={estimated_tempo:.2f})")
         
     try:
         ts_parts = detected_ts.split('/')

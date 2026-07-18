@@ -794,3 +794,8 @@ Older sections below describe previous failed attempts and are kept as history; 
 - 20/20 epochs 全部完成，epoch 20 最佳且獨立 reload 為 KD/SD/HH/TOM/CRASH/RIDE `0.6309/0.7370/0.5129/0.3315/0.1613/0.3766`，Macro `0.4584`。由於最終仍創新高，patience 5 未觸發是預期行為。
 - 相對 D7，TOM/CRASH/RIDE 均改善，但 Macro `0.4584 < 0.4601`，且 KD 從 `0.7046` 降至 `0.6309`（`-0.0737`），promotion FAIL。D7 繼續作為現有研究基線。
 - 自動報告顯示 CRASH/TOM extra prediction `81.82%/77.11%`、RIDE missed `46.05%`；主要誤配為 CRASH→SD `16.67%`、TOM→KD `13.38%`、RIDE→HH `12.07%`。候選不可商用，未跑 raw/test/固定五首、未碰 `test_real_audio`、未替換產品 checkpoint、未部署。
+## 2026-07-18 Phase D14 合併後檔名特判死碼清理（完成）
+
+- 已移除 Counting Stars、Rosanna、Blue 的檔名旗標與所有不可到達分支，僅保留泛用 tempo/grid 推論。
+- 本輪未訓練，亦未改 checkpoint、A_opt 閾值、資料或 gate。
+- 完整 `verify_current_solution.py` 已通過：blind Raw/Notation 5/5、hard 4/4、Round 4 30/30 與 6/6。
