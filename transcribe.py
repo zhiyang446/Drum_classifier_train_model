@@ -1108,7 +1108,7 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
 
     return onset_decisions
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None, use_multi_log_mel=False):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, thresh_tom=None, thresh_crash=None, thresh_ride=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None, use_multi_log_mel=False, architecture='symmetric'):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     
@@ -1161,6 +1161,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         n_classes = 3
         if 'onset_head.weight' in checkpoint:
             n_classes = checkpoint['onset_head.weight'].shape[0]
+        if architecture != 'symmetric':
+            from train_six_class_candidate import create_model
+            net, _ = create_model(architecture, ckpt_path, device)
+            net.eval()
+            return net, n_classes
         net = SymmetricDrumTCN(num_classes=n_classes).to(device)
         if 'backbone.legacy_slot_proj.weight' in checkpoint:
             net.backbone.use_legacy_proj = True
@@ -1293,7 +1298,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         thresholds[0] = t_k
         thresholds[1] = t_s
         thresholds[2] = t_h
-        for c in range(3, num_classes):
+        thresholds[3] = thresh_tom if (num_classes > 3 and thresh_tom is not None) else (calibrated_thresholds[3] if num_classes > 3 else 0.50)
+        thresholds[4] = thresh_crash if (num_classes > 4 and thresh_crash is not None) else (calibrated_thresholds[4] if num_classes > 4 else 0.50)
+        thresholds[5] = thresh_ride if (num_classes > 5 and thresh_ride is not None) else (calibrated_thresholds[5] if num_classes > 5 else 0.50)
+        for c in range(6, num_classes):
             thresholds[c] = calibrated_thresholds[c]
         
     # Calculate local RMS energy for adaptive dynamic thresholding
@@ -3474,6 +3482,9 @@ def main():
     parser.add_argument('--thresh-kick', type=float, default=None, help="Confidence threshold for Kick drum (default: None/auto-calibrate)")
     parser.add_argument('--thresh-snare', type=float, default=None, help="Confidence threshold for Snare drum (default: None/auto-calibrate)")
     parser.add_argument('--thresh-hihat', type=float, default=None, help="Confidence threshold for Hi-Hat (default: None/auto-calibrate)")
+    parser.add_argument('--thresh-tom', type=float, default=None, help="Confidence threshold for TOM drum (default: None/auto-calibrate)")
+    parser.add_argument('--thresh-crash', type=float, default=None, help="Confidence threshold for CRASH drum (default: None/auto-calibrate)")
+    parser.add_argument('--thresh-ride', type=float, default=None, help="Confidence threshold for RIDE drum (default: None/auto-calibrate)")
     parser.add_argument('--tempo', type=float, default=None, help="Tempo of the track in BPM. Auto-estimated if not provided.")
     parser.add_argument('--grid', type=str, choices=['auto', '16th', 'triplet', 'none'], default='auto',
                         help="Quantization grid style. 'auto' (default) detects style automatically. '16th' forces straight 16th, 'triplet' forces triplet grid, and 'none' disables quantization.")
@@ -3491,6 +3502,7 @@ def main():
     parser.add_argument('--floating-bpm', action='store_true', help="Enable dynamic time-varying BPM beat tracking and tempo mapping")
     parser.add_argument('--config', type=str, default=None, help="Path to custom post-processing config JSON file")
     parser.add_argument('--use-multi-log-mel', action='store_true', help="Use multi-resolution Log-Mel feature extraction")
+    parser.add_argument('--architecture', type=str, default='symmetric', help="Model architecture (default: symmetric)")
     
     args = parser.parse_args()
     
@@ -3560,6 +3572,9 @@ def main():
             thresh_kick=args.thresh_kick,
             thresh_snare=args.thresh_snare,
             thresh_hihat=args.thresh_hihat,
+            thresh_tom=args.thresh_tom,
+            thresh_crash=args.thresh_crash,
+            thresh_ride=args.thresh_ride,
             threshold=args.threshold,
             tempo=args.tempo,
             grid=grid_mode,
@@ -3575,7 +3590,8 @@ def main():
             adaptive_snare=args.adaptive_snare,
             floating_bpm=args.floating_bpm,
             config_path=args.config,
-            use_multi_log_mel=args.use_multi_log_mel
+            use_multi_log_mel=args.use_multi_log_mel,
+            architecture=args.architecture
         )
     else:
         print(f"[Batch Mode] Found {len(wav_files)} WAV files to process in parallel.")
@@ -3606,6 +3622,9 @@ def main():
                     thresh_kick=args.thresh_kick,
                     thresh_snare=args.thresh_snare,
                     thresh_hihat=args.thresh_hihat,
+                    thresh_tom=args.thresh_tom,
+                    thresh_crash=args.thresh_crash,
+                    thresh_ride=args.thresh_ride,
                     threshold=args.threshold,
                     tempo=args.tempo,
                     grid=grid_mode,
@@ -3621,7 +3640,8 @@ def main():
                     adaptive_snare=args.adaptive_snare,
                     floating_bpm=args.floating_bpm,
                     config_path=args.config,
-                    use_multi_log_mel=args.use_multi_log_mel
+                    use_multi_log_mel=args.use_multi_log_mel,
+                    architecture=args.architecture
                 )
                 print(f"[Worker-{idx}] Finished {os.path.basename(wav_path)} -> {out_midi}")
                 return wav_path, True

@@ -4,6 +4,11 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D13 D7 後處理優化與 Per-class 閾值尋優（完成並拒絕）** (2026-07-18)
+    *   [x] 修改 `transcribe.py` 與 `run_blind_test.py`、`run_egmd_round4_validation.py`，打通 TOM/CRASH/RIDE 的 6 類解碼閾值傳參。
+    *   [x] 實作 `search_thresholds.py` 逐類別座標上升尋優，取得最優閾值 (KD/SD/HH/TOM=0.60, CRASH=0.45, RIDE=0.55)。
+    *   [x] 在 Blind User Tests 與 Round 4 實體歌曲上完成雙重對照驗證，因大鼓和踩镲的漏檢導致 strong-hit F1 反向退步而拒絕。
+
 *   [x] **Phase D12-A Multi-resolution Log-Mel 音色特徵融合（完成並拒絕）** (2026-07-18)
     *   [x] 啟動 D12-A 僅多解析度 Log-Mel 特徵融合背景訓練（不帶 `--class-balanced-beta` 以控制變因）。
     *   [x] 評估 D12-A 最佳 epoch 的 class_health 報告，檢視鈸類與大鼓指標。
