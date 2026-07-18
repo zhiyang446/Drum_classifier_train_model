@@ -90,24 +90,37 @@ def superflux_difference(log_spectrogram, lag=2, max_size=3):
 
 def extract_features(
     y, sr=SR, n_fft=2048, hop_length=HOP_LENGTH, n_mels=N_MELS,
-    use_hybrid=False, use_true_superflux=False,
+    use_hybrid=False, use_true_superflux=False, use_multi_log_mel=False,
 ):
     """
     Extracts 2-channel ADT features:
     Channel 1: Log-Mel Spectrogram (standard Mel if use_hybrid=False, otherwise hybrid filterbank)
     Channel 2: 預設為既有 Mel 正向差分；opt-in 可使用 frequency-filtered True SuperFlux。
     """
-    # 1. Compute linear spectrogram
-    stft = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
-    spec = np.abs(stft) ** 2
-    
-    if use_hybrid:
-        # Apply custom hybrid filterbank
-        fb = custom_hybrid_filterbank(sr, n_fft, n_filters=n_mels)
-        mel = np.dot(fb, spec)
+    if use_multi_log_mel:
+        mel_list = []
+        for current_fft in [512, 1024, 2048]:
+            stft = librosa.stft(y, n_fft=current_fft, hop_length=hop_length)
+            spec = np.abs(stft) ** 2
+            if use_hybrid:
+                fb = custom_hybrid_filterbank(sr, current_fft, n_filters=n_mels)
+                mel_c = np.dot(fb, spec)
+            else:
+                mel_c = librosa.feature.melspectrogram(S=spec, sr=sr, n_mels=n_mels)
+            mel_list.append(mel_c)
+        mel = np.mean(mel_list, axis=0)
     else:
-        # Standard librosa mel spectrogram using precomputed power spectrogram
-        mel = librosa.feature.melspectrogram(S=spec, sr=sr, n_mels=n_mels)
+        # 1. Compute linear spectrogram
+        stft = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
+        spec = np.abs(stft) ** 2
+        
+        if use_hybrid:
+            # Apply custom hybrid filterbank
+            fb = custom_hybrid_filterbank(sr, n_fft, n_filters=n_mels)
+            mel = np.dot(fb, spec)
+        else:
+            # Standard librosa mel spectrogram using precomputed power spectrogram
+            mel = librosa.feature.melspectrogram(S=spec, sr=sr, n_mels=n_mels)
         
     # Channel 1: Log-Mel
     log_mel = librosa.power_to_db(mel, ref=np.max)

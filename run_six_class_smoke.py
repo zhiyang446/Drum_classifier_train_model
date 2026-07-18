@@ -112,7 +112,7 @@ def mix_accompaniment(waveform, accompaniment, gain, offset=0):
 
 def build_window(
     item, anchor=None, accompaniment=None, accompaniment_gain=0.17,
-    accompaniment_offset=0, use_true_superflux=False,
+    accompaniment_offset=0, use_true_superflux=False, use_multi_log_mel=False,
 ):
     """中文註解：讀取一個實體四秒音訊窗口，並建立六類 onset/velocity target。"""
     events = item['events']
@@ -150,6 +150,7 @@ def build_window(
     features = extract_features(
         waveform, sr=SR, hop_length=HOP_LENGTH, n_mels=N_MELS,
         use_hybrid=False, use_true_superflux=use_true_superflux,
+        use_multi_log_mel=use_multi_log_mel,
     )
     features = features[:, :, :CHUNK_FRAMES]
     if features.shape[2] < CHUNK_FRAMES:

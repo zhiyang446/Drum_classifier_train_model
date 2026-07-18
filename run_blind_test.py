@@ -58,7 +58,7 @@ def count_layer(csv_path):
     return result
 
 
-def run_one(audio_path, model_path, output_dir, hint=None, thresholds=None):
+def run_one(audio_path, model_path, output_dir, hint=None, thresholds=None, architecture='symmetric'):
     """
     中文註解：執行單一 blind test 音檔並回傳 summary row。
     """
@@ -80,6 +80,7 @@ def run_one(audio_path, model_path, output_dir, hint=None, thresholds=None):
         '--event-debug', event_debug,
         '--raw-ai-events', raw_csv,
         '--notation-events', notation_csv,
+        '--architecture', architecture,
     ]
     if hint:
         # 中文註解：診斷模式只使用 tempo/拍號提示，不用 KD/SD/HH 答案改寫輸出。
@@ -188,6 +189,10 @@ def main():
     parser.add_argument('--thresh-kick', type=float, default=None)
     parser.add_argument('--thresh-snare', type=float, default=None)
     parser.add_argument('--thresh-hihat', type=float, default=None)
+    parser.add_argument('--thresh-tom', type=float, default=None)
+    parser.add_argument('--thresh-crash', type=float, default=None)
+    parser.add_argument('--thresh-ride', type=float, default=None)
+    parser.add_argument('--architecture', default='symmetric')
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
 
@@ -205,11 +210,14 @@ def main():
         '--thresh-kick': args.thresh_kick,
         '--thresh-snare': args.thresh_snare,
         '--thresh-hihat': args.thresh_hihat,
+        '--thresh-tom': args.thresh_tom,
+        '--thresh-crash': args.thresh_crash,
+        '--thresh-ride': args.thresh_ride,
     }
     rows = []
     for audio_path in audio_files:
         print(f'Running blind test: {audio_path}', flush=True)
-        rows.append(run_one(audio_path, args.model, args.output_dir, hints.get(safe_stem(audio_path)), thresholds))
+        rows.append(run_one(audio_path, args.model, args.output_dir, hints.get(safe_stem(audio_path)), thresholds, architecture=args.architecture))
     csv_path, json_path = write_reports(rows, args.output_dir)
     print(f'Wrote blind summary CSV: {csv_path}')
     print(f'Wrote blind summary JSON: {json_path}')

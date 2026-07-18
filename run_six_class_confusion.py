@@ -166,6 +166,7 @@ def run_self_check():
 def evaluate_confusion(
     model, metadata, output_dir, accompaniment=None, accompaniment_gain=0.17,
     per_class=8, feature_mode='legacy-diff', device=None,
+    use_multi_log_mel=False,
 ):
     """中文註解：以已載入的最佳模型產生完整六類問題報告。"""
     device = device or next(model.parameters()).device
@@ -181,6 +182,7 @@ def evaluate_confusion(
             accompaniment_gain=accompaniment_gain,
             accompaniment_offset=window_index * TARGET_SAMPLES,
             use_true_superflux=feature_mode == 'true-superflux',
+            use_multi_log_mel=use_multi_log_mel,
         )
         with torch.no_grad():
             logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))

@@ -1,0 +1,101 @@
+Device: cuda
+Successfully loaded TCN model: validation_runs/six_class_candidate_d7_d4d_earlystop20/six_class_candidate_d7_best.pth (classes=6)
+Loading audio: blind_user_tests\basic_shuffle.wav
+Extracting custom hybrid 2-channel features for the entire track...
+Running Sequence TCN Inference...
+[Adaptive Thresholds] Dynamic range (KD): 0.42 to 0.58
+[Adaptive Thresholds] Dynamic range (SD): 0.42 to 0.58
+[Adaptive Thresholds] Dynamic range (HH): 0.35 to 0.60
+Detected 40 onset candidates using TCN NMS.
+[OTD] Removing higher harmonics: [np.float64(134.8), np.float64(134.9), np.float64(135.0), np.float64(135.1), np.float64(135.2), np.float64(134.8), np.float64(134.9), np.float64(180.1), np.float64(135.0), np.float64(135.1), np.float64(135.2), np.float64(179.9), np.float64(180.2), np.float64(179.7), np.float64(180.1), np.float64(179.8), np.float64(180.0), np.float64(180.2), np.float64(179.7), np.float64(179.8), np.float64(179.9), np.float64(180.0)]
+Selected Tempo: 90.00 BPM, Detected Grid Pattern: triplet (min_dev: 0.0081s)
+[Time Signature Auto-Detect] Using Jointly-Selected Time Signature: 12/8
+[Slow Shuffle Fold] Rewriting 12/8 wrapper to 50.00 BPM 4/4.
+Effective Time Signature: 4/4 (4.00 beats per measure)
+[Score Tempo] quarter=50.00 BPM (MIDI quarter=50.00 BPM)
+[Adaptive Settings] Standard effective tempo detected (50.0 BPM). Enabling Snare-HH crosstalk suppression to filter noise.
+[Grid Alignment] Grid start aligned to first triggered note at 0.3338s
+[Score Notation Mode] Shifting first note to 0.0s for clean score layout.
+Running inference (Thresholds: Kick=0.50, Snare=0.50, Hi-Hat=0.50)...
+[Dynamics] Dynamic Snare Accent Threshold: 57.57 (max rise: 104.66)
+[Heuristics] Hi-Hat grid alignments: {'1.000': 0.17, '0.500': 0.33, '0.333': 0.5, '0.250': 0.33}
+[Heuristics] Repeating Groove pattern detected (3 measures). Running Groove-Pattern-Aware Recovery (GPAR)...
+[GPAR] Active hi-hat steps: [2, 3, 12, 13, 19, 22]
+[GPAR] Inactive hi-hat steps (to suppress): [0, 7, 8, 11, 14, 20, 21]
+[GPAR] Virtual-fill hi-hat steps: [2]
+[GPAR] Skipping virtual hi-hat fill for folded slow shuffle.
+[Adaptive Hi-Hat] Median HH decay: -1.50 dB, dynamic threshold set to -10.00 dB.
+Event debug CSV exported to: validation_runs/ablation_study/A4_blind\basic_shuffle\basic_shuffle_event_debug.csv
+Raw AI events CSV exported to: validation_runs/ablation_study/A4_blind\basic_shuffle\basic_shuffle_raw_ai_events.csv
+Notation events CSV exported to: validation_runs/ablation_study/A4_blind\basic_shuffle\basic_shuffle_notation_events.csv
+
+==================================================
+           AI MODEL RECOGNITION RATE & CONFIDENCE REPORT
+==================================================
+Ground-Truth XML not found for this file.
+Reporting AI model's general benchmark accuracy & prediction confidence:
+-------------------------------------------------------
+Instrument   | Model Benchmark F1   | Acoustic Confidence (AI Only) 
+-------------------------------------------------------
+Kick (KD)    | 89.80%               | 87.62%                        
+Snare (SD)   | 82.10%               | 84.29%                        
+Hi-Hat (HH)  | 86.30%               | 66.53%                        
+-------------------------------------------------------
+Hi-Hat Groove Continuity Score (Brain): 100.00% (Reconstructed 0 masked notes)
+Note: Acoustic Confidence represents the model's neural network activation probability.
+=======================================================
+
+
+===============================================================================================
+                      DETAILED AI MODEL PREDICTIONS & DECISION LOG
+===============================================================================================
+Onset Time | Beat  | Kick (Prob/Rise)  | Snare (Prob/Rise)  | Hi-Hat (Prob/Thresh) | Triggered 
+-----------------------------------------------------------------------------------------------
+0.3338     | 0.00  | 0.80/98.9 (Ok)    | 0.00/77.2          | 0.18/0.36            | Kick      
+0.7741     | 0.33  | 0.26/77.1         | 0.01/68.0          | 0.68/0.46 (Ok)       | Hi-Hat    
+0.9988     | 0.50  | 0.00/105.7        | 0.89/98.5 (Ok)     | 0.66/0.38 (Ok)       | Snare+Hi-Hat
+1.2418     | 0.83  | 0.00/65.5         | 0.74/68.6 (Ok)     | 0.02/0.49            | Snare     
+1.4444     | 1.00  | 0.88/91.5 (Ok)    | 0.00/62.8          | 0.36/0.36            | Kick      
+1.6652     | 1.17  | 0.98/89.3 (Ok)    | 0.00/82.8          | 0.28/0.37            | Kick      
+2.1069     | 1.50  | 0.22/72.7         | 0.01/68.7          | 0.63/0.46 (Ok)       | Hi-Hat    
+2.3315     | 1.67  | 0.00/103.8        | 0.98/92.3 (Ok)     | 0.74/0.38 (Ok)       | Snare+Hi-Hat
+2.5745     | 1.83  | 0.00/64.5         | 0.63/66.1 (Ok)     | 0.11/0.49            | Snare     
+2.7742     | 2.00  | 0.01/70.9         | 0.12/57.3          | 0.86/0.48 (Ok)       | Hi-Hat    
+2.9991     | 2.17  | 0.96/100.0 (Ok)   | 0.00/88.1          | 0.60/0.36 (Ok)       | Kick+Hi-Hat
+3.4411     | 2.67  | 0.42/74.0         | 0.01/60.3          | 0.66/0.47 (Ok)       | Hi-Hat    
+3.6661     | 2.83  | 0.00/109.7        | 0.98/104.7 (Ok)    | 0.77/0.38 (Ok)       | Snare+Hi-Hat
+3.9064     | 3.00  | 0.00/68.2         | 0.83/65.1 (Ok)     | 0.12/0.49            | Snare     
+4.1097     | 3.17  | 0.87/82.8 (Ok)    | 0.00/64.5          | 0.60/0.36 (Ok)       | Kick+Hi-Hat
+4.3318     | 3.33  | 0.92/81.2 (Ok)    | 0.00/85.5          | 0.22/0.37            | Kick      
+4.7728     | 3.67  | 0.51/73.7 (Ok)    | 0.01/70.7          | 0.60/0.46 (Ok)       | Kick+Hi-Hat
+5.0001     | 3.83  | 0.00/97.0         | 0.98/89.7 (Ok)     | 0.70/0.38 (Ok)       | Snare+Hi-Hat
+5.2400     | 4.17  | 0.00/64.5         | 0.63/67.8 (Ok)     | 0.08/0.49            | Snare     
+5.4413     | 4.33  | 0.06/76.0         | 0.21/60.5          | 0.80/0.48 (Ok)       | Hi-Hat    
+5.6660     | 4.50  | 0.98/87.8 (Ok)    | 0.00/86.3          | 0.60/0.36 (Ok)       | Kick+Hi-Hat
+6.1080     | 4.83  | 0.35/77.3         | 0.00/70.6          | 0.48/0.47 (Ok)       | Hi-Hat    
+6.3322     | 5.00  | 0.00/103.9        | 0.86/97.0 (Ok)     | 0.48/0.38 (Ok)       | Snare+Hi-Hat
+6.5750     | 5.17  | 0.00/66.0         | 0.82/70.5 (Ok)     | 0.12/0.49            | Snare     
+6.7785     | 5.33  | 0.78/89.5 (Ok)    | 0.00/62.0          | 0.30/0.37            | Kick      
+6.9990     | 5.50  | 0.96/90.3 (Ok)    | 0.00/79.0          | 0.14/0.36            | Kick      
+7.4410     | 6.00  | 0.19/73.5         | 0.07/64.2          | 0.65/0.46 (Ok)       | Hi-Hat    
+7.6660     | 6.17  | 0.00/106.9        | 0.99/92.3 (Ok)     | 0.74/0.38 (Ok)       | Snare+Hi-Hat
+8.1077     | 6.50  | 0.01/72.7         | 0.24/53.6          | 0.78/0.48 (Ok)       | Hi-Hat    
+8.3333     | 6.67  | 0.87/95.7 (Ok)    | 0.00/81.8          | 0.25/0.36            | Kick      
+8.7751     | 7.00  | 0.20/77.7         | 0.01/58.9          | 0.59/0.47 (Ok)       | Hi-Hat    
+9.0008     | 7.17  | 0.00/102.8        | 0.86/96.1 (Ok)     | 0.60/0.38 (Ok)       | Snare+Hi-Hat
+9.2419     | 7.50  | 0.00/64.9         | 0.79/67.2 (Ok)     | 0.04/0.49            | Snare     
+9.4438     | 7.67  | 0.94/89.9 (Ok)    | 0.00/62.8          | 0.60/0.36 (Ok)       | Kick+Hi-Hat
+9.6651     | 7.83  | 0.95/82.2 (Ok)    | 0.00/79.4          | 0.12/0.36            | Kick      
+10.1071    | 8.17  | 0.18/75.4         | 0.06/68.6          | 0.72/0.46 (Ok)       | Hi-Hat    
+10.3330    | 8.33  | 0.00/99.3         | 0.94/91.0 (Ok)     | 0.60/0.38 (Ok)       | Snare+Hi-Hat
+10.5757    | 8.50  | 0.00/66.3         | 0.72/70.7 (Ok)     | 0.09/0.49            | Snare     
+10.7745    | 8.67  | 0.01/71.6         | 0.21/56.9          | 0.82/0.48 (Ok)       | Hi-Hat    
+===============================================================================================
+
+Transcription completed successfully!
+Processed 40 onsets, successfully identified 39 event beats.
+Wrote a total of 52 MIDI notes:
+  - Kick (KD): 13
+  - Snare (SD): 15
+  - Hi-Hat (HH): 24
+MIDI file exported to: validation_runs/ablation_study/A4_blind\basic_shuffle\basic_shuffle.mid

@@ -80,3 +80,17 @@ loop-cost.cmd --pattern daily-triage --level L1
 - 不得覆蓋既有 `.pth` 或產品模型；每輪使用全新 candidate 路徑並保留 train/validation 報告。
 - Codex 每個 Phase 必須完成文件更新與規定測試後，才可 commit 並 push 至 `origin/codex`；失敗 Phase 也要提交失敗證據與 blocker，但不得標記為完成。
 - 其他 AI 不得自行改變架構順序、資料隔離、訓練配方或驗收門檻。若有 materially different 提案，先寫入規格與證據並取得使用者明確確認。
+
+## ⚙️ 推論解碼校正與版本發布治理規範 (Decoder Calibration & Release Governance Rules)
+
+1. **閾值校正與版本化管理 (Versioned Calibration)**：
+   - 閾值校正 JSON 必須與其具體的 checkpoint 雜湊、特徵提取版本以及解碼模組版本相綁定。
+   - 上述任何一項如果發生變更，該閾值 JSON 必須**重新校正與驗收**，禁止直接套用。
+2. **驗證集隔離與防護 (Validation Set Hard Isolation)**：
+   - Validation 集合僅允許用於 Coordinate Ascent 門檻值搜尋與優化，禁止用於最終發布驗收。
+   - 必須永久保留、隔離出一批**全新且完全未看過**的封存歌曲（STAR test split 及獨立 EGMD 音訊）作為發布驗收的唯一門檻，不參與任何微調與訓練。
+3. **退步回滾機制 (Rollback Baseline)**：
+   - 在 `transcribe.py` 中必須同時保留 A_opt 校正配置與 A0 基線（全部 0.50）配置。
+   - 當面對新歌曲風格抽樣時，如果 `A_opt` 出現任何明顯的漏檢或退步，必須能一鍵無縫回滾（Rollback）至 `A0` 安全基線。
+4. **問題修正閉環與重訓 (Error Accumulation & Retraining)**：
+   - 若 TOM/CRASH/RIDE 出現漏檢或誤報，不應再透過無窮無盡地微調/掃描閾值來解決，而是應收集誤報/漏檢片段、核對標註，積累足夠數據後，進行針對性的重訓與微調。

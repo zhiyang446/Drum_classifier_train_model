@@ -1,0 +1,7 @@
+{
+  "gate": "round4_physical_strong_event",
+  "overall": "fail",
+  "passed_rows": 29,
+  "total_rows": 30,
+  "note": "full MIDI count reports are diagnostic only"
+}

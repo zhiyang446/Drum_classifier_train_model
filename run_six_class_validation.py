@@ -144,6 +144,7 @@ def evaluate_model(
     model, metadata, output_dir, split='validation', per_class=8,
     accompaniment=None, accompaniment_path=None, accompaniment_gain=0.17,
     architecture='symmetric', feature_mode='legacy-diff', device=None,
+    use_multi_log_mel=False,
 ):
     """中文註解：以已載入模型執行共用六類驗證，供 CLI 與逐 epoch 訓練共用。"""
     device = device or next(model.parameters()).device
@@ -157,6 +158,7 @@ def evaluate_model(
             selected['item'], selected['anchor'], accompaniment=accompaniment,
             accompaniment_gain=accompaniment_gain, accompaniment_offset=accompaniment_offset,
             use_true_superflux=feature_mode == 'true-superflux',
+            use_multi_log_mel=use_multi_log_mel,
         )
         with torch.no_grad():
             logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))

@@ -85,24 +85,31 @@ def evaluate_transcription(transcribed_times, xml_path, tolerance=0.050):
         }
     return metrics
 
-def map_velocity(prob, c_type='generic'):
+def map_velocity(prob, c_type='generic', config=None):
     """
     對模型預測的激發機率進行客製化的非線性冪律映射，還原真實力度動態。
     """
     p = np.clip(prob, 0.0, 1.0)
     
+    # 讀取配置字典
+    v_conf = config.get("velocity", {}) if config else {}
+    
     if c_type == 'kick':
-        gamma = 1.2
-        v_min, v_max = 40, 127
+        gamma = v_conf.get("kick_gamma", 1.2)
+        v_min = v_conf.get("kick_min", 40)
+        v_max = v_conf.get("kick_max", 127)
     elif c_type == 'snare':
-        gamma = 1.8
-        v_min, v_max = 25, 127
+        gamma = v_conf.get("snare_gamma", 1.8)
+        v_min = v_conf.get("snare_min", 25)
+        v_max = v_conf.get("snare_max", 127)
     elif c_type == 'hihat':
-        gamma = 1.5
-        v_min, v_max = 30, 120
+        gamma = v_conf.get("hihat_gamma", 1.5)
+        v_min = v_conf.get("hihat_min", 30)
+        v_max = v_conf.get("hihat_max", 120)
     else:  # cymbals / toms
-        gamma = 1.4
-        v_min, v_max = 35, 125
+        gamma = v_conf.get("rare_gamma", 1.4)
+        v_min = v_conf.get("rare_min", 35)
+        v_max = v_conf.get("rare_max", 125)
         
     scaled_val = v_min + (v_max - v_min) * (p ** gamma)
     return int(np.round(scaled_val))
@@ -1020,7 +1027,7 @@ def apply_raw_acoustic_hygiene(decisions, detected_ts, estimated_tempo, active_g
     cleaned.sort(key=lambda row: row.get('quantized_onset', 0.0))
     return cleaned
 
-def apply_cymbals_adc_hygiene(onset_decisions):
+def apply_cymbals_adc_hygiene(onset_decisions, config=None):
     """
     對 Toms/Crash/Ride 進行時間密度約束 (ADC) 與鈸類互斥消噪。
     """
@@ -1075,31 +1082,75 @@ def apply_cymbals_adc_hygiene(onset_decisions):
             d['ride_triggered'] = False
 
     # 3. 處理 Toms 餘音共振 (Toms Decay Gate)
+    toms_conf = config.get("toms_decay_gate", {}) if config else {}
+    gate_dur = toms_conf.get("gate_duration_sec", 0.15) if toms_conf.get("enabled", True) else 0.0
+
     for d in onset_decisions:
         if not d.get('tom_triggered', False):
             continue
         t_curr = d['quantized_onset']
         
-        # 尋找前 150ms 內是否有 KD/SD 重擊
+        # 尋找前 gate_dur 秒內是否有 KD/SD 重擊
         has_recent_strong_hit = False
-        for other in onset_decisions:
-            t_other = other['quantized_onset']
-            if 0.0 < t_curr - t_other <= 0.15:
-                if other.get('kick_triggered', False) and other['probs'][0] >= 0.80:
-                    has_recent_strong_hit = True
-                    break
-                if other.get('snare_triggered', False) and other['probs'][1] >= 0.80:
-                    has_recent_strong_hit = True
-                    break
+        if gate_dur > 0:
+            for other in onset_decisions:
+                t_other = other['quantized_onset']
+                if 0.0 < t_curr - t_other <= gate_dur:
+                    if other.get('kick_triggered', False) and other['probs'][0] >= 0.80:
+                        has_recent_strong_hit = True
+                        break
+                    if other.get('snare_triggered', False) and other['probs'][1] >= 0.80:
+                        has_recent_strong_hit = True
+                        break
                     
         if has_recent_strong_hit and d['probs'][3] < 0.65:
             d['tom_triggered'] = False
 
     return onset_decisions
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, thresh_tom=None, thresh_crash=None, thresh_ride=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None, use_multi_log_mel=False, architecture='symmetric', rollback_baseline=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
+    
+    # 載入預設與客製化配置
+    DEFAULT_CONFIG = {
+        "velocity": {
+            "kick_gamma": 1.2,
+            "kick_min": 40,
+            "kick_max": 127,
+            "snare_gamma": 1.8,
+            "snare_min": 25,
+            "snare_max": 127,
+            "hihat_gamma": 1.5,
+            "hihat_min": 30,
+            "hihat_max": 120,
+            "rare_gamma": 1.4,
+            "rare_min": 35,
+            "rare_max": 125
+        },
+        "hihat_open_adaptive": {
+            "enabled": True,
+            "base_offset": -16.0
+        },
+        "toms_decay_gate": {
+            "enabled": True,
+            "gate_duration_sec": 0.15
+        }
+    }
+    config = DEFAULT_CONFIG.copy()
+    if config_path and os.path.exists(config_path):
+        try:
+            import json
+            with open(config_path, "r", encoding="utf-8") as f:
+                user_conf = json.load(f)
+            for k, v in user_conf.items():
+                if isinstance(v, dict) and k in config:
+                    config[k].update(v)
+                else:
+                    config[k] = v
+            print(f"[Config] Loaded user config from {config_path}.")
+        except Exception as e:
+            print(f"[Config Warning] Failed to parse config JSON: {e}. Using default configs.")
     
     # 1. Load exactly the checkpoint requested by the caller.
     # 中文註解：不依音檔路徑切換模型，避免 regression/user blind 特判掩蓋真實能力。
@@ -1110,6 +1161,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         n_classes = 3
         if 'onset_head.weight' in checkpoint:
             n_classes = checkpoint['onset_head.weight'].shape[0]
+        if architecture != 'symmetric':
+            from train_six_class_candidate import create_model
+            net, _ = create_model(architecture, ckpt_path, device)
+            net.eval()
+            return net, n_classes
         net = SymmetricDrumTCN(num_classes=n_classes).to(device)
         if 'backbone.legacy_slot_proj.weight' in checkpoint:
             net.backbone.use_legacy_proj = True
@@ -1143,7 +1199,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     
     # 3. Model Inference on entire track
     print("Extracting custom hybrid 2-channel features for the entire track...")
-    features = extract_features(y, sr=sr, hop_length=hop_length, n_mels=n_mels)
+    features = extract_features(y, sr=sr, hop_length=hop_length, n_mels=n_mels, use_multi_log_mel=use_multi_log_mel)
     features_tensor = torch.from_numpy(features).float().unsqueeze(0).to(device)
     
     print("Running Sequence TCN Inference...")
@@ -1230,6 +1286,30 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     for c in range(num_classes):
         calibrated_thresholds[c] = get_mgpc_thresh(onset_preds[:, c], min(2, c))
 
+    # 載入正式的解碼閾值 json 配置檔案 (D7 的校正版本，僅適用於 6 類及以上模型)
+    json_thresh_path = "validation_runs/d7_calibrated_thresholds.json"
+    if num_classes > 3 and not rollback_baseline and os.path.exists(json_thresh_path):
+        try:
+            import json
+            with open(json_thresh_path, "r", encoding="utf-8") as f:
+                saved_thresholds = json.load(f)
+            print(f"[Decoder] Loaded calibrated thresholds from {json_thresh_path}: {saved_thresholds}")
+            calibrated_thresholds[0] = saved_thresholds.get("kick", calibrated_thresholds[0])
+            calibrated_thresholds[1] = saved_thresholds.get("snare", calibrated_thresholds[1])
+            calibrated_thresholds[2] = saved_thresholds.get("hihat", calibrated_thresholds[2])
+            if num_classes > 3:
+                calibrated_thresholds[3] = saved_thresholds.get("tom", 0.50)
+            if num_classes > 4:
+                calibrated_thresholds[4] = saved_thresholds.get("crash", 0.50)
+            if num_classes > 5:
+                calibrated_thresholds[5] = saved_thresholds.get("ride", 0.50)
+        except Exception as e:
+            print(f"[Decoder Warning] Failed to load {json_thresh_path}: {e}")
+    elif rollback_baseline:
+        print("[Decoder] Rollback flag activated: forcing all thresholds to 0.50 baseline.")
+        for c in range(min(num_classes, 6)):
+            calibrated_thresholds[c] = 0.50
+
     t_k = thresh_kick if thresh_kick is not None else calibrated_thresholds[0]
     t_s = thresh_snare if thresh_snare is not None else calibrated_thresholds[1]
     t_h = thresh_hihat if thresh_hihat is not None else calibrated_thresholds[2]
@@ -1242,7 +1322,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         thresholds[0] = t_k
         thresholds[1] = t_s
         thresholds[2] = t_h
-        for c in range(3, num_classes):
+        thresholds[3] = thresh_tom if (num_classes > 3 and thresh_tom is not None) else (calibrated_thresholds[3] if num_classes > 3 else 0.50)
+        thresholds[4] = thresh_crash if (num_classes > 4 and thresh_crash is not None) else (calibrated_thresholds[4] if num_classes > 4 else 0.50)
+        thresholds[5] = thresh_ride if (num_classes > 5 and thresh_ride is not None) else (calibrated_thresholds[5] if num_classes > 5 else 0.50)
+        for c in range(6, num_classes):
             thresholds[c] = calibrated_thresholds[c]
         
     # Calculate local RMS energy for adaptive dynamic thresholding
@@ -1394,8 +1477,16 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     # onset_times_tempo = np.array(merged_times_tempo)
     # onset_frames_tempo = merged_frames_tempo
     
+    # Detect specific commercial gate validation tracks from filename to apply spelling corrections
+    # [Removal Notice] Hand-tuned commercial gates are permanently disabled/removed to enforce generalizability.
+    is_counting_stars = False
+    is_rosanna = False
+    is_blue = False
+
     # Estimate tempo and grid adaptively if not specified
     if tempo is None:
+        tempo_max = 300.0 if is_rosanna else 220.0
+
         try:
             raw_estimated_tempo = librosa.feature.tempo(y=y, sr=sr, hop_length=hop_length)[0]
         except AttributeError:
@@ -1423,13 +1514,13 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     beat_dur_candidate = median_diff * multiplier
                     if 0.2 <= beat_dur_candidate <= 1.5:
                         bpm_candidate = float(round(60.0 / beat_dur_candidate, 1))
-                        if 45.0 <= bpm_candidate <= 220.0 and bpm_candidate not in raw_candidates:
+                        if 45.0 <= bpm_candidate <= tempo_max and bpm_candidate not in raw_candidates:
                             raw_candidates.append(bpm_candidate)
                             
-        # Filter to reasonable musical tempo limits (e.g., 45 to 220 BPM) to optimize search
+        # Filter to reasonable musical tempo limits (e.g., 45 to tempo_max BPM) to optimize search
         base_tempos = []
         for bt in raw_candidates:
-            if 45.0 <= bt <= 220.0 and bt not in base_tempos:
+            if 45.0 <= bt <= tempo_max and bt not in base_tempos:
                 base_tempos.append(bt)
         if not base_tempos:
             base_tempos = [raw_estimated_tempo]
@@ -1469,8 +1560,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             best_cand_init = min(candidates, key=lambda x: x['dev_sec'])
             t_best = best_cand_init['tempo']
             
-            # Filter candidates within a 5ms (0.005s) tolerance of the minimum
-            tolerance_sec = 0.005
+            # Filter candidates within tolerance of the minimum
+            tolerance_sec = 0.015 if is_counting_stars else 0.005
             qualified = [c for c in candidates if c['dev_sec'] <= min_dev + tolerance_sec]
             
             # Explicitly qualify subharmonics of the best candidate if they align well musically (< 0.020s dev)
@@ -1548,7 +1639,22 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             
         estimated_tempo = best_tempo
         detected_grid = best_grid
-        if 115.0 <= estimated_tempo <= 125.0 and auto_detected_ts == '12/8' and len(hh_peaks_tempo) >= 48:
+        if is_counting_stars:
+            estimated_tempo = 120.0
+            auto_detected_ts = '4/4'
+            detected_grid = '16th'
+            print("[Spelling Override] Forced Counting Stars to 120.0 BPM 4/4 16th.")
+        elif is_rosanna:
+            estimated_tempo = 258.0
+            auto_detected_ts = '12/8'
+            detected_grid = 'triplet'
+            print("[Spelling Override] Forced Rosanna to 258.0 BPM 12/8 triplet.")
+        elif is_blue:
+            estimated_tempo = 97.5
+            auto_detected_ts = '6/8'
+            detected_grid = 'triplet'
+            print("[Spelling Override] Forced Blue to 97.5 BPM 6/8 triplet.")
+        elif 115.0 <= estimated_tempo <= 125.0 and auto_detected_ts == '12/8' and len(hh_peaks_tempo) >= 48:
             estimated_tempo = estimated_tempo / 2.0
             detected_grid = '16th'
             auto_detected_ts = '4/4'
@@ -1757,6 +1863,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         detected_ts = '4/4'
         print("[Shuffle Detect] Keeping selected triplet tempo and spelling as 4/4 shuffle.")
         
+    if detected_ts == '12/8' and is_blue:
+        detected_ts = '6/8'
+        print(f"[Tempo Spelling] Rewriting 12/8 compound meter to 6/8 for Blue. (estimated_tempo={estimated_tempo:.2f})")
+        
     try:
         ts_parts = detected_ts.split('/')
         ts_num = int(ts_parts[0])
@@ -1798,7 +1908,14 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             if len(beat_times) < 2:
                 beat_times = None
             else:
-                print(f"[Floating BPM] Tracked {len(beat_times)} dynamic tempo beats using librosa.")
+                durs = np.diff(beat_times)
+                mean_dur = np.mean(durs) if len(durs) > 0 else 0.0
+                librosa_tempo = 60.0 / mean_dur if mean_dur > 0.0 else 0.0
+                if abs(librosa_tempo - estimated_tempo) / estimated_tempo > 0.15:
+                    print(f"[Floating BPM Warning] librosa tempo {librosa_tempo:.2f} BPM deviates significantly from estimated_tempo {estimated_tempo:.2f} BPM. Falling back to static BPM to avoid aliasing.")
+                    beat_times = None
+                else:
+                    print(f"[Floating BPM] Tracked {len(beat_times)} dynamic tempo beats using librosa.")
         except Exception as e:
             print(f"[Floating BPM Warning] Dynamic beat tracking failed: {e}. Falling back to static BPM.")
             beat_times = None
@@ -2034,7 +2151,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             pm.tempo_changes = ([0.0], [estimated_tempo])
     else:
         pm.tempo_changes = ([0.0], [estimated_tempo])
-    pm.time_signature_changes.append(pretty_midi.TimeSignature(ts_num, ts_den, 0.0))
+    try:
+        pm.time_signature_changes.append(pretty_midi.TimeSignature(ts_num, ts_den, 0.0))
+    except ValueError as val_err:
+        print(f"[Debug TS Error] ts_num: {ts_num} (type: {type(ts_num)}), ts_den: {ts_den} (type: {type(ts_den)}), detected_ts: {detected_ts}")
+        raise val_err
     drum_inst = pretty_midi.Instrument(program=0, is_drum=True)
     
     # Pitch map for GM percussion
@@ -2854,7 +2975,30 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         
     # Apply Cymbal Acoustic Density Constraints (ADC) & Mutex Filters
     if model_rare_path is not None:
-        onset_decisions = apply_cymbals_adc_hygiene(onset_decisions)
+        onset_decisions = apply_cymbals_adc_hygiene(onset_decisions, config=config)
+
+    # 預先計算自適應 Hi-Hat 開合閾值
+    hh_open_conf = config.get("hihat_open_adaptive", {}) if config else {}
+    base_hh_offset = hh_open_conf.get("base_offset", -16.0)
+    adaptive_hh_enabled = hh_open_conf.get("enabled", True)
+    hh_thresh = base_hh_offset
+    
+    if adaptive_hh_enabled and len(onset_times) > 0:
+        diff_list = []
+        for d in onset_decisions:
+            if d.get('hh_triggered', False):
+                t = d['frame']
+                t_energy = np.mean(features[0, 154:256, t])
+                decay_frame = min(n_frames - 1, t + 30)
+                decay_energy = np.mean(features[0, 154:256, decay_frame])
+                diff_list.append(decay_energy - t_energy)
+        if len(diff_list) >= 5:
+            median_decay = np.median(diff_list)
+            hh_thresh = median_decay + 2.5
+            hh_thresh = max(-25.0, min(-10.0, hh_thresh))
+            print(f"[Adaptive Hi-Hat] Median HH decay: {median_decay:.2f} dB, dynamic threshold set to {hh_thresh:.2f} dB.")
+        else:
+            print(f"[Adaptive Hi-Hat] Not enough HH samples. Falling back to static threshold: {hh_thresh:.2f} dB.")
         
     # 六類路徑需輸出 Hi-Hat articulation；高頻包絡只計算一次。
     final_hihat_decisions = [d for d in onset_decisions if d.get('hh_triggered', False)]
@@ -2879,7 +3023,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         
         if d['kick_triggered']:
             note = pretty_midi.Note(
-                velocity=d.get('vel_kick', map_velocity(d['probs'][0], 'kick')),
+                velocity=d.get('vel_kick', map_velocity(d['probs'][0], 'kick', config)),
                 pitch=pitch_map[0],
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2891,7 +3035,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             
         if d['snare_triggered']:
             note = pretty_midi.Note(
-                velocity=d.get('vel_snare', map_velocity(d['probs'][1], 'snare')),
+                velocity=d.get('vel_snare', map_velocity(d['probs'][1], 'snare', config)),
                 pitch=pitch_map[1],
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2918,7 +3062,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             d['hh_pitch'] = hh_pitch
                 
             note = pretty_midi.Note(
-                velocity=d.get('vel_hihat', map_velocity(d['probs'][2], 'hihat')),
+                velocity=d.get('vel_hihat', map_velocity(d['probs'][2], 'hihat', config)),
                 pitch=hh_pitch,
                 start=midi_onset,
                 end=midi_onset + note_len
@@ -2931,7 +3075,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         if model_rare_path is not None:
             if d.get('tom_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_tom', map_velocity(d['probs'][3], 'tom')),
+                    velocity=d.get('vel_tom', map_velocity(d['probs'][3], 'tom', config)),
                     pitch=pitch_map[3],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -2942,7 +3086,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 
             if d.get('crash_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_crash', map_velocity(d['probs'][4], 'cymbal')),
+                    velocity=d.get('vel_crash', map_velocity(d['probs'][4], 'cymbal', config)),
                     pitch=pitch_map[4],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -2953,7 +3097,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 
             if d.get('ride_triggered', False):
                 note = pretty_midi.Note(
-                    velocity=d.get('vel_ride', map_velocity(d['probs'][5], 'cymbal')),
+                    velocity=d.get('vel_ride', map_velocity(d['probs'][5], 'cymbal', config)),
                     pitch=pitch_map[5],
                     start=midi_onset,
                     end=midi_onset + note_len
@@ -3041,6 +3185,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         if base_name == f_base or f_base.startswith(base_name) or base_name.startswith(f_base) or base_name.replace('_drums', '') == f_base:
             xml_path = f
             break
+
+    if not xml_path:
+        audio_dir = os.path.dirname(audio_path)
+        xml_same_dir = os.path.join(audio_dir, base_name + '.xml')
+        if os.path.exists(xml_same_dir):
+            xml_path = xml_same_dir
             
     if xml_path and os.path.exists(xml_path):
         print(f"Found Ground-Truth Annotation: {xml_path}")
@@ -3353,6 +3503,9 @@ def main():
     parser.add_argument('--thresh-kick', type=float, default=None, help="Confidence threshold for Kick drum (default: None/auto-calibrate)")
     parser.add_argument('--thresh-snare', type=float, default=None, help="Confidence threshold for Snare drum (default: None/auto-calibrate)")
     parser.add_argument('--thresh-hihat', type=float, default=None, help="Confidence threshold for Hi-Hat (default: None/auto-calibrate)")
+    parser.add_argument('--thresh-tom', type=float, default=None, help="Confidence threshold for TOM drum (default: None/auto-calibrate)")
+    parser.add_argument('--thresh-crash', type=float, default=None, help="Confidence threshold for CRASH drum (default: None/auto-calibrate)")
+    parser.add_argument('--thresh-ride', type=float, default=None, help="Confidence threshold for RIDE drum (default: None/auto-calibrate)")
     parser.add_argument('--tempo', type=float, default=None, help="Tempo of the track in BPM. Auto-estimated if not provided.")
     parser.add_argument('--grid', type=str, choices=['auto', '16th', 'triplet', 'none'], default='auto',
                         help="Quantization grid style. 'auto' (default) detects style automatically. '16th' forces straight 16th, 'triplet' forces triplet grid, and 'none' disables quantization.")
@@ -3368,67 +3521,167 @@ def main():
     parser.add_argument('--model-rare', type=str, default=None, help="Optional rare drum classes extension model")
     parser.add_argument('--adaptive-snare', action='store_true', help="Enable dynamic Snare thresholding")
     parser.add_argument('--floating-bpm', action='store_true', help="Enable dynamic time-varying BPM beat tracking and tempo mapping")
+    parser.add_argument('--config', type=str, default=None, help="Path to custom post-processing config JSON file")
+    parser.add_argument('--use-multi-log-mel', action='store_true', help="Use multi-resolution Log-Mel feature extraction")
+    parser.add_argument('--architecture', type=str, default='symmetric', help="Model architecture (default: symmetric)")
+    parser.add_argument('--rollback-baseline', action='store_true', help="Rollback decoding thresholds to all 0.50 baseline")
     
     args = parser.parse_args()
     
-    if args.output is None:
-        base, _ = os.path.splitext(args.input)
-        output_path = f"{base}_drums.mid"
+    import glob
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    input_pattern = args.input
+    wav_files = []
+    
+    if os.path.isdir(input_pattern):
+        wav_files = glob.glob(os.path.join(input_pattern, "*.wav"))
+    elif "*" in input_pattern:
+        wav_files = glob.glob(input_pattern)
+    elif "," in input_pattern:
+        wav_files = [f.strip() for f in input_pattern.split(",") if f.strip()]
     else:
-        output_path = args.output
-
-    if args.event_debug == 'auto':
-        input_base, _ = os.path.splitext(args.input)
-        event_debug_path = f"{input_base}_event_debug.csv"
-    else:
-        event_debug_path = args.event_debug
-
-    if args.raw_ai_events == 'auto':
-        input_base, _ = os.path.splitext(args.input)
-        raw_ai_events_path = f"{input_base}_raw_ai_events.csv"
-    else:
-        raw_ai_events_path = args.raw_ai_events
-
-    if args.notation_events == 'auto':
-        input_base, _ = os.path.splitext(args.input)
-        notation_events_path = f"{input_base}_notation_events.csv"
-    else:
-        notation_events_path = args.notation_events
+        wav_files = [input_pattern]
         
-    if args.no_quantize:
-        grid_mode = 'none'
-    else:
-        grid_mode = args.grid
+    wav_files = [f for f in wav_files if os.path.exists(f)]
+    
+    if not wav_files:
+        print(f"[Error] No valid input wav files found matching pattern: {input_pattern}")
+        return
         
-    if args.crosstalk == 'auto':
-        no_crosstalk_val = None
-    elif args.crosstalk == 'on':
-        no_crosstalk_val = False  # Enable suppression
+    if len(wav_files) == 1:
+        single_input = wav_files[0]
+        if args.output is None:
+            base, _ = os.path.splitext(single_input)
+            output_path = f"{base}_drums.mid"
+        else:
+            output_path = args.output
+
+        if args.event_debug == 'auto':
+            input_base, _ = os.path.splitext(single_input)
+            event_debug_path = f"{input_base}_event_debug.csv"
+        else:
+            event_debug_path = args.event_debug
+
+        if args.raw_ai_events == 'auto':
+            input_base, _ = os.path.splitext(single_input)
+            raw_ai_events_path = f"{input_base}_raw_ai_events.csv"
+        else:
+            raw_ai_events_path = args.raw_ai_events
+
+        if args.notation_events == 'auto':
+            input_base, _ = os.path.splitext(single_input)
+            notation_events_path = f"{input_base}_notation_events.csv"
+        else:
+            notation_events_path = args.notation_events
+            
+        if args.no_quantize:
+            grid_mode = 'none'
+        else:
+            grid_mode = args.grid
+            
+        if args.crosstalk == 'auto':
+            no_crosstalk_val = None
+        elif args.crosstalk == 'on':
+            no_crosstalk_val = False  # Enable suppression
+        else:
+            no_crosstalk_val = True   # Disable suppression (no crosstalk)
+
+        return transcribe(
+            audio_path=single_input,
+            model_path=args.model,
+            output_midi_path=output_path,
+            thresh_kick=args.thresh_kick,
+            thresh_snare=args.thresh_snare,
+            thresh_hihat=args.thresh_hihat,
+            thresh_tom=args.thresh_tom,
+            thresh_crash=args.thresh_crash,
+            thresh_ride=args.thresh_ride,
+            threshold=args.threshold,
+            tempo=args.tempo,
+            grid=grid_mode,
+            onset_delta=args.onset_delta,
+            no_crosstalk=no_crosstalk_val,
+            fill_hihat=args.fill_hihat,
+            time_signature=args.time_signature,
+            sync_audio=args.sync_audio,
+            event_debug_path=event_debug_path,
+            raw_ai_events_path=raw_ai_events_path,
+            notation_events_path=notation_events_path,
+            model_rare_path=args.model_rare,
+            adaptive_snare=args.adaptive_snare,
+            floating_bpm=args.floating_bpm,
+            config_path=args.config,
+            use_multi_log_mel=args.use_multi_log_mel,
+            architecture=args.architecture,
+            rollback_baseline=args.rollback_baseline
+        )
     else:
-        no_crosstalk_val = True   # Disable suppression (no crosstalk)
+        print(f"[Batch Mode] Found {len(wav_files)} WAV files to process in parallel.")
+        gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        max_workers = min(len(wav_files), max(1, gpu_count * 2) if gpu_count > 0 else 4)
+        print(f"[Batch Mode] GPUs available: {gpu_count}. Spawning {max_workers} thread workers.")
         
-    return transcribe(
-        audio_path=args.input,
-        model_path=args.model,
-        output_midi_path=output_path,
-        thresh_kick=args.thresh_kick,
-        thresh_snare=args.thresh_snare,
-        thresh_hihat=args.thresh_hihat,
-        threshold=args.threshold,
-        tempo=args.tempo,
-        grid=grid_mode,
-        onset_delta=args.onset_delta,
-        no_crosstalk=no_crosstalk_val,
-        fill_hihat=args.fill_hihat,
-        time_signature=args.time_signature,
-        sync_audio=args.sync_audio,
-        event_debug_path=event_debug_path,
-        raw_ai_events_path=raw_ai_events_path,
-        notation_events_path=notation_events_path,
-        model_rare_path=args.model_rare,
-        adaptive_snare=args.adaptive_snare,
-        floating_bpm=args.floating_bpm
-    )
+        def process_single_wav(idx, wav_path):
+            try:
+                base, _ = os.path.splitext(wav_path)
+                out_midi = f"{base}_drums.mid"
+                
+                if gpu_count > 0:
+                    device_id = idx % gpu_count
+                    torch.cuda.set_device(device_id)
+                    dev_name = f"cuda:{device_id}"
+                else:
+                    dev_name = "cpu"
+                    
+                print(f"[Worker-{idx}] Processing {os.path.basename(wav_path)} on {dev_name}...")
+                grid_mode = 'none' if args.no_quantize else args.grid
+                no_crosstalk_val = None if args.crosstalk == 'auto' else (False if args.crosstalk == 'on' else True)
+                
+                transcribe(
+                    audio_path=wav_path,
+                    model_path=args.model,
+                    output_midi_path=out_midi,
+                    thresh_kick=args.thresh_kick,
+                    thresh_snare=args.thresh_snare,
+                    thresh_hihat=args.thresh_hihat,
+                    thresh_tom=args.thresh_tom,
+                    thresh_crash=args.thresh_crash,
+                    thresh_ride=args.thresh_ride,
+                    threshold=args.threshold,
+                    tempo=args.tempo,
+                    grid=grid_mode,
+                    onset_delta=args.onset_delta,
+                    no_crosstalk=no_crosstalk_val,
+                    fill_hihat=args.fill_hihat,
+                    time_signature=args.time_signature,
+                    sync_audio=args.sync_audio,
+                    event_debug_path=None,
+                    raw_ai_events_path=None,
+                    notation_events_path=None,
+                    model_rare_path=args.model_rare,
+                    adaptive_snare=args.adaptive_snare,
+                    floating_bpm=args.floating_bpm,
+                    config_path=args.config,
+                    use_multi_log_mel=args.use_multi_log_mel,
+                    architecture=args.architecture,
+                    rollback_baseline=args.rollback_baseline
+                )
+                print(f"[Worker-{idx}] Finished {os.path.basename(wav_path)} -> {out_midi}")
+                return wav_path, True
+            except Exception as e:
+                print(f"[Worker-{idx} Error] Failed to process {wav_path}: {e}")
+                return wav_path, False
+                
+        success_count = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_single_wav, i, path) for i, path in enumerate(wav_files)]
+            for fut in as_completed(futures):
+                path, ok = fut.result()
+                if ok:
+                    success_count += 1
+                    
+        print(f"[Batch Mode] Pipeline finished. Successfully transcribed {success_count}/{len(wav_files)} files.")
 
 if __name__ == '__main__':
     main()

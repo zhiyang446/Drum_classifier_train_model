@@ -387,7 +387,11 @@ def main():
     parser.add_argument('--thresh-kick', type=float, default=None)
     parser.add_argument('--thresh-snare', type=float, default=None)
     parser.add_argument('--thresh-hihat', type=float, default=None)
+    parser.add_argument('--thresh-tom', type=float, default=None)
+    parser.add_argument('--thresh-crash', type=float, default=None)
+    parser.add_argument('--thresh-ride', type=float, default=None)
     parser.add_argument('--event-tolerance', type=float, default=0.05)
+    parser.add_argument('--architecture', default='symmetric')
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
 
@@ -411,10 +415,13 @@ def main():
         '--thresh-kick': args.thresh_kick,
         '--thresh-snare': args.thresh_snare,
         '--thresh-hihat': args.thresh_hihat,
+        '--thresh-tom': args.thresh_tom,
+        '--thresh-crash': args.thresh_crash,
+        '--thresh-ride': args.thresh_ride,
     }
     for case in selected:
         print(f"Running E-GMD Round4: {case['audio_path']}", flush=True)
-        rows.append(run_one(case['audio_path'], args.model, args.output_dir, thresholds=thresholds))
+        rows.append(run_one(case['audio_path'], args.model, args.output_dir, thresholds=thresholds, architecture=args.architecture))
     summary_csv, _ = write_reports(rows, args.output_dir)
 
     raw_rows = compare(summary_csv, expected_path, layer='raw_acoustic')
