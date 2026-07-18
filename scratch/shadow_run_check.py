@@ -13,10 +13,10 @@ import numpy as np
 def match_onsets(gt_times, pred_times, tolerance=0.050):
     gt = sorted(gt_times)
     pred = sorted(pred_times)
-    
+
     tps = 0
     matched_gt = set()
-    
+
     for p in pred:
         best_match = -1
         min_dist = tolerance
@@ -30,14 +30,14 @@ def match_onsets(gt_times, pred_times, tolerance=0.050):
         if best_match != -1:
             tps += 1
             matched_gt.add(best_match)
-            
+
     fps = len(pred) - tps
     fns = len(gt) - len(matched_gt)
-    
+
     precision = tps / len(pred) if len(pred) > 0 else 0.0
     recall = tps / len(gt) if len(gt) > 0 else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-    
+
     return precision, recall, f1, len(gt), len(pred)
 
 # Load MIDI note onset times by instrument pitch
@@ -78,9 +78,9 @@ for track in TEST_TRACKS:
     wav_path = track["wav"]
     gt_midi_path = track["midi"]
     song_name = os.path.basename(wav_path)
-    
+
     print(f"\n================== Processing {song_name} ==================")
-    
+
     # 1. Generate A_opt MIDI
     opt_midi = f"validation_runs/shadow_run/A_opt_{song_name.replace('.wav', '.mid')}"
     cmd_opt = [
@@ -92,7 +92,7 @@ for track in TEST_TRACKS:
     ]
     print(f"Running A_opt transcription...")
     subprocess.run(cmd_opt, check=True, stdout=subprocess.DEVNULL)
-    
+
     # 2. Generate A0 (Rollback) MIDI
     a0_midi = f"validation_runs/shadow_run/A0_{song_name.replace('.wav', '.mid')}"
     cmd_a0 = [
@@ -105,21 +105,21 @@ for track in TEST_TRACKS:
     ]
     print(f"Running A0 transcription...")
     subprocess.run(cmd_a0, check=True, stdout=subprocess.DEVNULL)
-    
+
     # 3. Load onsets & Match
     onsets_gt = load_midi_onsets(gt_midi_path)
     onsets_opt = load_midi_onsets(opt_midi)
     onsets_a0 = load_midi_onsets(a0_midi)
-    
+
     res_track = {"track": song_name, "A0": {}, "A_opt": {}}
-    
+
     for inst in ["Kick", "Snare", "Hi-Hat"]:
         p_a0, r_a0, f_a0, gt_c, pred_a0_c = match_onsets(onsets_gt[inst], onsets_a0[inst])
         p_opt, r_opt, f_opt, _, pred_opt_c = match_onsets(onsets_gt[inst], onsets_opt[inst])
-        
+
         res_track["A0"][inst] = {"Precision": p_a0, "Recall": r_a0, "F1": f_a0, "GT": gt_c, "Pred": pred_a0_c}
         res_track["A_opt"][inst] = {"Precision": p_opt, "Recall": r_opt, "F1": f_opt, "GT": gt_c, "Pred": pred_opt_c}
-        
+
     results.append(res_track)
 
 # Output final report table

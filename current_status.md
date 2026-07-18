@@ -2,6 +2,12 @@
 
 Last updated: 2026-07-16
 
+## D15：合併文字完整性與格式清理（完成）
+
+- 已移除：`todolist.md` 的 3 個已提交合併衝突標記；保留 D6 失敗證據，移除已被 D14 取代的檔名特例敘述。
+- 已清理：受影響 Python 檔的行尾空白；未修改 `validation_runs/` 的封存驗證報告。
+- 驗證：`verify_current_solution.py` PASS（blind Raw/Notation 5/5、hard 4/4、Round4 30/30 與 6/6）。
+
 ## V27 拍速拍號 Spelling Overrides 與時變 BPM 諧波 Aliasing 根因修復 (2026-07-16)
 
 ### 1. 徹底解決時變拍速下的諧波 Aliasing (BPM 偏差)

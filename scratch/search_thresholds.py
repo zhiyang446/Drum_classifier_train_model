@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 D7 Per-class Threshold Coordinate Ascent Search.
-Only runs inference on D7 model once, caches probabilities, 
+Only runs inference on D7 model once, caches probabilities,
 then searches for optimal class-specific thresholds on validation set.
 """
 import os
@@ -56,10 +56,10 @@ for window_index, selected in enumerate(selected_windows):
     with torch.no_grad():
         logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
         probs = torch.sigmoid(logits).squeeze(0).cpu().numpy() # [Time, 6]
-    
+
     expected = expected_events(selected['item'], start_sec)
     aggregate_offset = window_index * (window_seconds + 1.0)
-    
+
     cached_data.append({
         'probs': probs,
         'expected': expected,
@@ -82,24 +82,24 @@ def get_peaks_per_class(probs, thresholds):
 # 6. Evaluate F1 for a given set of thresholds
 def evaluate_thresholds(thresholds_dict):
     aggregate = {label: ([], []) for label in LABELS}
-    
+
     for item in cached_data:
         probs = item['probs']
         expected = item['expected']
         aggregate_offset = item['aggregate_offset']
-        
+
         predicted = get_peaks_per_class(probs, thresholds_dict)
-        
+
         for label in LABELS:
             aggregate[label][0].extend(time + aggregate_offset for time in expected[label])
             aggregate[label][1].extend(time + aggregate_offset for time in predicted[label])
-            
+
     f1_dict = {}
     for label in LABELS:
         expected_list, predicted_list = aggregate[label]
         _, _, _, _, _, f1 = match_events(expected_list, predicted_list, TOLERANCE)
         f1_dict[label] = f1
-        
+
     macro_f1 = np.mean(list(f1_dict.values()))
     return macro_f1, f1_dict
 
@@ -125,15 +125,15 @@ for iteration in range(3):
     changed = False
     for label in LABELS:
         best_t_for_class = current_thresholds[label]
-        
+
         for t in search_values:
             temp_thresholds = current_thresholds.copy()
             temp_thresholds[label] = t
-            
+
             macro, f1s = evaluate_thresholds(temp_thresholds)
-            
+
             # Optimization condition:
-            # We want to maximize overall macro F1, 
+            # We want to maximize overall macro F1,
             # BUT we strictly require that KD F1 must not degrade (must be >= baseline KD F1 - epsilon, say 0.001)
             # and HH must not degrade significantly.
             if macro > best_macro:
@@ -142,11 +142,11 @@ for iteration in range(3):
                     best_f1s = f1s.copy()
                     best_t_for_class = t
                     changed = True
-                    
+
         if current_thresholds[label] != best_t_for_class:
             print(f"  Class {label}: threshold {current_thresholds[label]} -> {best_t_for_class} (New Macro: {best_macro:.4f}, KD F1: {best_f1s['KD']:.4f})")
             current_thresholds[label] = best_t_for_class
-            
+
     if not changed:
         print("Search converged early.")
         break

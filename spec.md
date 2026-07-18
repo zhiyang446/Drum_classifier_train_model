@@ -2120,3 +2120,9 @@ stateDiagram-v2
 - 刪除 Counting Stars、Rosanna、Blue 的檔名旗標與所有不可到達分支。
 - 回復泛用推論設定：tempo 候選上限固定為 `220 BPM`、同分候選容差固定為 `5ms`；保留既有非檔名導向的拍號與網格規則。
 - 不改動 checkpoint、A_opt 閾值、資料集或驗收門檻；完成後必須通過 `verify_current_solution.py`。
+
+### D15 合併文字完整性與格式清理規格
+
+- 範圍：移除 `todolist.md` 中已提交的 Git 衝突標記；保留仍有效的 D6 失敗證據，刪除已被 D14 取代的檔名特例任務敘述。
+- 格式：僅清除版本控制中 Python 原始碼與工具檔的行尾空白，不更動 `validation_runs/` 的封存驗證報告。
+- 行為：此工作不改變模型、推論或訓練配方；完成後仍須執行完整 `verify_current_solution.py` 回歸驗證。

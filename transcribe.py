@@ -27,7 +27,7 @@ def evaluate_transcription(transcribed_times, xml_path, tolerance=0.050):
     import xml.etree.ElementTree as ET
     inst_indices = {'KD': 0, 'SD': 1, 'HH': 2}
     inst_names = {0: 'Kick', 1: 'Snare', 2: 'Hi-Hat'}
-    
+
     # Load ground truth
     gt_events = {0: [], 1: [], 2: []}
     try:
@@ -41,16 +41,16 @@ def evaluate_transcription(transcribed_times, xml_path, tolerance=0.050):
     except Exception as e:
         print(f"Error parsing ground truth XML {xml_path}: {e}")
         return None
-        
+
     metrics = {}
     for inst_idx, name in inst_names.items():
         gt = sorted(gt_events[inst_idx])
         pred = sorted(transcribed_times[inst_idx])
-        
+
         tps = 0
         fps = 0
         matched_gt = set()
-        
+
         for p in pred:
             best_match = -1
             min_dist = tolerance
@@ -66,13 +66,13 @@ def evaluate_transcription(transcribed_times, xml_path, tolerance=0.050):
                 matched_gt.add(best_match)
             else:
                 fps += 1
-                
+
         fns = len(gt) - len(matched_gt)
-        
+
         precision = tps / (tps + fps) if (tps + fps) > 0 else 0.0
         recall = tps / (tps + fns) if (tps + fns) > 0 else 0.0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-        
+
         metrics[name] = {
             'Precision': precision,
             'Recall': recall,
@@ -90,10 +90,10 @@ def map_velocity(prob, c_type='generic', config=None):
     對模型預測的激發機率進行客製化的非線性冪律映射，還原真實力度動態。
     """
     p = np.clip(prob, 0.0, 1.0)
-    
+
     # 讀取配置字典
     v_conf = config.get("velocity", {}) if config else {}
-    
+
     if c_type == 'kick':
         gamma = v_conf.get("kick_gamma", 1.2)
         v_min = v_conf.get("kick_min", 40)
@@ -110,7 +110,7 @@ def map_velocity(prob, c_type='generic', config=None):
         gamma = v_conf.get("rare_gamma", 1.4)
         v_min = v_conf.get("rare_min", 35)
         v_max = v_conf.get("rare_max", 125)
-        
+
     scaled_val = v_min + (v_max - v_min) * (p ** gamma)
     return int(np.round(scaled_val))
 
@@ -206,38 +206,38 @@ def classify_hihat_articulation(hf_power, onset_frame, next_hihat_frame, sr=4410
 def detect_grid_type(onset_times, estimated_tempo):
     """
     Detect whether the onset times closer match a straight 16th-note grid or a triplet-based grid.
-    
+
     :param onset_times: numpy array of raw onset times (seconds)
     :param estimated_tempo: float, BPM
     :return: str, '16th' or 'triplet'
     """
     if len(onset_times) < 4:
         return '16th' # Default if too few notes
-        
+
     beat_duration = 60.0 / estimated_tempo
     first_onset = onset_times[0]
-    
+
     # Calculate phase of each onset relative to the estimated tempo beats
     offsets = onset_times - first_onset
     phases = (offsets / beat_duration) % 1.0
-    
+
     dev_straight = 0.0
     dev_triplet = 0.0
-    
+
     for p in phases:
         # Distance to closest straight 16th target (0.0, 0.25, 0.50, 0.75, 1.0)
         d_straight = min(abs(p - 0.0), abs(p - 0.25), abs(p - 0.50), abs(p - 0.75), abs(p - 1.0))
         dev_straight += d_straight ** 2
-        
+
         # Distance to closest triplet target (0.0, 1.3333, 2.3333, 1.0)
         d_triplet = min(abs(p - 0.0), abs(p - 1.0/3.0), abs(p - 2.0/3.0), abs(p - 1.0))
         dev_triplet += d_triplet ** 2
-        
+
     dev_straight = np.sqrt(dev_straight / len(phases))
     dev_triplet = np.sqrt(dev_triplet / len(phases))
-    
+
     print(f"[Grid Auto-Detect] Straight deviation: {dev_straight:.4f}, Triplet deviation: {dev_triplet:.4f}")
-    
+
     if dev_triplet < dev_straight:
         print("[Grid Auto-Detect] Result: Triplet/Shuffle grid detected.")
         return 'triplet'
@@ -349,7 +349,7 @@ def evaluate_tempo_meter_score(onset_times, onset_frames, kick_peaks, snare_peak
     beat_dur = 60.0 / tempo
     mult = 8 if is_32nd else (3 if grid == 'triplet' else 4)
     grid_dur = beat_dur / mult
-    
+
     grid_indices = []
     first_time = onset_times[0] if len(onset_times) > 0 else 0.0
     for t_sec, f in zip(onset_times, onset_frames):
@@ -357,12 +357,12 @@ def evaluate_tempo_meter_score(onset_times, onset_frames, kick_peaks, snare_peak
         step = int(round(dt / grid_dur))
         inst_type = 0 if f in kick_peaks else (1 if f in snare_peaks else 2)
         grid_indices.append((step, inst_type))
-        
+
     if not grid_indices:
         return 0.0, '4/4'
-        
+
     max_step = max(s for s, _ in grid_indices)
-    
+
     compound_ts, compound_diag = detect_compound_time_signature(
         onset_times, onset_frames, kick_peaks, snare_peaks, hh_peaks, tempo
     )
@@ -371,20 +371,20 @@ def evaluate_tempo_meter_score(onset_times, onset_frames, kick_peaks, snare_peak
     # 中文註解：低速三連音流通常應以 12/8 記譜，避免被泛用 4/4 規律分數吃掉。
     if grid == 'triplet' and 60.0 <= tempo <= 90.0:
         return 5.0, '12/8'
-        
+
     ts_candidates = {'4/4': 4.0, '7/8': 3.5, '5/4': 5.0, '5/8': 2.5, '9/8': 4.5, '12/8': 6.0}
     if tempo < 60.0:
         ts_candidates.pop('9/8', None)
         ts_candidates.pop('12/8', None)
     if grid not in ['triplet', 'swung_16th']:
         ts_candidates['3/4'] = 3.0
-        
+
     best_ts = '4/4'
     best_score = -1e9
     candidate_metrics = {}
     for ts_name, ts_beats in ts_candidates.items():
         steps = int(round(ts_beats * mult))
-        
+
         bins = [0] * steps
         for idx, _ in grid_indices:
             bins[idx % steps] += 1
@@ -393,7 +393,7 @@ def evaluate_tempo_meter_score(onset_times, onset_frames, kick_peaks, snare_peak
         raw_fano = var_val / mean_val if mean_val > 0 else 0.0
         # 中文註解：避免過細網格的離散度異常值壓過跨小節重複性，保留原始值供診斷。
         fano = min(raw_fano, 15.0)
-        
+
         num_measures = (max_step + 1) // steps
         if num_measures >= 2:
             measure_vectors = []
@@ -417,7 +417,7 @@ def evaluate_tempo_meter_score(onset_times, onset_frames, kick_peaks, snare_peak
             avg_sim = np.mean(similarities) if similarities else 0.0
         else:
             avg_sim = 0.0
-            
+
         score = (1.0 + fano) * (avg_sim ** 2)
         if ts_name == '4/4':
             score += 0.05
@@ -1037,13 +1037,13 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
         if not d.get('crash_triggered', False):
             continue
         t_curr = d['quantized_onset']
-        
+
         # Debounce Guard (400ms)
         if t_curr - last_crash_time < 0.40:
             if d['probs'][4] < 0.68:
                 d['crash_triggered'] = False
                 continue
-                
+
         # Density Guard
         # 統計前後 1.2 秒內的 Crash 原始觸發數
         win_crashes = []
@@ -1055,7 +1055,7 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
             if d['probs'][4] < 0.70:
                 d['crash_triggered'] = False
                 continue
-                
+
         last_crash_time = t_curr
 
     # 2. 處理 Ride 互斥與 KD/SD crosstalk
@@ -1063,21 +1063,21 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
         if not d.get('ride_triggered', False):
             continue
         t_curr = d['quantized_onset']
-        
+
         # Cymbal Mutex Guard (HH 密集時，Ride 需 >= 0.65)
         win_hhs = [other for other in onset_decisions if other.get('hh_triggered', False) and abs(other['quantized_onset'] - t_curr) <= 0.8]
         if len(win_hhs) >= 4:
             if d['probs'][5] < 0.65:
                 d['ride_triggered'] = False
                 continue
-                
+
         # KD/SD Crosstalk Guard
         has_strong_backbeat = False
         if d.get('kick_triggered', False) and d['probs'][0] >= 0.80:
             has_strong_backbeat = True
         if d.get('snare_triggered', False) and d['probs'][1] >= 0.80:
             has_strong_backbeat = True
-            
+
         if has_strong_backbeat and d['probs'][5] < 0.52:
             d['ride_triggered'] = False
 
@@ -1089,7 +1089,7 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
         if not d.get('tom_triggered', False):
             continue
         t_curr = d['quantized_onset']
-        
+
         # 尋找前 gate_dur 秒內是否有 KD/SD 重擊
         has_recent_strong_hit = False
         if gate_dur > 0:
@@ -1102,7 +1102,7 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
                     if other.get('snare_triggered', False) and other['probs'][1] >= 0.80:
                         has_recent_strong_hit = True
                         break
-                    
+
         if has_recent_strong_hit and d['probs'][3] < 0.65:
             d['tom_triggered'] = False
 
@@ -1111,7 +1111,7 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
 def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, thresh_tom=None, thresh_crash=None, thresh_ride=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None, use_multi_log_mel=False, architecture='symmetric', rollback_baseline=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
-    
+
     # 載入預設與客製化配置
     DEFAULT_CONFIG = {
         "velocity": {
@@ -1151,7 +1151,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             print(f"[Config] Loaded user config from {config_path}.")
         except Exception as e:
             print(f"[Config Warning] Failed to parse config JSON: {e}. Using default configs.")
-    
+
     # 1. Load exactly the checkpoint requested by the caller.
     # 中文註解：不依音檔路徑切換模型，避免 regression/user blind 特判掩蓋真實能力。
     def init_and_load_model(ckpt_path):
@@ -1179,49 +1179,49 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
 
     model, num_classes = init_and_load_model(model_path)
     print(f"Successfully loaded TCN model: {model_path} (classes={num_classes})")
-    
+
     model_rare = None
     num_classes_rare = 0
     if model_rare_path:
         model_rare, num_classes_rare = init_and_load_model(model_rare_path)
         print(f"Successfully loaded rare TCN model: {model_rare_path} (classes={num_classes_rare})")
-    
+
     beats_per_measure = 4.0 # Temporary default, will be auto-detected or updated below
-    
+
     kick_times = []
     snare_times = []
     hihat_times = []
     debug_rows = []
-    
+
     # 2. Load audio
     print(f"Loading audio: {audio_path}")
     y, _ = librosa.load(audio_path, sr=sr, mono=True)
-    
+
     # 3. Model Inference on entire track
     print("Extracting custom hybrid 2-channel features for the entire track...")
     features = extract_features(y, sr=sr, hop_length=hop_length, n_mels=n_mels, use_multi_log_mel=use_multi_log_mel)
     features_tensor = torch.from_numpy(features).float().unsqueeze(0).to(device)
-    
+
     print("Running Sequence TCN Inference...")
     with torch.no_grad():
         if model_rare is not None:
             onset_logits_base, vel_logits_base = model(features_tensor)
             onset_logits_rare, vel_logits_rare = model_rare(features_tensor)
-            
+
             base_p = torch.sigmoid(onset_logits_base).squeeze(0).cpu().numpy()
             rare_p = torch.sigmoid(onset_logits_rare).squeeze(0).cpu().numpy()
             base_v = torch.sigmoid(vel_logits_base).squeeze(0).cpu().numpy()
             rare_v = torch.sigmoid(vel_logits_rare).squeeze(0).cpu().numpy()
-            
+
             # 中文註解：雙塔機率特徵融合 (Probability Fusion)
             onset_preds = np.zeros((base_p.shape[0], 6), dtype=np.float32)
             onset_preds[:, :3] = base_p[:, :3]
             onset_preds[:, 3:6] = rare_p[:, 3:6]
-            
+
             vel_preds = np.zeros((base_v.shape[0], 6), dtype=np.float32)
             vel_preds[:, :3] = base_v[:, :3]
             vel_preds[:, 3:6] = rare_v[:, 3:6]
-            
+
             # 強制將推理類別數設為 6，以利啟用後續六類別解算器
             num_classes = 6
         else:
@@ -1232,7 +1232,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             else:
                 onset_preds = torch.sigmoid(onset_logits).squeeze(0).cpu().numpy()[:, :3]
                 vel_preds = torch.sigmoid(vel_logits).squeeze(0).cpu().numpy()[:, :3]
-        
+
     # Auto-calibrate thresholds using Maximum-Gap Peak Clustering (MGPC) or Percentile based
     def get_mgpc_thresh(prob, c_type):
         peaks = []
@@ -1244,7 +1244,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             return 0.65
         if len(peaks) == 1:
             return float(np.clip(peaks[0] * 0.5, 0.30, 0.60))
-            
+
         gaps = peaks[:-1] - peaks[1:]
         best_gap = -1
         best_thresh = 0.50
@@ -1256,11 +1256,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 valid = 0.22 <= mid <= 0.60
             else: # HH
                 valid = 0.20 <= mid <= 0.60
-                
+
             if valid and gaps[i] > best_gap:
                 best_gap = gaps[i]
                 best_thresh = mid
-                
+
         if best_gap == -1:
             max_p = peaks[0]
             if max_p < 0.22:
@@ -1327,7 +1327,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         thresholds[5] = thresh_ride if (num_classes > 5 and thresh_ride is not None) else (calibrated_thresholds[5] if num_classes > 5 else 0.50)
         for c in range(6, num_classes):
             thresholds[c] = calibrated_thresholds[c]
-        
+
     # Calculate local RMS energy for adaptive dynamic thresholding
     n_frames = len(onset_preds)
     rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=hop_length)[0]
@@ -1335,12 +1335,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         rms = np.pad(rms, (0, n_frames - len(rms)), mode='edge')
     elif len(rms) > n_frames:
         rms = rms[:n_frames]
-        
+
     rms_db = 20 * np.log10(rms + 1e-5)
     max_db = np.max(rms_db)
     min_db = np.max([np.min(rms_db), max_db - 40.0]) # Cap range to 40dB to prevent noise amplification
     rms_db_norm = np.clip((rms_db - min_db) / (max_db - min_db + 1e-6), 0.0, 1.0)
-    
+
     # Calculate adaptive thresholds for each frame
     # Hi-Hat: base threshold modified by [-0.15, +0.10]
     # Kick & Snare: base threshold modified by [-0.08, +0.08]
@@ -1350,12 +1350,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     else:
         thresh_array_s = np.clip(thresholds[1] + (0.08 - 0.16 * rms_db_norm), 0.25, 0.75)
     thresh_array_h = np.clip(thresholds[2] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
-    
+
     if num_classes == 6:
         thresh_array_tom = np.clip(thresholds[3] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
         thresh_array_crash = np.clip(thresholds[4] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
         thresh_array_ride = np.clip(thresholds[5] + (0.10 - 0.25 * rms_db_norm), 0.25, 0.75)
-        
+
     print(f"[Adaptive Thresholds] Dynamic range (KD): {np.min(thresh_array_k):.2f} to {np.max(thresh_array_k):.2f}")
     print(f"[Adaptive Thresholds] Dynamic range (SD): {np.min(thresh_array_s):.2f} to {np.max(thresh_array_s):.2f}")
     print(f"[Adaptive Thresholds] Dynamic range (HH): {np.min(thresh_array_h):.2f} to {np.max(thresh_array_h):.2f}")
@@ -1389,7 +1389,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     kick_peaks = get_peaks(onset_preds[:, 0], thresh_array_k)
     snare_peaks = get_peaks(onset_preds[:, 1], thresh_array_s)
     hh_peaks = get_peaks(onset_preds[:, 2], thresh_array_h)
-    
+
     tom_peaks = []
     crash_peaks = []
     ride_peaks = []
@@ -1397,10 +1397,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         tom_peaks = get_peaks(onset_preds[:, 3], thresh_array_tom)
         crash_peaks = get_peaks(onset_preds[:, 4], thresh_array_crash)
         ride_peaks = get_peaks(onset_preds[:, 5], thresh_array_ride)
-    
+
     # Union of all peak frames is our candidate list
     onset_frames = sorted(list(set(kick_peaks + snare_peaks + hh_peaks + tom_peaks + crash_peaks + ride_peaks)))
-    
+
     # Apply sub-frame parabolic interpolation to find precise onset_times
     onset_times = []
     for t in onset_frames:
@@ -1412,12 +1412,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             if t in tom_peaks: active_channels.append(3)
             if t in crash_peaks: active_channels.append(4)
             if t in ride_peaks: active_channels.append(5)
-        
+
         if not active_channels:
             active_channels = [np.argmax(onset_preds[t, :])]
-            
+
         best_c = active_channels[np.argmax([onset_preds[t, c] for c in active_channels])]
-        
+
         prob = onset_preds[:, best_c]
         denom = prob[t-1] - 2 * prob[t] + prob[t+1]
         if abs(denom) > 1e-5:
@@ -1427,7 +1427,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             dt = 0.0
         onset_time = (t + dt) * hop_length / sr
         onset_times.append(onset_time)
-        
+
     onset_times = np.array(onset_times)
     print(f"Detected {len(onset_times)} onset candidates using TCN NMS.")
 
@@ -1439,7 +1439,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     kick_peaks_tempo = get_peaks(onset_preds[:, 0], tempo_thresh_k)
     snare_peaks_tempo = get_peaks(onset_preds[:, 1], tempo_thresh_s)
     hh_peaks_tempo = get_peaks(onset_preds[:, 2], tempo_thresh_h)
-    
+
     onset_frames_tempo = sorted(list(set(kick_peaks_tempo + snare_peaks_tempo + hh_peaks_tempo)))
     onset_times_tempo = []
     for t in onset_frames_tempo:
@@ -1476,7 +1476,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     #             merged_frames_tempo.append(f_curr)
     # onset_times_tempo = np.array(merged_times_tempo)
     # onset_frames_tempo = merged_frames_tempo
-    
+
     # Estimate tempo and grid adaptively if not specified
     if tempo is None:
         tempo_max = 220.0
@@ -1486,7 +1486,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         except AttributeError:
             raw_estimated_tempo = librosa.beat.tempo(y=y, sr=sr, hop_length=hop_length)[0]
         raw_estimated_tempo = float(round(raw_estimated_tempo))
-        
+
         # Determine best tempo and grid adaptively with 0.1 BPM refinement
         raw_candidates = [
             raw_estimated_tempo,
@@ -1497,7 +1497,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             raw_estimated_tempo / 1.5,
             raw_estimated_tempo * 1.5
         ]
-        
+
         # Add interval-based tempo candidates
         if len(onset_times_tempo) > 1:
             diffs = np.diff(onset_times_tempo)
@@ -1510,7 +1510,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         bpm_candidate = float(round(60.0 / beat_dur_candidate, 1))
                         if 45.0 <= bpm_candidate <= tempo_max and bpm_candidate not in raw_candidates:
                             raw_candidates.append(bpm_candidate)
-                            
+
         # Filter to reasonable musical tempo limits (e.g., 45 to tempo_max BPM) to optimize search
         base_tempos = []
         for bt in raw_candidates:
@@ -1518,11 +1518,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 base_tempos.append(bt)
         if not base_tempos:
             base_tempos = [raw_estimated_tempo]
-            
+
         best_tempo = raw_estimated_tempo
         best_grid = '16th'
         min_dev = float('inf')
-        
+
         if len(onset_times_tempo) >= 4:
             candidates = []
             for base_t in base_tempos:
@@ -1531,33 +1531,33 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     first_on = onset_times_tempo[0]
                     offs = onset_times_tempo - first_on
                     phs = (offs / beat_dur) % 1.0
-                    
+
                     dev_16th = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 0.25, 0.50, 0.75, 1.0])**2 for p in phs]))
                     dev_trip = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 1.0/3.0, 2.0/3.0, 1.0])**2 for p in phs]))
                     dev_sw = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 1.0/3.0, 0.50, 5.0/6.0, 1.0])**2 for p in phs]))
-                    
+
                     dev_16th_sec = dev_16th * beat_dur
                     dev_trip_sec = dev_trip * beat_dur
                     dev_sw_sec = dev_sw * beat_dur
-                        
+
                     candidates.append({'tempo': t, 'grid': '16th', 'dev_sec': dev_16th_sec, 'is_32nd': False})
                     candidates.append({'tempo': t, 'grid': 'triplet', 'dev_sec': dev_trip_sec, 'is_32nd': False})
                     candidates.append({'tempo': t, 'grid': 'swung_16th', 'dev_sec': dev_sw_sec, 'is_32nd': False})
-                    
+
                     if t <= 75.0:
                         dev_32nd = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 0.125, 0.25, 0.375, 0.50, 0.625, 0.75, 0.875, 1.0])**2 for p in phs]))
                         dev_32nd_sec = dev_32nd * beat_dur
                         candidates.append({'tempo': t, 'grid': '16th', 'dev_sec': dev_32nd_sec, 'is_32nd': True})
-            
+
             # Find minimum deviation in seconds
             min_dev = min(c['dev_sec'] for c in candidates)
             best_cand_init = min(candidates, key=lambda x: x['dev_sec'])
             t_best = best_cand_init['tempo']
-            
+
             # Filter candidates within a 5ms tolerance of the minimum.
             tolerance_sec = 0.005
             qualified = [c for c in candidates if c['dev_sec'] <= min_dev + tolerance_sec]
-            
+
             # Explicitly qualify subharmonics of the best candidate if they align well musically (< 0.020s dev)
             for c in candidates:
                 if c in qualified:
@@ -1580,7 +1580,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         if c['dev_sec'] < 0.020:
                             qualified.append(c)
                             break
-            
+
             # --- Extended Octave-Tempo De-doubling (OTD) ---
             # If both a tempo T and a higher tempo (related by a 2.0x, 1.5x, or 3.0x ratio) are qualified,
             # we remove the higher tempo candidate to prefer the base tempo.
@@ -1596,11 +1596,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                             continue
                         if abs(c['tempo'] * ratio - other['tempo']) < 5.0:
                             tempos_to_remove.add(other['tempo'])
-            
+
             if tempos_to_remove:
                 print(f"[OTD] Removing higher harmonics: {[round(t, 2) for t in tempos_to_remove]}")
                 qualified = [c for c in qualified if c['tempo'] not in tempos_to_remove]
-                    
+
             # Run Joint Tempo-TS Selection for all inputs; no path-based regression branch.
             scored_qualified = []
             for c in qualified:
@@ -1626,11 +1626,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             best_ts_detected = scored_qualified[0]['best_ts']
             # Save detected TS so we don't have to recompute it later
             auto_detected_ts = best_ts_detected
-            
+
             best_tempo = best_candidate['tempo']
             best_grid = best_candidate['grid']
             min_dev = best_candidate['dev_sec']
-            
+
         estimated_tempo = best_tempo
         detected_grid = best_grid
         if 115.0 <= estimated_tempo <= 125.0 and auto_detected_ts == '12/8' and len(hh_peaks_tempo) >= 48:
@@ -1672,13 +1672,13 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             first_on = onset_times_tempo[0]
             offs = onset_times_tempo - first_on
             phs = (offs / beat_dur) % 1.0
-            
+
             dev_16th_sec = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 0.25, 0.50, 0.75, 1.0])**2 for p in phs])) * beat_dur
             dev_32nd_sec = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 0.125, 0.25, 0.375, 0.50, 0.625, 0.75, 0.875, 1.0])**2 for p in phs])) * beat_dur
             dev_str_sec = min(dev_16th_sec, dev_32nd_sec)
             dev_trip_sec = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 1.0/3.0, 2.0/3.0, 1.0])**2 for p in phs])) * beat_dur
             dev_sw_sec = np.sqrt(np.mean([min(abs(p - tg) for tg in [0.0, 1.0/3.0, 0.50, 5.0/6.0, 1.0])**2 for p in phs])) * beat_dur
-            
+
             print(f"[Grid Search] Straight: {dev_str_sec:.4f}s, Triplet: {dev_trip_sec:.4f}s, Swung 16th: {dev_sw_sec:.4f}s")
             if dev_str_sec < min_dev:
                 min_dev = dev_str_sec
@@ -1691,7 +1691,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 best_grid = 'swung_16th'
         detected_grid = best_grid
         print(f"Detected Grid Pattern: {detected_grid}")
-        
+
     detected_ts = '4/4'
     if time_signature == 'auto' and len(onset_times_tempo) >= 4:
         if 'auto_detected_ts' in locals():
@@ -1727,11 +1727,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     candidates['3/4'] = 3.0
                 best_ts = '4/4'
                 max_score = -1.0
-                
+
                 # Calculate beat duration
                 beat_dur = 60.0 / estimated_tempo
                 first_on = onset_times_tempo[0]
-                
+
                 # Calculate global grid indices with instrument identity (0: Kick, 1: Snare)
                 grid_indices = []
                 for idx, t in enumerate(onset_frames_tempo):
@@ -1742,7 +1742,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         grid_indices.append((step_idx, 0))
                     if onset_preds[t, 1] >= 0.20:
                         grid_indices.append((step_idx, 1))
-                        
+
                 # If too few hits detected, fallback to all onset candidates
                 if len(grid_indices) < 4:
                     grid_indices = []
@@ -1752,9 +1752,9 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         step_idx = int(round(beat_val * 4))
                         # Treat everything as generic drum hits
                         grid_indices.append((step_idx, 0))
-                        
+
                 max_step = max(idx for idx, _ in grid_indices) if grid_indices else 0
-                
+
                 quarter_steps = [idx for idx, inst_type in grid_indices if idx % 4 == 0]
                 quarter_ratio = len(quarter_steps) / len(grid_indices) if grid_indices else 0.0
                 unique_quarter_beats = len(set(idx // 4 for idx in quarter_steps))
@@ -1767,7 +1767,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
 
                 for name, P in candidates.items():
                     steps = int(round(P * 4))
-                    
+
                     # 1. Calculate Fano Factor (dispersion) using total hits per beat
                     bins = [0] * steps
                     for idx, _ in grid_indices:
@@ -1775,7 +1775,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     mean_val = np.mean(bins)
                     var_val = np.var(bins)
                     fano = var_val / mean_val if mean_val > 0 else 0.0
-                    
+
                     # 2. Calculate Cross-Measure Similarity (consistency) with Kick/Snare distinction
                     num_measures = (max_step + 1) // steps
                     if num_measures >= 2:
@@ -1790,7 +1790,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                                     elif inst_type == 1:
                                         vec_s[idx - m * steps] = 1
                             measure_vectors.append(vec_k + vec_s)
-                            
+
                         similarities = []
                         for i in range(num_measures):
                             for j in range(i + 1, num_measures):
@@ -1804,18 +1804,18 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         avg_sim = np.mean(similarities) if similarities else 0.0
                     else:
                         avg_sim = 0.0
-                        
+
                     # Combine Fano Factor and Similarity
                     score = (1.0 + fano) * (avg_sim ** 2)
                     if name == '4/4':
                         score += 0.05
                         if sparse_shuffle_skeleton:
                             score += 1.00
-                        
+
                     if score > max_score:
                         max_score = score
                         best_ts = name
-                        
+
                 detected_ts = best_ts
                 print(f"[Time Signature Auto-Detect] Detected Time Signature: {detected_ts} (dispersion score: {max_score:.4f})")
                 if sparse_shuffle_skeleton and detected_ts == '4/4':
@@ -1841,7 +1841,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     elif detected_grid == 'triplet' and detected_ts == '12/8' and 85.0 <= estimated_tempo <= 95.0:
         detected_ts = '4/4'
         print("[Shuffle Detect] Keeping selected triplet tempo and spelling as 4/4 shuffle.")
-        
+
     try:
         ts_parts = detected_ts.split('/')
         ts_num = int(ts_parts[0])
@@ -1856,7 +1856,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         f"[Score Tempo] {score_tempo_unit}={score_tempo:.2f} BPM "
         f"(MIDI quarter={estimated_tempo:.2f} BPM)"
     )
-        
+
     if no_crosstalk is None:
         if ts_den == 8 and ts_num in (6, 9, 12):
             effective_tempo = score_tempo
@@ -1871,7 +1871,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     else:
         active_no_crosstalk = no_crosstalk
         print(f"[Adaptive Settings] Using user-specified no_crosstalk: {active_no_crosstalk}")
-    
+
     # --- Floating BPM Dynamic Beat Tracking (V22 Step 4) ---
     beat_times = None
     if floating_bpm and len(onset_times) > 0:
@@ -1897,7 +1897,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
 
     # Quantize onset times to grid if requested
     beat_duration = 60.0 / estimated_tempo
-    
+
     # Grid mode selection
     if len(onset_times) > 0:
         if grid == 'auto':
@@ -1906,7 +1906,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             active_grid = grid
     else:
         active_grid = 'none'
-        
+
     # Apply grid quantization
     time_offset = 0.0
     aligned_first_onset = 0.0
@@ -1935,17 +1935,17 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         else:
             time_offset = 0.0
             print("[Score Notation Mode] Shifting first note to 0.0s for clean score layout.")
-        
+
         # Calculate minimum raw gap between onsets to detect rapid consecutive hits (like rolls/flams/32nd notes)
         min_raw_gap = np.min(np.diff(onset_times)) if len(onset_times) > 1 else float('inf')
-        
+
         if beat_times is not None:
             # --- Floating BPM Dynamic Grid Quantization (V22 Step 4) ---
             # 依時變 beat_times 對每一個 Onset 進行小節與拍點內的動態吸附
             t_meas_beats = 4.0
             num_beats = len(beat_times)
             num_measures = int(np.ceil(num_beats / t_meas_beats))
-            
+
             measure_grids = {}
             for m in range(num_measures):
                 b_start_idx = int(m * t_meas_beats)
@@ -1953,11 +1953,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 if b_end_idx <= b_start_idx:
                     measure_grids[m] = '16th'
                     continue
-                
+
                 m_start = beat_times[b_start_idx]
                 m_end = beat_times[b_end_idx]
                 m_onsets = [t for t in onset_times if m_start <= t < m_end]
-                
+
                 if len(m_onsets) >= 3:
                     dist_trip = []
                     dist_straight = []
@@ -1966,50 +1966,50 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         idx = max(0, min(idx, num_beats - 2))
                         p_beat_dur = beat_times[idx+1] - beat_times[idx]
                         phase_t = (t - beat_times[idx]) / p_beat_dur if p_beat_dur > 0 else 0.0
-                        
+
                         p_trip = phase_t * 3
                         dist_trip.append(abs(p_trip - round(p_trip)))
                         p_straight = phase_t * 4
                         dist_straight.append(abs(p_straight - round(p_straight)))
-                        
+
                     avg_trip = np.mean(dist_trip) if dist_trip else 0.5
                     avg_straight = np.mean(dist_straight) if dist_straight else 0.5
-                    
+
                     if avg_trip < 0.08 and avg_trip < avg_straight:
                         measure_grids[m] = 'triplet'
                     else:
                         measure_grids[m] = '16th'
                 else:
                     measure_grids[m] = measure_grids.get(m - 1, '16th')
-            
+
             quantized_times = []
             for t in onset_times:
                 idx = np.searchsorted(beat_times, t) - 1
                 idx = max(0, min(idx, num_beats - 2))
                 p_beat_dur = beat_times[idx+1] - beat_times[idx]
                 phase_t = (t - beat_times[idx]) / p_beat_dur if p_beat_dur > 0 else 0.0
-                
+
                 m = int(idx // t_meas_beats)
                 grid_style = measure_grids.get(m, '16th')
-                
+
                 b_start_idx = int(m * t_meas_beats)
                 b_end_idx = min(num_beats - 1, int((m + 1) * t_meas_beats))
                 m_start = beat_times[b_start_idx]
                 m_end = beat_times[b_end_idx]
                 m_onsets = [other for other in onset_times if m_start <= other < m_end]
                 m_min_gap = np.min(np.diff(m_onsets)) if len(m_onsets) > 1 else float('inf')
-                
+
                 if grid_style == 'triplet':
                     trip_dur = p_beat_dur / 3.0
                     sub_divs = 6 if m_min_gap < 0.65 * trip_dur else 3
                 else:
                     sixteenth_dur = p_beat_dur / 4.0
                     sub_divs = 8 if m_min_gap < 0.65 * sixteenth_dur else 4
-                    
+
                 sub_idx = round(phase_t * sub_divs)
                 quantized_t = beat_times[idx] + (sub_idx / float(sub_divs)) * p_beat_dur
                 quantized_times.append(quantized_t)
-                
+
             quantized_times = np.array(quantized_times)
             if not sync_audio:
                 quantized_times = quantized_times - first_onset
@@ -2018,17 +2018,17 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             # --- Local Time-Varying Grid Quantization (ADC) ---
             t_meas = 4.0 * beat_duration
             quantized_times = []
-            
+
             # Pre-calculate dominant quantization grid style per measure window
             measure_grids = {}
             max_t = max(onset_times) if len(onset_times) > 0 else 100.0
             num_measures = int(np.ceil((max_t - first_onset) / t_meas)) + 1
-            
+
             for m in range(num_measures):
                 m_start = first_onset + m * t_meas
                 m_end = m_start + t_meas
                 m_onsets = [t for t in onset_times if m_start <= t < m_end]
-                
+
                 if len(m_onsets) >= 3:
                     dist_trip = []
                     dist_straight = []
@@ -2039,10 +2039,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         dist_trip.append(abs(p_trip - round(p_trip)))
                         p_straight = phase_t * 4
                         dist_straight.append(abs(p_straight - round(p_straight)))
-                        
+
                     avg_trip = np.mean(dist_trip)
                     avg_straight = np.mean(dist_straight)
-                    
+
                     # If triplet grid has significantly lower quantization distance
                     if avg_trip < 0.08 and avg_trip < avg_straight:
                         measure_grids[m] = 'triplet'
@@ -2056,12 +2056,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 m = int(np.floor((t - first_onset) / t_meas))
                 m = max(0, m)
                 grid_style = measure_grids.get(m, '16th')
-                
+
                 m_start = first_onset + m * t_meas
                 m_end = m_start + t_meas
                 m_onsets = [other for other in onset_times if m_start <= other < m_end]
                 m_min_gap = np.min(np.diff(m_onsets)) if len(m_onsets) > 1 else float('inf')
-                
+
                 if grid_style == 'triplet':
                     triplet_dur = beat_duration / 3.0
                     if m_min_gap < 0.65 * triplet_dur:
@@ -2074,11 +2074,11 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         local_grid_duration = beat_duration / 8.0
                     else:
                         local_grid_duration = sixteenth_dur
-                        
+
                 intervals = round((t - first_onset) / local_grid_duration)
                 quantized_t = aligned_first_onset + intervals * local_grid_duration
                 quantized_times.append(quantized_t)
-                
+
             quantized_times = np.array(quantized_times)
             grid_duration = beat_duration / 4.0
         else:
@@ -2097,16 +2097,16 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     grid_duration = beat_duration / 8.0
                 else:
                     grid_duration = sixteenth_dur
-                
+
             first_onset_beat = 0
-            
+
             quantized_times = []
             for t in onset_times:
                 intervals = round((t - first_onset) / grid_duration)
                 quantized_t = aligned_first_onset + intervals * grid_duration
                 quantized_times.append(quantized_t)
             quantized_times = np.array(quantized_times)
-        
+
     # 5. Initialize MIDI with tempo and time signature metadata
     pm = pretty_midi.PrettyMIDI(initial_tempo=estimated_tempo)
     if beat_times is not None:
@@ -2132,7 +2132,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         print(f"[Debug TS Error] ts_num: {ts_num} (type: {type(ts_num)}), ts_den: {ts_den} (type: {type(ts_den)}), detected_ts: {detected_ts}")
         raise val_err
     drum_inst = pretty_midi.Instrument(program=0, is_drum=True)
-    
+
     # Pitch map for GM percussion
     pitch_map = {
         0: 36, # Kick
@@ -2142,28 +2142,28 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         4: 49, # Crash
         5: 51  # Ride
     }
-    
+
     transcribed_events_count = 0
     total_notes_count = 0
-    
+
     print(f"Running inference (Thresholds: Kick={thresholds[0]:.2f}, Snare={thresholds[1]:.2f}, Hi-Hat={thresholds[2]:.2f})...")
-    
+
     onset_decisions = []
-    
+
     for idx, (raw_onset, quantized_onset) in enumerate(zip(onset_times, quantized_times)):
         t = onset_frames[idx]
         probs = onset_preds[t, :]
-        
+
         # Calculate continuous velocity and rise indicators from model outputs
         # 1D Max Pooling for Velocity in [t-2, t+2]
         vel_pool_k = vel_preds[max(0, t-2):min(len(vel_preds), t+3), 0]
         vel_pool_s = vel_preds[max(0, t-2):min(len(vel_preds), t+3), 1]
         vel_pool_h = vel_preds[max(0, t-2):min(len(vel_preds), t+3), 2]
-        
+
         vel_kick = int(np.clip(np.max(vel_pool_k) * 127.0, 1, 127))
         vel_snare = int(np.clip(np.max(vel_pool_s) * 127.0, 1, 127))
         vel_hihat = int(np.clip(np.max(vel_pool_h) * 127.0, 1, 127))
-        
+
         vel_tom = 0
         vel_crash = 0
         vel_ride = 0
@@ -2174,33 +2174,33 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             vel_tom = int(np.clip(np.max(vel_pool_tom) * 127.0, 1, 127))
             vel_crash = int(np.clip(np.max(vel_pool_crash) * 127.0, 1, 127))
             vel_ride = int(np.clip(np.max(vel_pool_ride) * 127.0, 1, 127))
-        
+
         # Heuristics map low_rise and mid_rise to the regression velocities
         low_rise = vel_preds[t, 0] * 127.0
         mid_rise = vel_preds[t, 1] * 127.0
-        
+
         kick_triggered = t in kick_peaks
         snare_triggered = t in snare_peaks
         hh_triggered = t in hh_peaks
-        
+
         tom_triggered = t in tom_peaks if num_classes == 6 else False
         crash_triggered = t in crash_peaks if num_classes == 6 else False
         ride_triggered = t in ride_peaks if num_classes == 6 else False
-        
+
         kick_threshold = thresh_array_k[t]
         snare_threshold = thresh_array_s[t]
         hh_threshold = thresh_array_h[t]
-        
+
         tom_threshold = thresh_array_tom[t] if num_classes == 6 else 0.50
         crash_threshold = thresh_array_crash[t] if num_classes == 6 else 0.50
         ride_threshold = thresh_array_ride[t] if num_classes == 6 else 0.50
-        
+
         # High frequency energy slices from Channel 1 (Log-Mel spectrogram)
         # Custom hybrid scale: 40% of 256 filters above 5kHz = indices 154 to 255.
         hf_slice = features[0, 154:256, max(0, t-1):min(features.shape[2], t+2)]
         global_hf_energy = np.max(np.mean(hf_slice, axis=0)) if hf_slice.size > 0 else -80.0
         hf_energy = np.mean(features[0, 154:256, t])
-        
+
         onset_decisions.append({
             'raw_onset': raw_onset,
             'quantized_onset': quantized_onset,
@@ -2283,7 +2283,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             existing['tom_originally_triggered'] = existing.get('tom_originally_triggered', False) or d.get('tom_originally_triggered', False)
             existing['crash_originally_triggered'] = existing.get('crash_originally_triggered', False) or d.get('crash_originally_triggered', False)
             existing['ride_originally_triggered'] = existing.get('ride_originally_triggered', False) or d.get('ride_originally_triggered', False)
-    
+
     # Sort merged decisions by quantized_onset
     onset_decisions = sorted(merged_decisions.values(), key=lambda x: x['quantized_onset'])
 
@@ -2412,7 +2412,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     # --- Continuous Snare / Snare Roll / Train Beat Heuristics ---
     snare_density = sum(1 for d in onset_decisions if d['probs'][1] >= 0.50) / len(onset_decisions) if len(onset_decisions) > 0 else 0.0
     enable_snare_roll = (snare_density >= 0.70 and len(onset_decisions) >= 8)
-    
+
     if enable_snare_roll:
         print(f"[Heuristics] Continuous Snare/Roll pattern detected (density: {snare_density:.2f} >= 0.70). Enabling Snare Roll Mode.")
         for d in onset_decisions:
@@ -2423,7 +2423,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             else:
                 d['snare_triggered'] = False
                 d['snare_accent'] = False
-            
+
             # Pedal hi-hat is always present on the offbeat eighth notes (8 notes total in 2 bars)
             d['hh_triggered'] = (d['step_16th'] % 4 == 2)
     else:
@@ -2436,7 +2436,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             print(f"[Dynamics] Dynamic Snare Accent Threshold: {dynamic_thresh:.2f} (max rise: {max_rise:.2f})")
         else:
             dynamic_thresh = 15.0
-            
+
         for d in onset_decisions:
             # For triplet grid, check if it's a middle triplet eighth (ghost note)
             step_3rd = int(round(d['quantized_onset'] / (beat_duration / 3.0))) if beat_duration > 0 else 0
@@ -2449,14 +2449,14 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     hh_triggered_count = sum(1 for d in onset_decisions if d['hh_triggered'])
     total_onsets = len(onset_decisions)
     hh_density = hh_triggered_count / total_onsets if total_onsets > 0 else 0.0
-    
+
     # 1. Determine dominant hi-hat grid spacing based on native hi-hat triggers first
     native_hh_beats = []
     for d in onset_decisions:
         if d['hh_triggered']:
             beat_val = d['quantized_onset'] / beat_duration
             native_hh_beats.append(beat_val)
-            
+
     hh_grid_spacing = 0.5  # Default to eighth notes
     prefers_low_tempo_16th_fill = False
     prefers_high_tempo_short_16th_fill = False
@@ -2467,9 +2467,9 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         for spacing in [1.0, 0.5, 1.0/3.0, 0.25]:
             count = sum(1 for b in native_hh_beats if min(abs(b % spacing), abs(b % spacing - spacing)) < 0.02)
             alignments[spacing] = count / len(native_hh_beats)
-            
+
         print(f"[Heuristics] Hi-Hat grid alignments: { {f'{k:.3f}': round(v, 2) for k, v in alignments.items()} }")
-        
+
         # Select the largest spacing that explains the native hi-hats.
         # 中文註解：低速 4/4 若八分音符對齊已足夠，不升級成十六分補音，避免 Ghost groove 被補成兩倍。
         max_allowed_spacing = grid_duration / beat_duration if beat_duration > 0 else 0.25
@@ -2524,30 +2524,30 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     last_beat = quantized_times[-1] / beat_duration if len(quantized_times) > 0 else 0.0
     total_slots = int(last_beat / hh_grid_spacing) + 1 if hh_grid_spacing > 0 else 1
     hh_occupancy = hh_triggered_count / total_slots if total_slots > 0 else 0.0
-    
+
     enable_fill = False
     is_gpar_applied = False
-    
+
     # Check if Groove-Pattern-Aware Recovery (GPAR) is applicable
     gpar_grid_spacing = grid_duration / beat_duration if beat_duration > 0 else hh_grid_spacing
     steps_per_measure = int(round(beats_per_measure / gpar_grid_spacing)) if gpar_grid_spacing > 0 else 0
-    
+
     # Calculate num_measures based on the last triggered note to exclude trailing noise/decays
     last_triggered_time = 0.0
     for d in onset_decisions:
         if d['kick_triggered'] or d['snare_triggered'] or d['hh_triggered']:
             last_triggered_time = max(last_triggered_time, d['quantized_onset'])
-            
+
     if last_triggered_time > 0.0:
         num_measures = int(np.ceil((last_triggered_time / beat_duration) / beats_per_measure))
     else:
         num_measures = int(np.ceil((quantized_times[-1] / beat_duration) / beats_per_measure)) if len(quantized_times) > 0 and beat_duration > 0 and beats_per_measure > 0 else 0
-    
+
     # We require at least 3 measures to identify repeating patterns and reasonable hi-hat occupancy.
     # For sixteenth-note or finer grids, occupancy can naturally be lower (e.g., 20%) due to syncopation.
     min_occupancy = 0.20 if gpar_grid_spacing <= 0.30 else 0.40
     is_gpar_applicable = (num_measures >= 3 and steps_per_measure > 0 and hh_occupancy >= min_occupancy)
-    
+
     # 1. Determine if continuous hi-hat filling should be enabled
     if fill_hihat == 'on':
         enable_fill = True
@@ -2562,10 +2562,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     # 2. If continuous filling is not enabled, check if we should run Groove-Pattern-Aware Recovery (GPAR)
     if not enable_fill and fill_hihat in ['auto', 'gpar'] and is_gpar_applicable:
         print(f"[Heuristics] Repeating Groove pattern detected ({num_measures} measures). Running Groove-Pattern-Aware Recovery (GPAR)...")
-        
+
         # Step occupancy map: phase_step -> list of measures where hh is triggered
         phase_occupancy = {i: [] for i in range(steps_per_measure)}
-        
+
         for d in onset_decisions:
             step_idx = int(round(d['quantized_onset'] / (beat_duration * gpar_grid_spacing))) if beat_duration > 0 and gpar_grid_spacing > 0 else 0
             meas_idx = step_idx // steps_per_measure if steps_per_measure > 0 else 0
@@ -2573,7 +2573,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             if meas_idx < num_measures and phase_step < steps_per_measure:
                 if d['hh_triggered']:
                     phase_occupancy[phase_step].append(meas_idx)
-                    
+
         # Classify each phase_step:
         # Active: ratio >= 0.35
         # Inactive: ratio <= 0.15
@@ -2585,32 +2585,32 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 active_steps.add(ps)
             elif ratio <= 0.15:
                 inactive_steps.add(ps)
-                
+
         print(f"[GPAR] Active hi-hat steps: {sorted(list(active_steps))}")
         print(f"[GPAR] Inactive hi-hat steps (to suppress): {sorted(list(inactive_steps))}")
-        
+
         # Repair the onset_decisions hi-hat trigger states
         for d in onset_decisions:
             step_idx = int(round(d['quantized_onset'] / (beat_duration * gpar_grid_spacing))) if beat_duration > 0 and gpar_grid_spacing > 0 else 0
             meas_idx = step_idx // steps_per_measure if steps_per_measure > 0 else 0
             phase_step = step_idx % steps_per_measure if steps_per_measure > 0 else 0
-            
+
             if meas_idx >= num_measures:
                 d['hh_triggered'] = False
                 d['kick_triggered'] = False
                 d['snare_triggered'] = False
                 continue
-                
+
             if phase_step < steps_per_measure:
                 if phase_step in active_steps:
                     # Context-aware GPAR rhythm prior: check grid alignment, masking context, and soft activation
                     step_in_beats = d['quantized_onset'] / beat_duration
                     is_grid_aligned = min(abs(step_in_beats % hh_grid_spacing), abs(step_in_beats % hh_grid_spacing - hh_grid_spacing)) < 0.05
-                    
+
                     has_masking = (d['snare_triggered'] or d['kick_triggered'])
                     has_soft_activation = (d['probs'][2] >= 0.30)
                     is_linear_avoidance = (d['snare_triggered'] or d['kick_triggered']) and d['probs'][2] < 0.20
-                    
+
                     if is_grid_aligned and (has_masking or has_soft_activation) and not is_linear_avoidance:
                         d['hh_triggered'] = True
                         d['probs'] = d['probs'].copy()
@@ -2623,7 +2623,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 elif phase_step in inactive_steps:
                     # Suppress false trigger
                     d['hh_triggered'] = False
-                    
+
         # 中文註解：只有高度重複的相位可跨小節補音；35% active 門檻只足以做抑制判斷。
         virtual_fill_steps = {
             ps for ps in active_steps
@@ -2642,7 +2642,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     target_step = m * steps_per_measure + ps
                     quant_time = target_step * gpar_grid_spacing * beat_duration
                     target_time = first_onset + quant_time
-                    
+
                     # Check if there is an existing onset decision close to this target_time (within 10ms)
                     matched = False
                     for d in onset_decisions:
@@ -2653,7 +2653,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         # Rhythm-prior check: only spawn virtual hi-hats if target_time is grid-aligned with hh_grid_spacing
                         step_in_beats = quant_time / beat_duration
                         is_grid_aligned = min(abs(step_in_beats % hh_grid_spacing), abs(step_in_beats % hh_grid_spacing - hh_grid_spacing)) < 0.05
-                        
+
                         if is_grid_aligned:
                             # Find frame index for dynamic threshold assignment
                             t_frame = int(round(target_time * sr / hop_length))
@@ -2689,26 +2689,26 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             print(f"[GPAR] Skipping virtual hi-hat fill for odd-eighth meter {detected_ts}.")
         elif slow_shuffle_folded_4_4:
             print("[GPAR] Skipping virtual hi-hat fill for folded slow shuffle.")
-                    
+
         if virtual_decisions:
             print(f"[GPAR] Added {len(virtual_decisions)} virtual hi-hat notes to fill pattern gaps.")
             onset_decisions.extend(virtual_decisions)
             # Re-sort
             onset_decisions.sort(key=lambda x: x['quantized_onset'])
-            
+
         is_gpar_applied = True
-                
+
     if enable_fill:
         print(f"[Heuristics] Continuous Hi-Hat pattern detected (occupancy: {hh_occupancy:.2f}, spacing: {hh_grid_spacing:.4f}). Reconstructing clean hi-hat track...")
-        
+
         # Clear all existing hi-hat triggers to reconstruct from clean grid
         for d in onset_decisions:
             d['hh_triggered'] = False
-            
+
         # Reconstruct clean hi-hat track
         last_beat = (num_measures * beats_per_measure) if num_measures > 0 else (quantized_times[-1] / beat_duration if len(quantized_times) > 0 else 0.0)
         num_steps = int(last_beat / hh_grid_spacing)
-        
+
         clean_hh_decisions = []
         for i in range(num_steps + 1):
             # If it's a triplet/shuffle grid, only place hi-hats on 1st and 3rd triplets (i.e. i % 3 != 1)
@@ -2717,14 +2717,14 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             hh_beat = i * hh_grid_spacing
             quant_time = hh_beat * beat_duration
             hh_time = first_onset + quant_time
-            
+
             # Find if there is an existing onset quantized to this time (within 10ms)
             matched_d = None
             for d in onset_decisions:
                 if abs(d['quantized_onset'] - quant_time) < 0.01:
                     matched_d = d
                     break
-                    
+
             if matched_d is not None:
                 matched_d['hh_triggered'] = True
                 matched_d['probs'] = matched_d['probs'].copy()
@@ -2763,14 +2763,14 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                     'snare_originally_triggered': False,
                     'hh_originally_triggered': False
                 })
-                
+
         # Append virtual decisions and sort
         if clean_hh_decisions:
             onset_decisions.extend(clean_hh_decisions)
             onset_decisions.sort(key=lambda x: x['quantized_onset'])
     elif not is_gpar_applied:
         print(f"[Heuristics] Continuous Hi-Hat pattern not detected or disabled (density: {hh_density:.2f}).")
-        
+
     # --- Trailing Incomplete Measure Pruning (TIMP) ---
     if len(onset_decisions) > 0 and beat_duration > 0 and beats_per_measure > 0 and not slow_shuffle_folded_4_4:
         measure_counts = {}
@@ -2779,13 +2779,13 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             triggered_count = int(d['kick_triggered']) + int(d['snare_triggered']) + int(d['hh_triggered'])
             if triggered_count > 0:
                 measure_counts[meas_idx] = measure_counts.get(meas_idx, 0) + triggered_count
-                
+
         if measure_counts:
             max_meas = max(measure_counts.keys())
             if max_meas > 0:
                 preceding_counts = [measure_counts.get(m, 0) for m in range(max_meas)]
                 avg_preceding = sum(preceding_counts) / len(preceding_counts)
-                
+
                 final_native_backbone = 0
                 if ts_den == 8 and ts_num in (6, 9, 12):
                     for d in onset_decisions:
@@ -2947,7 +2947,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             else:
                 intervals = int(round(d['quantized_onset'] / (beat_duration / 4.0))) if beat_duration > 0 else 0
                 d['step_16th'] = intervals
-        
+
     # Apply Cymbal Acoustic Density Constraints (ADC) & Mutex Filters
     if model_rare_path is not None:
         onset_decisions = apply_cymbals_adc_hygiene(onset_decisions, config=config)
@@ -2957,7 +2957,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     base_hh_offset = hh_open_conf.get("base_offset", -16.0)
     adaptive_hh_enabled = hh_open_conf.get("enabled", True)
     hh_thresh = base_hh_offset
-    
+
     if adaptive_hh_enabled and len(onset_times) > 0:
         diff_list = []
         for d in onset_decisions:
@@ -2974,7 +2974,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             print(f"[Adaptive Hi-Hat] Median HH decay: {median_decay:.2f} dB, dynamic threshold set to {hh_thresh:.2f} dB.")
         else:
             print(f"[Adaptive Hi-Hat] Not enough HH samples. Falling back to static threshold: {hh_thresh:.2f} dB.")
-        
+
     # 六類路徑需輸出 Hi-Hat articulation；高頻包絡只計算一次。
     final_hihat_decisions = [d for d in onset_decisions if d.get('hh_triggered', False)]
     next_hihat_frame_by_id = {
@@ -2989,13 +2989,13 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     for d in onset_decisions:
         quantized_onset = d['quantized_onset']
         event_triggered = False
-        
+
         # Note length is slightly longer than grid spacing (1.8x) to look clean in notation software
         note_len = grid_duration * 1.8 if active_grid != 'none' else 0.2
-        
+
         # 中文註解：套用共用實體時間校正，並避免 MIDI 出現負時間。
         midi_onset = max(0.0, quantized_onset + time_offset)
-        
+
         if d['kick_triggered']:
             note = pretty_midi.Note(
                 velocity=d.get('vel_kick', map_velocity(d['probs'][0], 'kick', config)),
@@ -3007,7 +3007,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             kick_times.append(midi_onset)
             total_notes_count += 1
             event_triggered = True
-            
+
         if d['snare_triggered']:
             note = pretty_midi.Note(
                 velocity=d.get('vel_snare', map_velocity(d['probs'][1], 'snare', config)),
@@ -3019,7 +3019,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             snare_times.append(midi_onset)
             total_notes_count += 1
             event_triggered = True
-            
+
         if d['hh_triggered']:
             if enable_snare_roll:
                 hh_pitch = 44
@@ -3035,7 +3035,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             else:
                 hh_pitch = pitch_map[2]
             d['hh_pitch'] = hh_pitch
-                
+
             note = pretty_midi.Note(
                 velocity=d.get('vel_hihat', map_velocity(d['probs'][2], 'hihat', config)),
                 pitch=hh_pitch,
@@ -3046,7 +3046,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             hihat_times.append(midi_onset)
             total_notes_count += 1
             event_triggered = True
-            
+
         if model_rare_path is not None:
             if d.get('tom_triggered', False):
                 note = pretty_midi.Note(
@@ -3058,7 +3058,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 drum_inst.notes.append(note)
                 total_notes_count += 1
                 event_triggered = True
-                
+
             if d.get('crash_triggered', False):
                 note = pretty_midi.Note(
                     velocity=d.get('vel_crash', map_velocity(d['probs'][4], 'cymbal', config)),
@@ -3069,7 +3069,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 drum_inst.notes.append(note)
                 total_notes_count += 1
                 event_triggered = True
-                
+
             if d.get('ride_triggered', False):
                 note = pretty_midi.Note(
                     velocity=d.get('vel_ride', map_velocity(d['probs'][5], 'cymbal', config)),
@@ -3080,10 +3080,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 drum_inst.notes.append(note)
                 total_notes_count += 1
                 event_triggered = True
-            
+
         if event_triggered:
             transcribed_events_count += 1
-            
+
         debug_rows.append({
             'row_type': 'event',
             'frames': ';'.join(str(frame) for frame in d.get('frames', [])),
@@ -3144,12 +3144,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             estimated_tempo, active_grid, detected_ts, score_tempo_unit, score_tempo, time_offset
         )
         print(f"Notation events CSV exported to: {notation_events_path}")
-        
+
     # --- AI Model Recognition Rate / Confidence Reporting ---
     print("\n" + "="*50)
     print("           AI MODEL RECOGNITION RATE & CONFIDENCE REPORT")
     print("="*50)
-    
+
     # Try to find ground-truth XML annotation
     import glob
     base_name = os.path.basename(audio_path).split('.')[0]
@@ -3166,7 +3166,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         xml_same_dir = os.path.join(audio_dir, base_name + '.xml')
         if os.path.exists(xml_same_dir):
             xml_path = xml_same_dir
-            
+
     if xml_path and os.path.exists(xml_path):
         print(f"Found Ground-Truth Annotation: {xml_path}")
         transcribed_times = {
@@ -3188,21 +3188,21 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         print("Ground-Truth XML not found for this file.")
         print("Reporting AI model's general benchmark accuracy & prediction confidence:")
         print("-"*55)
-        
+
         # 1. Acoustic Confidence (excluding brain virtual notes)
         conf_k = [d['probs'][0] for d in onset_decisions if d['kick_triggered'] and not d.get('is_virtual_kd', False)]
         conf_s = [d['probs'][1] for d in onset_decisions if d['snare_triggered'] and not d.get('is_virtual_sd', False)]
         conf_h = [d['probs'][2] for d in onset_decisions if d['hh_triggered'] and not d.get('is_virtual_hh', False)]
-        
+
         avg_conf_k = np.mean(conf_k) if conf_k else 0.0
         avg_conf_s = np.mean(conf_s) if conf_s else 0.0
         avg_conf_h = np.mean(conf_h) if conf_h else 0.0
-        
+
         # 2. Brain Groove Continuity Score (percentage of native hi-hats vs virtual filled)
         total_hh = sum(1 for d in onset_decisions if d['hh_triggered'])
         virtual_hh = sum(1 for d in onset_decisions if d['hh_triggered'] and d.get('is_virtual_hh', False))
         groove_score = 1.0 - (virtual_hh / total_hh) if total_hh > 0 else 1.0
-        
+
         print(f"{'Instrument':<12} | {'Model Benchmark F1':<20} | {'Acoustic Confidence (AI Only)':<30}")
         print("-"*55)
         print(f"{'Kick (KD)':<12} | {'89.80%':<20} | {avg_conf_k:<30.2%}")
@@ -3211,47 +3211,47 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         print("-"*55)
         print(f"Hi-Hat Groove Continuity Score (Brain): {groove_score:.2%} (Reconstructed {virtual_hh} masked notes)")
         print("Note: Acoustic Confidence represents the model's neural network activation probability.")
-        
+
     print("="*55 + "\n")
 
     pm.instruments.append(drum_inst)
     pm.write(output_midi_path)
-    
+
     # Print detailed debug table
     print("\n" + "="*95)
     print("                      DETAILED AI MODEL PREDICTIONS & DECISION LOG")
     print("="*95)
     print(f"{'Onset Time':<10} | {'Beat':<5} | {'Kick (Prob/Rise)':<17} | {'Snare (Prob/Rise)':<18} | {'Hi-Hat (Prob/Thresh)':<20} | {'Triggered':<10}")
     print("-"*95)
-    
+
     for row in debug_rows:
         kick_status = f"{row['probs'][0]:.2f}/{row['low_rise']:.1f}"
         if row['kick_ok']:
             kick_status += " (Ok)"
         elif row['probs'][0] >= thresholds[0]:
             kick_status += " (LowRise)"
-            
+
         snare_status = f"{row['probs'][1]:.2f}/{row['mid_rise']:.1f}"
         if row['snare_ok']:
             snare_status += " (Ok)"
         elif row['probs'][1] >= thresholds[1]:
             snare_status += " (LowRise)"
-            
+
         hh_status = f"{row['probs'][2]:.2f}/{row['hh_thresh']:.2f}"
         if row['hh_ok']:
             hh_status += " (Ok)"
         elif row['probs'][2] >= thresholds[2]:
             hh_status += " (Suppressed)"
-            
+
         triggered = []
         if row['kick_ok']: triggered.append("Kick")
         if row['snare_ok']: triggered.append("Snare")
         if row['hh_ok']: triggered.append("Hi-Hat")
         triggered_str = "+".join(triggered) if triggered else "None"
-        
+
         print(f"{row['raw_time']:<10.4f} | {row['beat']:<5.2f} | {kick_status:<17} | {snare_status:<18} | {hh_status:<20} | {triggered_str:<10}")
     print("="*95)
-    
+
     print("\nTranscription completed successfully!")
     print(f"Processed {len(onset_times)} onsets, successfully identified {transcribed_events_count} event beats.")
     print(f"Wrote a total of {total_notes_count} MIDI notes:")
@@ -3259,14 +3259,14 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     print(f"  - Snare (SD): {len(snare_times)}")
     print(f"  - Hi-Hat (HH): {len(hihat_times)}")
     print(f"MIDI file exported to: {output_midi_path}")
-    
+
     # --- LilyPond Score Generation ---
     if False:  # Disabled to output MIDI only as requested
         try:
             print("Generating LilyPond drum sheet music...")
             base_midi, _ = os.path.splitext(output_midi_path)
             ly_path = f"{base_midi}.ly"
-            
+
             # Dynamic steps calculation based on time signature and grid
             if active_grid == 'triplet':
                 steps_per_beat = 3
@@ -3285,12 +3285,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 step_dur = '16'
                 steps_per_group = 16 // ts_den if ts_den in [4, 8, 16] else 4
                 is_tuplet = False
-                
+
             steps_per_bar = int(round(beats_per_measure * steps_per_beat))
-            
+
             max_step = 0
             mapped_onsets = []
-            
+
             for d in onset_decisions:
                 if active_grid == 'triplet' or active_grid == 'swung_16th':
                     intervals = int(round(d['quantized_onset'] / (beat_duration / 6.0)))
@@ -3305,7 +3305,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 else:
                     intervals = int(round(d['quantized_onset'] / (beat_duration / 4.0)))
                     step_idx = intervals
-                    
+
                 mapped_onsets.append({
                     'step': step_idx,
                     'kick': d['kick_triggered'],
@@ -3315,15 +3315,15 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 })
                 if step_idx > max_step:
                     max_step = step_idx
-                    
+
             num_bars = int(np.ceil((max_step + 1) / steps_per_bar))
             if num_bars == 0:
                 num_bars = 1
             total_steps = num_bars * steps_per_bar
-            
+
             lower_steps = ['r'] * total_steps
             upper_steps = ['r'] * total_steps
-            
+
             for mo in mapped_onsets:
                 step = mo['step']
                 if step >= total_steps:
@@ -3331,7 +3331,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 is_pedal_hh = enable_snare_roll
                 if mo['hh'] and not is_pedal_hh:
                     upper_steps[step] = 'hh'
-                
+
                 # Format lower voice components (Kick, Snare, Pedal HH)
                 lower_components = []
                 if mo['kick']:
@@ -3343,25 +3343,25 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                         lower_components.append('\\parenthesize sn')
                 if mo['hh'] and is_pedal_hh:
                     lower_components.append('hhp')
-                
+
                 if lower_components:
                     if len(lower_components) == 1:
                         note_str = lower_components[0]
                     else:
                         note_str = '<' + ' '.join(lower_components) + '>'
-                    
+
                     # Add accent if the snare at this step is accented
                     if mo['snare'] and mo.get('snare_accent', False):
                         note_str += '->'
-                    
+
                     lower_steps[step] = note_str
-            
+
             def format_voice_bars_adaptive(steps):
                 bars_code = []
                 for b in range(num_bars):
                     bar_steps = steps[b * steps_per_bar : (b + 1) * steps_per_bar]
                     bar_code = []
-                    
+
                     num_groups = len(bar_steps) // steps_per_group
                     for g in range(num_groups):
                         group_steps = bar_steps[g * steps_per_group : (g + 1) * steps_per_group]
@@ -3376,25 +3376,25 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                                     group_notes.append(' '.join(parts))
                                 else:
                                     group_notes.append(s + step_dur)
-                                    
+
                         group_str = " ".join(group_notes)
                         if is_tuplet:
                             bar_code.append(f"{tuplet_str} {{ {group_str} }}")
                         else:
                             bar_code.append(group_str)
-                            
+
                     bars_code.append(" ".join(bar_code) + " |")
                 return "\n  ".join(bars_code)
-                
+
             lower_code = format_voice_bars_adaptive(lower_steps)
             upper_code = format_voice_bars_adaptive(upper_steps)
-            
+
             style_name = "Straight 16th Funk"
             if active_grid == 'swung_16th':
                 style_name = "Swung 16ths Funk (Swing Feel)"
             elif active_grid == 'triplet':
                 style_name = "Shuffle Groove"
-                
+
             # Formatting tempo mark (eighth note = estimated_tempo * 2 for X/8, else quarter = estimated_tempo)
             if ts_den == 8:
                 tempo_val = int(round(estimated_tempo * 2))
@@ -3402,7 +3402,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             else:
                 tempo_val = int(round(estimated_tempo))
                 tempo_unit = '4'
-                
+
             ly_content = f"""\\version "2.24.4"
 \\header {{
   title = "{style_name}"
@@ -3439,7 +3439,7 @@ lower = \\drummode {{
             with open(ly_path, 'w') as f:
                 f.write(ly_content)
             print(f"LilyPond code exported to: {ly_path}")
-            
+
             print("Compiling LilyPond to sheet music images...")
             ly_dir = os.path.dirname(ly_path)
             ly_file = os.path.basename(ly_path)
@@ -3461,7 +3461,7 @@ lower = \\drummode {{
                 print(result.stderr)
         except Exception as ex:
             print(f"Failed to generate LilyPond sheet music: {ex}")
-            
+
     return {
         'kick': np.array(kick_times),
         'snare': np.array(snare_times),
@@ -3500,15 +3500,15 @@ def main():
     parser.add_argument('--use-multi-log-mel', action='store_true', help="Use multi-resolution Log-Mel feature extraction")
     parser.add_argument('--architecture', type=str, default='symmetric', help="Model architecture (default: symmetric)")
     parser.add_argument('--rollback-baseline', action='store_true', help="Rollback decoding thresholds to all 0.50 baseline")
-    
+
     args = parser.parse_args()
-    
+
     import glob
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    
+
     input_pattern = args.input
     wav_files = []
-    
+
     if os.path.isdir(input_pattern):
         wav_files = glob.glob(os.path.join(input_pattern, "*.wav"))
     elif "*" in input_pattern:
@@ -3517,13 +3517,13 @@ def main():
         wav_files = [f.strip() for f in input_pattern.split(",") if f.strip()]
     else:
         wav_files = [input_pattern]
-        
+
     wav_files = [f for f in wav_files if os.path.exists(f)]
-    
+
     if not wav_files:
         print(f"[Error] No valid input wav files found matching pattern: {input_pattern}")
         return
-        
+
     if len(wav_files) == 1:
         single_input = wav_files[0]
         if args.output is None:
@@ -3549,12 +3549,12 @@ def main():
             notation_events_path = f"{input_base}_notation_events.csv"
         else:
             notation_events_path = args.notation_events
-            
+
         if args.no_quantize:
             grid_mode = 'none'
         else:
             grid_mode = args.grid
-            
+
         if args.crosstalk == 'auto':
             no_crosstalk_val = None
         elif args.crosstalk == 'on':
@@ -3596,23 +3596,23 @@ def main():
         gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
         max_workers = min(len(wav_files), max(1, gpu_count * 2) if gpu_count > 0 else 4)
         print(f"[Batch Mode] GPUs available: {gpu_count}. Spawning {max_workers} thread workers.")
-        
+
         def process_single_wav(idx, wav_path):
             try:
                 base, _ = os.path.splitext(wav_path)
                 out_midi = f"{base}_drums.mid"
-                
+
                 if gpu_count > 0:
                     device_id = idx % gpu_count
                     torch.cuda.set_device(device_id)
                     dev_name = f"cuda:{device_id}"
                 else:
                     dev_name = "cpu"
-                    
+
                 print(f"[Worker-{idx}] Processing {os.path.basename(wav_path)} on {dev_name}...")
                 grid_mode = 'none' if args.no_quantize else args.grid
                 no_crosstalk_val = None if args.crosstalk == 'auto' else (False if args.crosstalk == 'on' else True)
-                
+
                 transcribe(
                     audio_path=wav_path,
                     model_path=args.model,
@@ -3647,7 +3647,7 @@ def main():
             except Exception as e:
                 print(f"[Worker-{idx} Error] Failed to process {wav_path}: {e}")
                 return wav_path, False
-                
+
         success_count = 0
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(process_single_wav, i, path) for i, path in enumerate(wav_files)]
@@ -3655,7 +3655,7 @@ def main():
                 path, ok = fut.result()
                 if ok:
                     success_count += 1
-                    
+
         print(f"[Batch Mode] Pipeline finished. Successfully transcribed {success_count}/{len(wav_files)} files.")
 
 if __name__ == '__main__':

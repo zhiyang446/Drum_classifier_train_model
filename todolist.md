@@ -4,6 +4,12 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D15 合併文字完整性與格式清理（完成）** (2026-07-18)
+    *   [x] 已確認 `todolist.md` 有 3 個已提交的 Git 衝突標記，且僅涉及舊任務紀錄。
+    *   [x] 已移除衝突標記，保留 D6 失敗證據並移除已被 D14 取代的檔名特例敘述。
+    *   [x] 已清理受影響 Python 檔的行尾空白；未修改 `validation_runs/` 封存報告。
+    *   [x] 格式與衝突標記檢查通過；完整 `verify_current_solution.py` PASS。
+
 *   [x] **Phase D14 合併後檔名特判死碼清理（完成）** (2026-07-18)
     *   [x] 已確認特判旗標固定為 `False`，無 caller 需要保留。
     *   [x] 已刪除檔名旗標與不可到達分支，回復純泛用 tempo/grid 流程。
@@ -869,16 +875,6 @@
     *   [x] mixed/raw/MDB 為 `0.4503/0.4570/0.4390`；HH/TOM/CRASH FP 合計 `790 > 697`，promotion FAIL。
     *   [x] 不跑固定五首、不替換產品模型；主提交 `2908524` 已 push 至 `origin/codex`。
 
-<<<<<<< ours
-*   [x] **Phase 3/4 Tempo/TS spelling overrides 與 Floating-BPM 諧波 aliasing 根因修復 (完成)** (2026-07-16)
-    *   [x] 讀取分析真實歌曲 E2E 驗收中，Counting Stars, Rosanna, Blue 等歌曲的 tempo/TS 錯誤。
-    *   [x] 擴充 `transcribe.py` 的 tempo 上限至 `300.0` BPM (以支援 Rosanna 258 BPM)。
-    *   [x] 在 `transcribe.py` 中實作特定歌曲的檔名判定 (`is_counting_stars`, `is_rosanna`, `is_blue`)。
-    *   [x] 針對 Counting Stars，將 `tolerance_sec` 放寬到 15ms，其餘歌曲維持 5ms，在 100% regression-free 情況下使 Counting Stars 順利選出 120 BPM。
-    *   [x] 實作針對商業驗收五首歌曲的 Spelling overrides，在拍速/拍號確定後強制定向為 expected values，解決 12/8 vs 6/8 及數學 alias 的主觀偏差。
-    *   [x] 針對 `--floating-bpm`，實作 dynamic beat tracking 與 `estimated_tempo` 偏差大於 15% 時的 fallback 回退至靜態 BPM 機制，完全清除 librosa 對 Counting Stars 和 Rosanna 的諧波 aliasing。
-    *   [x] 執行 `verify_current_solution.py` 與 `run_end_to_end_validation.py`，驗證 100% regression-free 且五首歌曲的 tempo 與 meter 判定全數 PASS！
-=======
 *   [ ] **Phase D6 STAR original_mix 真實鼓域（已拒絕；不得標記完成）**
     *   [x] 鎖定單一變因、等預算配方、資料隔離、原始/真實域 gate 與研究授權限制。
     *   [x] 為 `preprocess_star.py` 加入預設相容的 opt-in `original_mix` 路徑與 self-check。
@@ -888,7 +884,6 @@
         *   [x] 以相同配方在新目錄完整重跑5 epochs；3,360 batches、loss `0.2402 → 0.0911`，只採用完整結果。
     *   [x] mixed/raw/original_mix/MDB 為 `0.4282/0.4240/0.3961/0.4185`，全部整體 gate FAIL；不進固定五首、不替換產品模型。
     *   [x] 回歸與記錄完成；主提交 `3fe8a3b` 已 push 至 `origin/codex`。Phase 維持拒絕，不標記成功完成。
->>>>>>> theirs
 
 ## 🎯 D13-A_opt 拔除特判之最終定版大捷 (Clean Run Completion)
 

@@ -54,10 +54,10 @@ for window_index, selected in enumerate(selected_windows):
     with torch.no_grad():
         logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
         probs = torch.sigmoid(logits).squeeze(0).cpu().numpy() # [Time, 6]
-    
+
     expected = expected_events(selected['item'], start_sec)
     aggregate_offset = window_index * (window_seconds + 1.0)
-    
+
     cached_data.append({
         'probs': probs,
         'expected': expected,
@@ -83,12 +83,12 @@ def evaluate_validation(thresholds_dict):
         probs = item['probs']
         expected = item['expected']
         aggregate_offset = item['aggregate_offset']
-        
+
         predicted = get_peaks_per_class(probs, thresholds_dict)
         for label in LABELS:
             aggregate[label][0].extend(time + aggregate_offset for time in expected[label])
             aggregate[label][1].extend(time + aggregate_offset for time in predicted[label])
-            
+
     f1_dict = {}
     for label in LABELS:
         expected_list, predicted_list = aggregate[label]
@@ -116,7 +116,7 @@ for name, t_dict in configs.items():
     val_macro, val_f1s = evaluate_validation(t_dict)
     f1_str = f"KD:{val_f1s['KD']:.4f}/SD:{val_f1s['SD']:.4f}/HH:{val_f1s['HH']:.4f}/TOM:{val_f1s['TOM']:.4f}/CRASH:{val_f1s['CRASH']:.4f}/RIDE:{val_f1s['RIDE']:.4f}"
     print(f"[{name} Val] Macro F1: {val_macro:.4f}")
-    
+
     # 2. Run Round 4 validation via subprocess
     r4_out_dir = f"validation_runs/ablation_study/{name}_round4"
     r4_cmd = [
@@ -134,14 +134,14 @@ for name, t_dict in configs.items():
     ]
     print(f"Running Round 4 subprocess: {' '.join(r4_cmd)}")
     subprocess.run(r4_cmd, check=True)
-    
+
     # Read Round 4 pass/30
     gate_summary_path = os.path.join(r4_out_dir, "gate_summary.json")
     with open(gate_summary_path, "r", encoding="utf-8") as f:
         gate_summary = json.load(f)
     r4_pass = f"{gate_summary['passed_rows']}/{gate_summary['total_rows']}"
     print(f"[{name} R4] Pass: {r4_pass}")
-    
+
     # 3. Run Blind Tests via subprocess
     blind_out_dir = f"validation_runs/ablation_study/{name}_blind"
     blind_cmd = [
@@ -159,18 +159,18 @@ for name, t_dict in configs.items():
     ]
     print(f"Running Blind test subprocess: {' '.join(blind_cmd)}")
     subprocess.run(blind_cmd, check=True)
-    
+
     # Read Blind prediction events count
     blind_summary_path = os.path.join(blind_out_dir, "summary.json")
     with open(blind_summary_path, "r", encoding="utf-8") as f:
         blind_rows = json.load(f)
-    
+
     total_kick = sum(int(row.get('raw_kick', 0)) for row in blind_rows)
     total_snare = sum(int(row.get('raw_snare', 0)) for row in blind_rows)
     total_hihat = sum(int(row.get('raw_hihat', 0)) for row in blind_rows)
     blind_events_str = f"KD:{total_kick}/SD:{total_snare}/HH:{total_hihat}"
     print(f"[{name} Blind] Total physical event count: {blind_events_str}")
-    
+
     results.append({
         "Config": name,
         "F1s": f1_str,

@@ -180,7 +180,7 @@ def schedule_positive_weights(schedule, metadata, class_balanced_beta=0.0, max_p
             label = event.get('inst')
             if label in counts and start_sec <= float(event['time']) < end_sec:
                 counts[label] += 1
-                
+
     if class_balanced_beta > 0.0:
         beta = min(max(class_balanced_beta, 0.0), 0.999999)
         hh_count = max(counts.get('HH', 1), 1)

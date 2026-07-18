@@ -50,10 +50,10 @@ for window_index, selected in enumerate(selected_windows):
     with torch.no_grad():
         logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
         probs = torch.sigmoid(logits).squeeze(0).cpu().numpy()
-    
+
     expected = expected_events(selected['item'], start_sec)
     aggregate_offset = window_index * (window_seconds + 1.0)
-    
+
     cached_data.append({
         'probs': probs,
         'expected': expected,
@@ -76,12 +76,12 @@ def evaluate_test_split(thresholds_dict):
         probs = item['probs']
         expected = item['expected']
         aggregate_offset = item['aggregate_offset']
-        
+
         predicted = get_peaks_per_class(probs, thresholds_dict)
         for label in LABELS:
             aggregate[label][0].extend(time + aggregate_offset for time in expected[label])
             aggregate[label][1].extend(time + aggregate_offset for time in predicted[label])
-            
+
     f1_dict = {}
     for label in LABELS:
         expected_list, predicted_list = aggregate[label]
