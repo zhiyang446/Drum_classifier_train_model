@@ -1108,7 +1108,7 @@ def apply_cymbals_adc_hygiene(onset_decisions, config=None):
 
     return onset_decisions
 
-def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, thresh_tom=None, thresh_crash=None, thresh_ride=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None, use_multi_log_mel=False, architecture='symmetric'):
+def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thresh_snare=None, thresh_hihat=None, thresh_tom=None, thresh_crash=None, thresh_ride=None, threshold=None, tempo=None, grid='auto', sr=44100, hop_length=256, n_mels=256, onset_delta=None, no_crosstalk=None, fill_hihat='auto', time_signature='4/4', sync_audio=False, event_debug_path=None, raw_ai_events_path=None, notation_events_path=None, model_rare_path=None, adaptive_snare=False, floating_bpm=False, config_path=None, use_multi_log_mel=False, architecture='symmetric', rollback_baseline=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     
@@ -1288,7 +1288,7 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
 
     # 載入正式的解碼閾值 json 配置檔案 (D7 的校正版本，僅適用於 6 類及以上模型)
     json_thresh_path = "validation_runs/d7_calibrated_thresholds.json"
-    if num_classes > 3 and os.path.exists(json_thresh_path):
+    if num_classes > 3 and not rollback_baseline and os.path.exists(json_thresh_path):
         try:
             import json
             with open(json_thresh_path, "r", encoding="utf-8") as f:
@@ -1305,6 +1305,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
                 calibrated_thresholds[5] = saved_thresholds.get("ride", 0.50)
         except Exception as e:
             print(f"[Decoder Warning] Failed to load {json_thresh_path}: {e}")
+    elif rollback_baseline:
+        print("[Decoder] Rollback flag activated: forcing all thresholds to 0.50 baseline.")
+        for c in range(min(num_classes, 6)):
+            calibrated_thresholds[c] = 0.50
 
     t_k = thresh_kick if thresh_kick is not None else calibrated_thresholds[0]
     t_s = thresh_snare if thresh_snare is not None else calibrated_thresholds[1]
@@ -3523,6 +3527,7 @@ def main():
     parser.add_argument('--config', type=str, default=None, help="Path to custom post-processing config JSON file")
     parser.add_argument('--use-multi-log-mel', action='store_true', help="Use multi-resolution Log-Mel feature extraction")
     parser.add_argument('--architecture', type=str, default='symmetric', help="Model architecture (default: symmetric)")
+    parser.add_argument('--rollback-baseline', action='store_true', help="Rollback decoding thresholds to all 0.50 baseline")
     
     args = parser.parse_args()
     
@@ -3611,7 +3616,8 @@ def main():
             floating_bpm=args.floating_bpm,
             config_path=args.config,
             use_multi_log_mel=args.use_multi_log_mel,
-            architecture=args.architecture
+            architecture=args.architecture,
+            rollback_baseline=args.rollback_baseline
         )
     else:
         print(f"[Batch Mode] Found {len(wav_files)} WAV files to process in parallel.")
@@ -3661,7 +3667,8 @@ def main():
                     floating_bpm=args.floating_bpm,
                     config_path=args.config,
                     use_multi_log_mel=args.use_multi_log_mel,
-                    architecture=args.architecture
+                    architecture=args.architecture,
+                    rollback_baseline=args.rollback_baseline
                 )
                 print(f"[Worker-{idx}] Finished {os.path.basename(wav_path)} -> {out_midi}")
                 return wav_path, True
