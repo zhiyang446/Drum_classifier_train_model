@@ -4,6 +4,10 @@
 
 ## 📅 进行中的任务 (In Progress)
 
+*   [x] **Phase D12-A Multi-resolution Log-Mel 音色特徵融合（完成並拒絕）** (2026-07-18)
+    *   [x] 啟動 D12-A 僅多解析度 Log-Mel 特徵融合背景訓練（不帶 `--class-balanced-beta` 以控制變因）。
+    *   [x] 評估 D12-A 最佳 epoch 的 class_health 報告，檢視鈸類與大鼓指標。
+
 *   [x] **Phase D12-B Class-Balanced BCE 梯度平衡優化（完成並拒絕）** (2026-07-18)
     *   [x] 實作 `dsp_utils.py` 多解析度 Log-Mel 特徵（預設關閉以控制變因）。
     *   [x] 實作 `train_six_class_candidate.py` 的動態 Class-Balanced BCE 權重計算與 Clip 限制。
