@@ -1286,6 +1286,26 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     for c in range(num_classes):
         calibrated_thresholds[c] = get_mgpc_thresh(onset_preds[:, c], min(2, c))
 
+    # 載入正式的解碼閾值 json 配置檔案 (D7 的校正版本，僅適用於 6 類及以上模型)
+    json_thresh_path = "validation_runs/d7_calibrated_thresholds.json"
+    if num_classes > 3 and os.path.exists(json_thresh_path):
+        try:
+            import json
+            with open(json_thresh_path, "r", encoding="utf-8") as f:
+                saved_thresholds = json.load(f)
+            print(f"[Decoder] Loaded calibrated thresholds from {json_thresh_path}: {saved_thresholds}")
+            calibrated_thresholds[0] = saved_thresholds.get("kick", calibrated_thresholds[0])
+            calibrated_thresholds[1] = saved_thresholds.get("snare", calibrated_thresholds[1])
+            calibrated_thresholds[2] = saved_thresholds.get("hihat", calibrated_thresholds[2])
+            if num_classes > 3:
+                calibrated_thresholds[3] = saved_thresholds.get("tom", 0.50)
+            if num_classes > 4:
+                calibrated_thresholds[4] = saved_thresholds.get("crash", 0.50)
+            if num_classes > 5:
+                calibrated_thresholds[5] = saved_thresholds.get("ride", 0.50)
+        except Exception as e:
+            print(f"[Decoder Warning] Failed to load {json_thresh_path}: {e}")
+
     t_k = thresh_kick if thresh_kick is not None else calibrated_thresholds[0]
     t_s = thresh_snare if thresh_snare is not None else calibrated_thresholds[1]
     t_h = thresh_hihat if thresh_hihat is not None else calibrated_thresholds[2]
