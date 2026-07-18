@@ -1,0 +1,162 @@
+Device: cuda
+Successfully loaded TCN model: validation_runs/six_class_candidate_d7_d4d_earlystop20/six_class_candidate_d7_best.pth (classes=6)
+Loading audio: blind_user_tests\syncopated_4_4.wav
+Extracting custom hybrid 2-channel features for the entire track...
+Running Sequence TCN Inference...
+[Adaptive Thresholds] Dynamic range (KD): 0.52 to 0.68
+[Adaptive Thresholds] Dynamic range (SD): 0.42 to 0.58
+[Adaptive Thresholds] Dynamic range (HH): 0.35 to 0.60
+Detected 115 onset candidates using TCN NMS.
+Selected Tempo: 200.10 BPM, Detected Grid Pattern: 16th (min_dev: 0.0093s)
+[Time Signature Auto-Detect] Using Jointly-Selected Time Signature: 4/4
+Effective Time Signature: 4/4 (4.00 beats per measure)
+[Score Tempo] quarter=200.10 BPM (MIDI quarter=200.10 BPM)
+[Adaptive Settings] Fast effective tempo detected (200.1 BPM). Disabling Snare-HH crosstalk suppression to preserve co-occurring notes.
+[Grid Alignment] Grid start aligned to first triggered note at 0.1617s
+[Score Notation Mode] Shifting first note to 0.0s for clean score layout.
+Running inference (Thresholds: Kick=0.60, Snare=0.50, Hi-Hat=0.50)...
+[Dynamics] Dynamic Snare Accent Threshold: 58.70 (max rise: 106.74)
+[Heuristics] Hi-Hat grid alignments: {'1.000': 0.96, '0.500': 1.0, '0.333': 0.96, '0.250': 1.0}
+[Heuristics] Continuous Hi-Hat pattern detected (occupancy: 0.79, spacing: 1.0000). Reconstructing clean hi-hat track...
+[Heuristics] Incomplete trailing measure detected (Measure 16 has only 1 notes, vs average 8.0). Pruning it...
+[Adaptive Hi-Hat] Median HH decay: -1.21 dB, dynamic threshold set to -10.00 dB.
+Event debug CSV exported to: validation_runs/ablation_study/A1_blind\syncopated_4_4\syncopated_4_4_event_debug.csv
+Raw AI events CSV exported to: validation_runs/ablation_study/A1_blind\syncopated_4_4\syncopated_4_4_raw_ai_events.csv
+Notation events CSV exported to: validation_runs/ablation_study/A1_blind\syncopated_4_4\syncopated_4_4_notation_events.csv
+
+==================================================
+           AI MODEL RECOGNITION RATE & CONFIDENCE REPORT
+==================================================
+Ground-Truth XML not found for this file.
+Reporting AI model's general benchmark accuracy & prediction confidence:
+-------------------------------------------------------
+Instrument   | Model Benchmark F1   | Acoustic Confidence (AI Only) 
+-------------------------------------------------------
+Kick (KD)    | 89.80%               | 83.62%                        
+Snare (SD)   | 82.10%               | 92.31%                        
+Hi-Hat (HH)  | 86.30%               | 71.36%                        
+-------------------------------------------------------
+Hi-Hat Groove Continuity Score (Brain): 75.00% (Reconstructed 16 masked notes)
+Note: Acoustic Confidence represents the model's neural network activation probability.
+=======================================================
+
+
+===============================================================================================
+                      DETAILED AI MODEL PREDICTIONS & DECISION LOG
+===============================================================================================
+Onset Time | Beat  | Kick (Prob/Rise)  | Snare (Prob/Rise)  | Hi-Hat (Prob/Thresh) | Triggered 
+-----------------------------------------------------------------------------------------------
+0.1617     | 0.00  | 0.96/98.0 (Ok)    | 0.01/78.5          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+0.4595     | 1.00  | 0.05/66.9         | 0.59/59.8 (LowRise) | 0.84/0.42 (Ok)       | Hi-Hat    
+0.6103     | 1.50  | 0.97/79.6 (Ok)    | 0.01/85.3          | 0.03/0.36            | Kick      
+0.7605     | 2.00  | 0.10/93.6         | 0.94/96.1 (Ok)     | 0.66/0.37 (Ok)       | Snare+Hi-Hat
+1.0582     | 3.00  | 0.03/67.7         | 0.47/71.8          | 0.83/0.43 (Ok)       | Hi-Hat    
+1.2114     | 3.50  | 0.00/105.6        | 0.98/94.5 (Ok)     | 0.05/0.38            | Snare     
+1.3008     | 3.75  | 0.00/80.1         | 0.65/84.3 (LowRise) | 0.01/0.44            | None      
+1.3348     | 3.88  | 0.10/78.0         | 0.53/85.3 (LowRise) | 0.05/0.43            | None      
+1.3625     | 4.00  | 0.70/88.2 (Ok)    | 0.00/86.5          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+1.6596     | 5.00  | 0.93/89.7 (Ok)    | 0.01/80.1          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+1.9611     | 6.00  | 0.00/112.8        | 1.00/105.3 (Ok)    | 0.82/0.38 (Ok)       | Snare+Hi-Hat
+2.1639     | 6.62  | 0.00/70.4         | 0.67/70.3 (LowRise) | 0.01/0.44            | None      
+2.2592     | 7.00  | 0.00/69.0         | 0.40/70.0          | 0.86/0.45 (Ok)       | Hi-Hat    
+2.5592     | 8.00  | 0.96/98.1 (Ok)    | 0.00/92.1          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+2.8593     | 9.00  | 0.02/68.4         | 0.27/63.3          | 0.76/0.42 (Ok)       | Hi-Hat    
+3.0103     | 9.50  | 0.91/88.0 (Ok)    | 0.02/79.0          | 0.04/0.36            | Kick      
+3.1587     | 10.00 | 0.06/94.0         | 0.89/86.2 (Ok)     | 0.50/0.37 (Ok)       | Snare+Hi-Hat
+3.4590     | 11.00 | 0.00/65.4         | 0.12/70.6          | 0.90/0.43 (Ok)       | Hi-Hat    
+3.6104     | 11.50 | 0.00/108.6        | 0.98/100.8 (Ok)    | 0.40/0.38            | Snare     
+3.7023     | 11.75 | 0.00/81.3         | 0.51/84.0 (LowRise) | 0.00/0.44            | None      
+3.7635     | 12.00 | 0.58/75.5 (Ok)    | 0.00/83.3          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+4.0596     | 13.00 | 0.79/73.2 (Ok)    | 0.01/65.3          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+4.3597     | 14.00 | 0.02/104.9        | 0.95/101.1 (Ok)    | 0.64/0.38 (Ok)       | Snare+Hi-Hat
+4.5693     | 14.75 | 0.00/59.5         | 0.89/67.7 (Ok)     | 0.03/0.45            | Snare     
+4.6593     | 15.00 | 0.00/70.3         | 0.56/68.2 (LowRise) | 0.84/0.45 (Ok)       | Hi-Hat    
+4.9618     | 16.00 | 0.93/95.0 (Ok)    | 0.00/79.3          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+5.2592     | 17.00 | 0.11/70.1         | 0.37/61.0          | 0.79/0.41 (Ok)       | Hi-Hat    
+5.4100     | 17.50 | 0.96/85.1 (Ok)    | 0.01/86.5          | 0.08/0.36            | Kick      
+5.5609     | 18.00 | 0.30/96.4         | 0.93/95.4 (Ok)     | 0.52/0.37 (Ok)       | Snare+Hi-Hat
+5.6584     | 18.38 | 0.66/90.0 (Ok)    | 0.12/78.7          | 0.04/0.42            | Kick      
+5.8590     | 19.00 | 0.02/66.1         | 0.24/71.3          | 0.85/0.43 (Ok)       | Hi-Hat    
+6.0123     | 19.50 | 0.00/107.0        | 0.95/98.7 (Ok)     | 0.11/0.38            | Snare     
+6.1611     | 20.00 | 0.69/82.3 (Ok)    | 0.00/90.8          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+6.4603     | 21.00 | 0.89/85.7 (Ok)    | 0.03/77.9          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+6.7614     | 22.00 | 0.04/111.0        | 0.98/101.1 (Ok)    | 0.54/0.38 (Ok)       | Snare+Hi-Hat
+6.8851     | 22.38 | 0.00/77.8         | 0.51/74.6 (LowRise) | 0.02/0.43            | None      
+6.9716     | 22.75 | 0.00/59.5         | 0.79/67.0 (Ok)     | 0.01/0.45            | Snare     
+7.0593     | 23.00 | 0.00/69.4         | 0.63/70.9 (LowRise) | 0.86/0.45 (Ok)       | Hi-Hat    
+7.3557     | 24.00 | 0.88/94.2 (Ok)    | 0.00/86.7          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+7.6612     | 25.00 | 0.20/71.6         | 0.14/65.3          | 0.75/0.43 (Ok)       | Hi-Hat    
+7.8101     | 25.50 | 0.87/77.8 (Ok)    | 0.07/78.9          | 0.04/0.37            | Kick      
+7.9604     | 26.00 | 0.13/92.2         | 0.89/93.5 (Ok)     | 0.59/0.38 (Ok)       | Snare+Hi-Hat
+8.2594     | 27.00 | 0.00/68.1         | 0.16/66.2          | 0.85/0.44 (Ok)       | Hi-Hat    
+8.4111     | 27.50 | 0.00/114.2        | 0.99/106.7 (Ok)    | 0.31/0.38            | Snare     
+8.5623     | 28.00 | 0.81/78.4 (Ok)    | 0.00/85.3          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+8.8592     | 29.00 | 0.88/80.3 (Ok)    | 0.03/76.2          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+9.1603     | 30.00 | 0.01/106.4        | 0.96/103.3 (Ok)    | 0.58/0.38 (Ok)       | Snare+Hi-Hat
+9.2871     | 30.38 | 0.00/77.2         | 0.70/73.0 (LowRise) | 0.02/0.43            | None      
+9.3683     | 30.75 | 0.00/65.3         | 0.55/69.1 (LowRise) | 0.00/0.45            | None      
+9.4596     | 31.00 | 0.00/74.0         | 0.60/71.1 (LowRise) | 0.85/0.45 (Ok)       | Hi-Hat    
+9.7618     | 32.00 | 0.93/101.4 (Ok)   | 0.02/87.7          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+10.0592    | 33.00 | 0.03/68.4         | 0.44/59.9          | 0.87/0.42 (Ok)       | Hi-Hat    
+10.2102    | 33.50 | 0.94/80.2 (Ok)    | 0.00/77.2          | 0.06/0.36            | Kick      
+10.3616    | 34.00 | 0.05/90.2         | 0.98/87.0 (Ok)     | 0.64/0.37 (Ok)       | Snare+Hi-Hat
+10.5715    | 34.75 | 0.02/65.4         | 0.52/68.1 (LowRise) | 0.03/0.42            | None      
+10.6604    | 35.00 | 0.05/66.9         | 0.35/69.5          | 0.81/0.43 (Ok)       | Hi-Hat    
+10.8114    | 35.50 | 0.00/109.6        | 0.88/100.9 (Ok)    | 0.14/0.38            | Snare     
+10.9002    | 35.88 | 0.00/80.4         | 0.52/83.5 (LowRise) | 0.00/0.44            | None      
+10.9613    | 36.00 | 0.62/73.3 (Ok)    | 0.00/83.3          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+11.2608    | 37.00 | 0.88/88.1 (Ok)    | 0.03/81.4          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+11.5592    | 38.00 | 0.01/105.7        | 0.91/96.0 (Ok)     | 0.54/0.38 (Ok)       | Snare+Hi-Hat
+11.6852    | 38.38 | 0.00/72.5         | 0.94/75.1 (Ok)     | 0.21/0.43            | Snare     
+11.7690    | 38.75 | 0.00/63.3         | 0.61/69.4 (LowRise) | 0.02/0.45            | None      
+11.8589    | 39.00 | 0.00/69.6         | 0.41/67.3          | 0.93/0.45 (Ok)       | Hi-Hat    
+12.1562    | 40.00 | 0.84/92.1 (Ok)    | 0.00/84.6          | 0.58/0.37 (Ok)       | Kick+Hi-Hat
+12.4597    | 41.00 | 0.12/74.7         | 0.39/68.1          | 0.76/0.42 (Ok)       | Hi-Hat    
+12.6101    | 41.50 | 0.93/81.7 (Ok)    | 0.04/79.8          | 0.04/0.37            | Kick      
+12.7600    | 42.00 | 0.01/96.8         | 0.89/95.0 (Ok)     | 0.50/0.37 (Ok)       | Snare+Hi-Hat
+12.8865    | 42.38 | 0.00/75.1         | 0.47/69.3          | 0.01/0.42            | None      
+13.0602    | 43.00 | 0.01/65.2         | 0.28/64.4          | 0.86/0.43 (Ok)       | Hi-Hat    
+13.2110    | 43.50 | 0.00/111.6        | 1.00/102.0 (Ok)    | 0.45/0.38            | Snare     
+13.3004    | 43.88 | 0.00/80.1         | 0.52/86.7 (LowRise) | 0.00/0.44            | None      
+13.3601    | 44.00 | 0.59/78.5 (Ok)    | 0.00/82.5          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+13.6595    | 45.00 | 0.95/86.0 (Ok)    | 0.01/86.8          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+13.9609    | 46.00 | 0.01/106.2        | 1.00/101.6 (Ok)    | 0.70/0.38 (Ok)       | Snare+Hi-Hat
+14.0873    | 46.50 | 0.00/80.9         | 0.68/76.9 (LowRise) | 0.02/0.43            | None      
+14.2608    | 47.00 | 0.00/65.4         | 0.33/63.5          | 0.87/0.45 (Ok)       | Hi-Hat    
+14.5618    | 48.00 | 0.87/86.7 (Ok)    | 0.00/83.8          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+14.8596    | 49.00 | 0.04/71.0         | 0.47/63.4          | 0.87/0.42 (Ok)       | Hi-Hat    
+15.0109    | 49.50 | 0.95/76.2 (Ok)    | 0.01/68.8          | 0.08/0.37            | Kick      
+15.1621    | 50.00 | 0.55/103.1 (Ok)   | 0.98/98.1 (Ok)     | 0.69/0.37 (Ok)       | Kick+Snare+Hi-Hat
+15.4591    | 51.00 | 0.01/68.8         | 0.29/73.2          | 0.88/0.43 (Ok)       | Hi-Hat    
+15.6101    | 51.50 | 0.00/108.7        | 0.90/106.6 (Ok)    | 0.18/0.38            | Snare     
+15.7360    | 52.00 | 0.58/78.6 (Ok)    | 0.64/83.0 (LowRise) | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+16.0606    | 53.00 | 0.84/90.6 (Ok)    | 0.03/85.0          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+16.3595    | 54.00 | 0.03/106.4        | 0.79/97.2 (Ok)     | 0.50/0.38 (Ok)       | Snare+Hi-Hat
+16.4510    | 54.38 | 0.00/84.0         | 0.59/79.3 (LowRise) | 0.00/0.43            | None      
+16.4850    | 54.50 | 0.00/80.5         | 0.51/72.7 (LowRise) | 0.04/0.43            | None      
+16.5677    | 54.75 | 0.00/64.9         | 0.66/69.1 (LowRise) | 0.01/0.44            | None      
+16.6592    | 55.00 | 0.00/64.5         | 0.57/64.8 (LowRise) | 0.88/0.45 (Ok)       | Hi-Hat    
+16.9564    | 56.00 | 0.93/96.0 (Ok)    | 0.01/80.0          | 0.50/0.37 (Ok)       | Kick+Hi-Hat
+17.2592    | 57.00 | 0.02/68.3         | 0.29/65.1          | 0.80/0.42 (Ok)       | Hi-Hat    
+17.4102    | 57.50 | 0.98/84.5 (Ok)    | 0.01/85.7          | 0.02/0.36            | Kick      
+17.5600    | 58.00 | 0.04/97.4         | 0.97/95.2 (Ok)     | 0.73/0.37 (Ok)       | Snare+Hi-Hat
+17.7702    | 58.75 | 0.00/64.6         | 0.54/69.5 (LowRise) | 0.03/0.42            | None      
+17.8594    | 59.00 | 0.01/64.7         | 0.09/65.2          | 0.78/0.43 (Ok)       | Hi-Hat    
+18.0118    | 59.50 | 0.00/113.7        | 1.00/105.7 (Ok)    | 0.24/0.38            | Snare     
+18.1008    | 59.88 | 0.00/84.1         | 0.75/85.3 (Ok)     | 0.00/0.44            | Snare     
+18.1627    | 60.00 | 0.75/84.2 (Ok)    | 0.00/86.0          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+18.4601    | 61.00 | 0.94/90.8 (Ok)    | 0.01/88.2          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+18.7610    | 62.00 | 0.01/108.1        | 1.00/101.6 (Ok)    | 0.86/0.38 (Ok)       | Snare+Hi-Hat
+18.8874    | 62.50 | 0.00/79.1         | 0.74/75.3 (Ok)     | 0.02/0.43            | Snare     
+18.9714    | 62.75 | 0.00/62.2         | 0.86/66.5 (Ok)     | 0.02/0.45            | Snare     
+19.0595    | 63.00 | 0.00/68.3         | 0.44/70.6          | 0.85/0.45 (Ok)       | Hi-Hat    
+19.3521    | 64.00 | 0.00/0.0          | 0.00/0.0           | 0.60/0.60 (Suppressed) | None      
+===============================================================================================
+
+Transcription completed successfully!
+Processed 115 onsets, successfully identified 87 event beats.
+Wrote a total of 128 MIDI notes:
+  - Kick (KD): 34
+  - Snare (SD): 30
+  - Hi-Hat (HH): 64
+MIDI file exported to: validation_runs/ablation_study/A1_blind\syncopated_4_4\syncopated_4_4.mid

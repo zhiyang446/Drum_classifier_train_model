@@ -1,0 +1,6 @@
+name,layer,counts_only,overall,failures,expected_tempo,actual_tempo,expected_time_signature,actual_time_signature,expected_kick,actual_kick,raw_kick,expected_snare,actual_snare,raw_snare,expected_hihat,actual_hihat,raw_hihat,virtual_kick,virtual_snare,virtual_hihat,shuffle_completion
+10_rock_100_beat_4-4_1,notation,False,fail,tempo:66.47!=100.0;time_signature:12/8!=4/4;kick:18!=19;snare:19!=20;hihat:68!=74,100.0,66.47,4/4,12/8,19,18,18,20,19,19,74,68,78,0,0,0,False
+9_soul-groove9_105_beat_4-4_1,notation,False,fail,time_signature:12/8!=4/4;kick:44!=47;hihat:127!=128,105.0,105.00,4/4,12/8,47,44,44,32,32,32,128,127,123,0,0,27,False
+7_pop-groove7_138_beat_4-4_1,notation,False,fail,tempo:69.10!=138.0;kick:36!=47;snare:33!=35,138.0,69.10,4/4,4/4,47,36,36,35,33,33,128,128,127,0,5,9,False
+10_soul-groove10_102_beat_4-4_1,notation,False,fail,time_signature:12/8!=4/4;kick:38!=56;snare:35!=99;hihat:126!=129,102.0,102.00,4/4,12/8,56,38,38,99,35,35,129,126,123,0,0,21,False
+1_funk-groove1_138_beat_4-4_1,notation,False,fail,tempo:68.85!=138.0;kick:55!=56;snare:96!=114;hihat:128!=127,138.0,68.85,4/4,4/4,56,55,55,114,96,96,127,128,116,0,0,30,False

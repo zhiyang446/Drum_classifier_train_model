@@ -1,0 +1,99 @@
+Device: cuda
+Successfully loaded TCN model: validation_runs/six_class_candidate_d7_d4d_earlystop20/six_class_candidate_d7_best.pth (classes=6)
+Loading audio: blind_user_tests\ghost_snare.wav
+Extracting custom hybrid 2-channel features for the entire track...
+Running Sequence TCN Inference...
+[Adaptive Thresholds] Dynamic range (KD): 0.42 to 0.58
+[Adaptive Thresholds] Dynamic range (SD): 0.42 to 0.58
+[Adaptive Thresholds] Dynamic range (HH): 0.35 to 0.60
+Detected 50 onset candidates using TCN NMS.
+[OTD] Removing higher harmonics: [np.float64(129.9), np.float64(130.0), np.float64(129.9), np.float64(130.0), np.float64(130.1), np.float64(130.1), np.float64(194.9), np.float64(195.0), np.float64(195.1), np.float64(173.2), np.float64(173.3), np.float64(173.4), np.float64(173.2), np.float64(173.3), np.float64(173.4)]
+Selected Tempo: 65.00 BPM, Detected Grid Pattern: 16th (min_dev: 0.0040s)
+[Time Signature Auto-Detect] Using Jointly-Selected Time Signature: 4/4
+Effective Time Signature: 4/4 (4.00 beats per measure)
+[Score Tempo] quarter=65.00 BPM (MIDI quarter=65.00 BPM)
+[Adaptive Settings] Standard effective tempo detected (65.0 BPM). Enabling Snare-HH crosstalk suppression to filter noise.
+[Grid Alignment] Grid start aligned to first triggered note at 0.4186s
+[Score Notation Mode] Shifting first note to 0.0s for clean score layout.
+Running inference (Thresholds: Kick=0.50, Snare=0.50, Hi-Hat=0.50)...
+[Heuristics] Continuous Snare/Roll pattern detected (density: 0.72 >= 0.70). Enabling Snare Roll Mode.
+[Heuristics] Hi-Hat grid alignments: {'1.000': 0.0, '0.500': 1.0, '0.333': 0.0, '0.250': 1.0}
+[Heuristics] Continuous Hi-Hat pattern detected (occupancy: 0.50, spacing: 0.5000). Reconstructing clean hi-hat track...
+[Heuristics] Incomplete trailing measure detected (Measure 4 has only 1 notes, vs average 17.5). Pruning it...
+[Adaptive Hi-Hat] Median HH decay: -1.62 dB, dynamic threshold set to -10.00 dB.
+Event debug CSV exported to: validation_runs/ablation_study/A4_blind\ghost_snare\ghost_snare_event_debug.csv
+Raw AI events CSV exported to: validation_runs/ablation_study/A4_blind\ghost_snare\ghost_snare_raw_ai_events.csv
+Notation events CSV exported to: validation_runs/ablation_study/A4_blind\ghost_snare\ghost_snare_notation_events.csv
+
+==================================================
+           AI MODEL RECOGNITION RATE & CONFIDENCE REPORT
+==================================================
+Ground-Truth XML not found for this file.
+Reporting AI model's general benchmark accuracy & prediction confidence:
+-------------------------------------------------------
+Instrument   | Model Benchmark F1   | Acoustic Confidence (AI Only) 
+-------------------------------------------------------
+Kick (KD)    | 89.80%               | 93.06%                        
+Snare (SD)   | 82.10%               | 84.34%                        
+Hi-Hat (HH)  | 86.30%               | 76.72%                        
+-------------------------------------------------------
+Hi-Hat Groove Continuity Score (Brain): 87.50% (Reconstructed 4 masked notes)
+Note: Acoustic Confidence represents the model's neural network activation probability.
+=======================================================
+
+
+===============================================================================================
+                      DETAILED AI MODEL PREDICTIONS & DECISION LOG
+===============================================================================================
+Onset Time | Beat  | Kick (Prob/Rise)  | Snare (Prob/Rise)  | Hi-Hat (Prob/Thresh) | Triggered 
+-----------------------------------------------------------------------------------------------
+0.4186     | 0.00  | 0.98/100.8 (Ok)   | 0.00/84.1          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+0.8777     | 0.50  | 0.27/89.4         | 0.81/77.2 (Ok)     | 0.84/0.45 (Ok)       | Snare+Hi-Hat
+1.3426     | 1.00  | 0.00/114.1        | 0.98/96.2 (Ok)     | 0.60/0.38 (Ok)       | Snare+Hi-Hat
+1.7992     | 1.50  | 0.00/66.7         | 0.63/53.7 (Ok)     | 0.90/0.46 (Ok)       | Snare+Hi-Hat
+2.0320     | 1.75  | 0.00/83.8         | 0.90/70.3 (Ok)     | 0.61/0.42 (Suppressed) | Snare     
+2.2632     | 2.00  | 0.97/88.6 (Ok)    | 0.00/73.2          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+2.7239     | 2.50  | 0.14/76.0         | 0.70/61.8 (Ok)     | 0.86/0.46 (Ok)       | Snare+Hi-Hat
+3.1891     | 3.00  | 0.01/113.9        | 0.94/106.2 (Ok)    | 0.57/0.37 (Ok)       | Snare+Hi-Hat
+3.6473     | 3.50  | 0.01/83.6         | 0.80/65.8 (Ok)     | 0.83/0.46 (Ok)       | Snare+Hi-Hat
+3.8789     | 3.75  | 0.00/84.9         | 0.91/71.0 (Ok)     | 0.60/0.42 (Suppressed) | Snare     
+4.1093     | 4.00  | 0.99/86.2 (Ok)    | 0.00/71.6          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+4.5694     | 4.50  | 0.12/80.1         | 0.50/66.4          | 0.88/0.46 (Ok)       | Hi-Hat    
+5.0353     | 5.00  | 0.00/112.6        | 0.97/100.1 (Ok)    | 0.60/0.37 (Ok)       | Snare+Hi-Hat
+5.4936     | 5.50  | 0.02/83.5         | 0.74/62.7 (Ok)     | 0.89/0.45 (Ok)       | Snare+Hi-Hat
+5.7250     | 5.75  | 0.00/74.4         | 0.96/52.7 (Ok)     | 0.26/0.42            | Snare     
+5.9556     | 6.00  | 0.98/87.9 (Ok)    | 0.00/75.4          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+6.4159     | 6.50  | 0.22/88.8         | 0.76/73.1 (Ok)     | 0.85/0.45 (Ok)       | Snare+Hi-Hat
+6.8830     | 7.00  | 0.01/113.0        | 1.00/100.7 (Ok)    | 0.87/0.37 (Ok)       | Snare+Hi-Hat
+7.3382     | 7.50  | 0.00/72.2         | 0.74/58.4 (Ok)     | 0.93/0.46 (Ok)       | Snare+Hi-Hat
+7.5704     | 7.75  | 0.00/85.8         | 0.90/68.6 (Ok)     | 0.49/0.42            | Snare     
+7.8013     | 8.00  | 0.97/86.8 (Ok)    | 0.00/78.7          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+8.2622     | 8.50  | 0.34/92.8         | 0.53/71.6 (Ok)     | 0.85/0.45 (Ok)       | Snare+Hi-Hat
+8.7282     | 9.00  | 0.00/110.4        | 0.98/95.1 (Ok)     | 0.76/0.37 (Ok)       | Snare+Hi-Hat
+9.1851     | 9.50  | 0.02/73.6         | 0.71/60.4 (Ok)     | 0.90/0.46 (Ok)       | Snare+Hi-Hat
+9.4163     | 9.75  | 0.00/84.1         | 0.91/67.3 (Ok)     | 0.51/0.42 (Suppressed) | Snare     
+9.6491     | 10.00 | 0.96/86.3 (Ok)    | 0.00/79.6          | 0.67/0.35 (Ok)       | Kick+Hi-Hat
+10.1077    | 10.50 | 0.14/75.4         | 0.65/62.6 (Ok)     | 0.84/0.46 (Ok)       | Snare+Hi-Hat
+10.5735    | 11.00 | 0.01/111.4        | 0.97/100.5 (Ok)    | 0.72/0.37 (Ok)       | Snare+Hi-Hat
+11.0312    | 11.50 | 0.01/92.5         | 0.70/70.2 (Ok)     | 0.88/0.46 (Ok)       | Snare+Hi-Hat
+11.2630    | 11.75 | 0.00/81.3         | 0.89/65.8 (Ok)     | 0.60/0.42 (Suppressed) | Snare     
+11.4935    | 12.00 | 0.97/84.0 (Ok)    | 0.00/74.1          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+11.9535    | 12.50 | 0.63/83.5 (Ok)    | 0.18/72.9          | 0.88/0.46 (Ok)       | Kick+Hi-Hat
+12.4199    | 13.00 | 0.00/112.5        | 0.97/104.1 (Ok)    | 0.70/0.37 (Ok)       | Snare+Hi-Hat
+12.8776    | 13.50 | 0.01/83.1         | 0.73/72.2 (Ok)     | 0.75/0.46 (Ok)       | Snare+Hi-Hat
+13.1086    | 13.75 | 0.00/83.0         | 0.94/68.4 (Ok)     | 0.47/0.42            | Snare     
+13.3398    | 14.00 | 0.93/84.4 (Ok)    | 0.00/80.9          | 0.50/0.36 (Ok)       | Kick+Hi-Hat
+13.8004    | 14.50 | 0.26/92.1         | 0.36/72.9          | 0.79/0.46 (Ok)       | Hi-Hat    
+14.2660    | 15.00 | 0.00/112.8        | 1.00/100.8 (Ok)    | 0.76/0.37 (Ok)       | Snare+Hi-Hat
+14.7235    | 15.50 | 0.01/88.2         | 0.80/65.2 (Ok)     | 0.88/0.46 (Ok)       | Snare+Hi-Hat
+14.9549    | 15.75 | 0.00/78.9         | 0.94/72.3 (Ok)     | 0.46/0.42            | Snare     
+15.1879    | 16.00 | 0.00/0.0          | 0.00/0.0           | 0.60/0.52 (Suppressed) | None      
+===============================================================================================
+
+Transcription completed successfully!
+Processed 50 onsets, successfully identified 40 event beats.
+Wrote a total of 70 MIDI notes:
+  - Kick (KD): 9
+  - Snare (SD): 29
+  - Hi-Hat (HH): 32
+MIDI file exported to: validation_runs/ablation_study/A4_blind\ghost_snare\ghost_snare.mid

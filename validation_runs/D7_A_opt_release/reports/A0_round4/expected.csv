@@ -1,0 +1,7 @@
+name,expected_tempo,tempo_tol,expected_time_signature,expected_kick,expected_snare,expected_hihat
+10_rock_100_beat_4-4_1,100.0,2.0,4/4,19,20,74
+9_soul-groove9_105_beat_4-4_1,105.0,2.0,4/4,47,32,128
+7_pop-groove7_138_beat_4-4_1,138.0,2.0,4/4,47,35,128
+10_soul-groove10_102_beat_4-4_1,102.0,2.0,4/4,56,99,129
+1_funk-groove1_138_beat_4-4_1,138.0,2.0,4/4,56,114,127
+2_funk-groove2_105_beat_4-4_1,105.0,2.0,4/4,71,124,139

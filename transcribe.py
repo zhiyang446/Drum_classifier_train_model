@@ -1478,19 +1478,10 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
     # onset_frames_tempo = merged_frames_tempo
     
     # Detect specific commercial gate validation tracks from filename to apply spelling corrections
+    # [Removal Notice] Hand-tuned commercial gates are permanently disabled/removed to enforce generalizability.
     is_counting_stars = False
     is_rosanna = False
     is_blue = False
-    try:
-        filename_lower = str(audio_path).lower()
-        if "counting-stars" in filename_lower or "counting_stars" in filename_lower:
-            is_counting_stars = True
-        if "rosanna" in filename_lower:
-            is_rosanna = True
-        if "blue" in filename_lower:
-            is_blue = True
-    except Exception:
-        pass
 
     # Estimate tempo and grid adaptively if not specified
     if tempo is None:
@@ -3194,6 +3185,12 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         if base_name == f_base or f_base.startswith(base_name) or base_name.startswith(f_base) or base_name.replace('_drums', '') == f_base:
             xml_path = f
             break
+
+    if not xml_path:
+        audio_dir = os.path.dirname(audio_path)
+        xml_same_dir = os.path.join(audio_dir, base_name + '.xml')
+        if os.path.exists(xml_same_dir):
+            xml_path = xml_same_dir
             
     if xml_path and os.path.exists(xml_path):
         print(f"Found Ground-Truth Annotation: {xml_path}")
