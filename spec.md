@@ -2079,3 +2079,23 @@ stateDiagram-v2
 ### 15.3 驗收結果
 *   安全性回歸測試 `verify_current_solution.py` **100% 綠燈通過**，沒有發生任何 regression。
 *   端到端商業驗收五首歌曲的拍速與拍號判定（Counting Stars tempo/meter, Rosanna tempo/meter, Blue meter）**全數成功 PASS**。
+
+## ⚙️ 推論解碼校正與版本發布治理規範 (Decoder Calibration & Release Governance)
+
+為了確保 ADT 系統在後續迭代中，解碼閾值的校正與模型發布具有最高度的科學嚴謹性與工程安全性，特制訂以下四項核心治理規範：
+
+### 1. 閾值校正與版本化管理 (Versioned Calibration)
+- **規範**：任何解碼閾值 JSON 配置文件必須與其具體的 **Model Checkpoint (SHA256 雜湊)**、**輸入特徵提取版本 (如 legacy-diff)** 以及 **解碼推理模組代碼** 進行強綁定。
+- **原則**：上述三項中的任何一項如果發生變更，該解碼門檻 JSON 必須重新進行 Coordinate Ascent 尋優與發布驗收，禁止在未經校正的情況下直接繼承套用。
+
+### 2. 驗證集與測試集之物理隔離 (Validation Hard Isolation)
+- **規範**：模型的 Validation 驗證集（如 STAR validation windows）僅允許用於解碼閾值的尋優、搜尋與分析，**禁止直接用於最終 Release 發布的防線判定**。
+- **原則**：必須永久保留、物理隔離出一批模型在訓練和調參中**完全未看過**的封存測試集（如 STAR test split 及獨立 E-GMD 測試歌曲），作為發布驗收的唯一安全判定關卡，不參與任何微調與閾值搜尋。
+
+### 3. 退步回滾防禦機制 (Rollback Baseline)
+- **規範**：在 `transcribe.py` 中必須同時保留優化後的 `A_opt` 參數與基線 `A0`（全部 0.50）配置。
+- **原則**：在新歌曲、新風格或實體生產環境中進行影式抽檢 (Shadow Run / Sampling Check) 時，如果優化閾值 `A_opt` 在特定音軌上出現明顯的漏檢或退步，必須能夠一鍵無縫回滾至 `A0` 安全基線。
+
+### 4. 稀有鼓件錯誤閉環 (Error Accumulation & Retraining)
+- **規範**：對於稀有鼓件（TOM, CRASH, RIDE）的漏檢與誤報，**解法應為數據重訓，而非無窮無盡地微調後處理閾值**。
+- **原則**：若此類別的 F1 表現仍弱，必須系統性收集該類別的誤報與漏檢片段，進行精確的標註核對，在累積足夠數據量後，透過神經網路底層重訓或微調來徹底解決，停止在解碼層的過擬合調參。
