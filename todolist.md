@@ -20,7 +20,7 @@
 
 - [x] 先確認目前分支為 `codex`、遠端為 `origin/codex`，並保留工作區其他既有 dirty/untracked 變更不動。
 - [x] 建立 `DATASET_STORAGE_GUIDE.md`，包含目前 junction、D 槽要求、檢查、重新移植與回復注意事項。
-- [ ] 只提交本次說明與相關規格／任務清單更新，確認 diff 後推送至 `origin/codex`。
+- [x] 只提交本次說明與相關規格／任務清單更新，確認 diff 後推送至 `origin/codex`。
 
 ## D117 目前任務
 
