@@ -4,6 +4,209 @@
 
 ---
 
+## Dataset migration to D 槽規格（2026-08-28）
+
+### 1. 架構與選型
+
+- 程式碼、`.venv`、metadata、checkpoint 與驗證證據保留在專案位置；大型 dataset 實體存放於外接 `D:` 硬碟。
+- 使用 Windows NTFS directory junction 保留原 C 槽路徑，不改寫大量既有 metadata 絕對路徑。
+- 本輪只處理 `e-gmd-v1.0.0` 與 `STAR_Drums_full`；不處理 D54 依賴的 DrumSep、checkpoint、`processed_data` 或 validation 輸出。
+
+### 2. 資料模型
+
+| Dataset | 原 C 槽路徑 | D 槽實體路徑 | C 槽處理 |
+|---|---|---|---|
+| E-GMD | `...\e-gmd-v1.0.0` | `D:\DrumDatasets\E-GMD\e-gmd-v1.0.0` | junction |
+| STAR | `...\STAR_Drums_full` | `D:\DrumDatasets\STAR_Drums_full` | junction |
+
+既有 metadata 的 `audio_path` 繼續指向原 C 槽邏輯路徑；junction 將讀取轉送至 D 槽。D 槽必須保持磁碟代號 `D:`。
+
+### 3. 關鍵流程
+
+1. 讀取規則、來源、目標與磁碟容量。
+2. 唯讀驗證 D 槽 E-GMD 副本。
+3. 將 STAR 複製到 D 槽 staging 目錄，不刪除來源。
+4. 以檔案數、容量、路徑與抽樣 SHA-256 驗證副本。
+5. 暫時移開 C 槽實體 dataset，建立同名 junction。
+6. 透過舊 C 槽路徑驗證 metadata、WAV/MIDI 與既有 verifier。
+7. 所有驗收通過後，刪除已核准的 C 槽實體副本；失敗則移除 junction 並還原來源。
+
+### 4. 虛擬碼
+
+```text
+read constraints and exact paths
+verify D drive and existing E-GMD copy
+copy STAR to D staging without deleting C source
+compare source and D copies
+if compare fails: stop
+replace approved C dataset path with junction -> D target
+verify old C paths and training metadata can read files
+if all checks pass: delete approved C physical copies
+else: rollback junction and restore source
+```
+
+### 5. 系統脈絡圖
+
+```mermaid
+flowchart LR
+    User[使用者] --> Project[C 槽專案程式]
+    Project --> Metadata[C 槽 metadata]
+    Project --> Link[C 槽 junction]
+    Link --> Dataset[D 槽外接 dataset]
+```
+
+### 6. 容器/部署概觀
+
+- Windows 本機 CLI；沒有 API、資料庫、容器或雲端部署。
+- D 槽是外接儲存；未連接時資料依賴流程預期無法訓練。
+- 不搬 Python 環境、不安裝依賴、不啟動訓練。
+
+### 7. 模組關係圖（Backend / Frontend）
+
+本專案沒有 Backend/Frontend；資料模組關係如下：
+
+```mermaid
+flowchart TB
+    Preprocess[preprocess scripts] --> Metadata[processed_data]
+    Trainer[training scripts] --> Metadata
+    Metadata --> Link[dataset junction]
+    Link --> DData[D 槽 E-GMD / STAR]
+```
+
+### 8. 序列圖
+
+```mermaid
+sequenceDiagram
+    participant User as 使用者
+    participant PS as PowerShell
+    participant D as D 槽
+    participant C as C 槽舊路徑
+    participant V as 驗證器
+    User->>PS: 連接 D 槽
+    PS->>D: 複製並驗證 dataset
+    PS->>C: 建立 junction
+    PS->>V: 透過舊路徑讀取資料
+    V-->>User: 回報驗收結果
+```
+
+### 9. ER 圖
+
+```mermaid
+erDiagram
+    PROJECT ||--o{ DATASET_LINK : contains
+    DATASET_LINK }o--|| EXTERNAL_DATASET : points_to
+    METADATA ||--o{ AUDIO_ITEM : references
+    AUDIO_ITEM }o--|| EXTERNAL_DATASET : stored_in
+    PROJECT { string c_path }
+    DATASET_LINK { string link_path string target_path }
+    EXTERNAL_DATASET { string drive string dataset_path }
+    METADATA { string metadata_path }
+    AUDIO_ITEM { string audio_path string midi_path }
+```
+
+### 10. 類別圖（後端關鍵類別）
+
+本輪沒有後端類別；以既有資料處理責任表示：
+
+```mermaid
+classDiagram
+    class PreprocessScript
+    class MetadataItem
+    class DatasetJunction {
+        +link_path
+        +target_path
+        +verify()
+    }
+    PreprocessScript --> MetadataItem
+    MetadataItem --> DatasetJunction
+```
+
+### 11. 流程圖
+
+```mermaid
+flowchart TD
+    Start([開始]) --> Preflight[路徑與容量檢查]
+    Preflight --> Copy[複製/驗證 dataset]
+    Copy --> Match{比對通過?}
+    Match -- 否 --> Stop([停止並保留來源])
+    Match -- 是 --> Link[建立 junction]
+    Link --> Smoke{舊路徑驗收通過?}
+    Smoke -- 否 --> Rollback[回滾]
+    Smoke -- 是 --> Cleanup[刪除 C 實體副本]
+    Cleanup --> Done([完成])
+```
+
+### 12. 狀態圖
+
+```mermaid
+stateDiagram-v2
+    [*] --> Preflight
+    Preflight --> Copying
+    Copying --> CopyVerified
+    Copying --> Blocked
+    CopyVerified --> JunctionReady
+    JunctionReady --> SmokeVerified
+    JunctionReady --> Rollback
+    SmokeVerified --> SourceCleanup
+    SourceCleanup --> Completed
+    Rollback --> Blocked
+    Blocked --> [*]
+    Completed --> [*]
+```
+
+### 驗收與安全界線
+
+- E-GMD C/D 副本目前均為 `91,077` 個檔案、`141,311,710,336` bytes，並已有抽樣 SHA-256 一致證據。
+- STAR 來源約 `168.90 GiB`；D 槽當前可用約 `317.96 GiB`。
+- 不覆蓋 checkpoint、不訓練、不讀取或修改 gate/test、不 push、不 merge、不部署。
+- 只有副本與 junction 驗收通過後，才刪除精確指定的 C 槽實體 dataset。
+
+### 執行結果（2026-08-28）
+
+- E-GMD 與 STAR 已存放於 D 槽正式目標；完整 Robocopy 唯讀比對均為 exit `0`。
+- C 槽原路徑已建立 NTFS junction：`e-gmd-v1.0.0` → `D:\DrumDatasets\E-GMD\e-gmd-v1.0.0`、`STAR_Drums_full` → `D:\DrumDatasets\STAR_Drums_full`。
+- metadata 舊 C 槽絕對路徑可透過 junction 讀取；WAV、MIDI、FLAC 與 annotation 抽樣 SHA-256 一致；兩個前處理 self-check 通過。
+- `verify_current_solution.py` 完整驗證通過，exit `0`；之後才刪除兩個精確的 C 槽 `__backup_20260828` 實體副本。未修改程式碼、checkpoint 或 validation 輸出。
+- 刪除後 C 槽可用空間約 `373.72 GiB`，D 槽可用空間約 `148.93 GiB`。
+
+## 第二批 DrumSep 衍生資料移植規格（2026-08-28）
+
+### 範圍與資料模型
+
+- 本輪只移植既有衍生 DrumSep 資料：`drumsep_d48`、`drumsep_d52`、`drumsep_d53`；不移動原始音訊、`.venv`、checkpoint 或 `validation_runs`。
+- D 槽目標分別為 `D:\DrumDatasets\DrumSep\drumsep_d48`、`D:\DrumDatasets\DrumSep\drumsep_d52`、`D:\DrumDatasets\DrumSep\drumsep_d53`。
+- C 槽保留原路徑作為 NTFS junction，讓既有 D48/D50/D52/D53/D54 metadata 與腳本繼續使用原本的絕對路徑。
+
+### 依賴、流程與驗收
+
+- `drumsep_d48` 是 Whack Studio Metal 六 stem 前處理候選；`drumsep_d52` 是 1,424 首 train 的六 stem；`drumsep_d53` 是 8 首 validation 的隔離六 stem。D54 manifest 直接依賴 D52/D53，mixed metadata 依賴 D48，因此三者一起處理。
+- 流程：`來源唯讀盤點 → D staging 複製 → 完整 Robocopy 比對 → 改名正式目標 → C 實體目錄改為 backup → 建立 junction → audit/self-check/verifier → 通過後刪除 backup`。
+- 任一比對或驗證失敗即停止，不刪除來源；必要時移除 junction 並將 backup 改回原路徑。只有三個 D 目標、C junction、D54 路徑與既有 verifier 全部通過後，才清理精確指定的 C 槽 backup。
+
+### 執行結果（2026-08-28）
+
+- `drumsep_d48`、`drumsep_d52`、`drumsep_d53` 已完成 D 槽 staging 複製與完整 Robocopy 唯讀比對，三者 compare exit 均為 `0`。
+- C 槽原路徑已建立 junction，三個目標分別為 `D:\DrumDatasets\DrumSep\drumsep_d48`、`D:\DrumDatasets\DrumSep\drumsep_d52`、`D:\DrumDatasets\DrumSep\drumsep_d53`；C/D 檔案數與邏輯容量一致，WAV 抽樣 SHA-256 一致。
+- D48/D52/D53 audit、D50/D54 metadata 依賴 smoke 與既有 `verify_current_solution.py` 均通過，verifier exit `0`。
+- 驗證通過後已刪除三個 C 槽 `__backup_20260828` 實體副本；未修改程式碼、checkpoint 或既有 validation 輸出。完成後 C 槽可用約 `415.63 GiB`，D 槽可用約 `99.75 GiB`。
+- 日後操作與故障排查以根目錄 `DATASET_STORAGE_GUIDE.md` 為準；本文件只保留設計與執行證據。
+
+## D117 五首真歌高解析度實體時間對齊證據包（執行中；不訓練）
+
+- **架構與選型／系統脈絡／容器部署概觀**：本機 Windows 離線 audit；重用 D116 的固定 MDX23C 六 stem 與 D103 reference events。每一類只量測對應 stem（KD=`kick`、SD=`snare`、HH=`hh`、TOM=`toms`、CRASH=`crash`、RIDE=`ride`）的 high-resolution onset-strength，不載入分類模型、optimizer、decoder、API、資料庫、容器或部署。
+- **資料模型／ER／模組關係／類別圖**：`D103 event 1--1 D116 class-stem -> D117 event_measurement{event_time, nearest_peak_time, delta, peak_strength, support_25ms, support_50ms}`；每歌每類彙總 `{events, support_25ms, support_50ms, median_abs_delta, p90_abs_delta}`，另選出有限數量 review candidates 與 clip。逐事件 CSV 固定只含量測欄位，review 專用 clip 欄位只寫入 review CSV。來源 events、split、group、MIDI 與 D116 stems 一律唯讀。
+- **關鍵流程／虛擬碼／序列圖／流程圖**：`assert D116 audit pass and five unique groups -> load all six stems at 44.1kHz -> onset_strength(hop=64) -> detect local peaks -> for each event find nearest same-class peak within 100ms -> aggregate -> select bounded low-confidence/high-error review clips -> write immutable report -> manual_review_required`。狀態圖為 `preflight -> measure -> aggregate -> review_pack_written -> manual_review_required|blocked`。
+- **驗收與停止條件**：輸出只可新建 `real-song/d117_physical_alignment_audit/`；必須有 5 首、30 stem、逐事件量測、六類摘要與不超過 30 個 review clips，否則停止。量測只提供人工作答證據，不得自動平移 event、改 MIDI、改 split、推定成功率、啟動訓練或讀取任何 gate/test。即使所有峰值都接近，也只能標記 `manual_review_required`；後續只有已簽核的人工作答才能另立「校正或保留」決策。
+- **執行結果（完成；等待人工 review）**：已量測五首、`30/30` stem、共 `4,876` events，建立 `30` 個 bounded review clips。全部 events 在其同類 stem 的最近局部 onset peak `25ms` 內；KD/SD/HH/TOM/CRASH/RIDE 的中位絕對差為 `3.662/5.278/4.782/3.960/3.667/3.737ms`。這排除明顯整曲或類別 stem 的粗大時間軸錯位，但不證明 peak 的鼓件語意、MIDI 標註正確性或模型成功率；結果固定為 `manual_review_required`，沒有套用任何 offset 或啟動訓練。
+
+## D116 五首真歌 DrumSep 六 Stem 與對齊前資料稽核（2026-08-03）
+
+- **架構與選型／系統脈絡／容器部署概觀**：本機 Windows 離線資料準備，不啟動分類模型、optimizer、訓練、decoder、threshold、API、資料庫、容器或部署。重用 D48/D52 的 MDX23C DrumSep checkpoint 與 `Drumsep/config_drumsep_mdx23c.yaml`，固定 inference batch size `1`、無 TTA、無 LoRA；只處理 D103 的五首原始 MP3，輸出至全新 `real-song/d116_drumsep/`。
+- **資料模型／ER／模組關係／類別圖**：`D103 manifest item 1--1 D116 input MP3 hard-link 1--6 stem WAV`；`D116 manifest item={audio_path, reference_midi, reference_events_csv, group_id, split, input_mode=drumsep-mix, drumsep_stems{version,mix_strategy=sum_mono,paths}}`。來源 MIDI、D103 event CSV、固定 offset 與 review 欄位保持逐值不變；D104、D54、checkpoint 與所有封存 gate 不寫入。
+- **關鍵流程／虛擬碼／序列圖／流程圖**：`assert D103 exactly five unique groups -> verify MDX23C checkpoint/config hashes from D48 -> estimate output size and free space -> create new hard-link inputs + immutable plan -> run official inference.py -> verify each song has six nonempty 44.1kHz stereo stems and duration tolerance -> write new D116 manifest/audit -> ready_for_alignment_audit | blocked`。流程狀態為 `preflight -> inputs_prepared -> stems_inferred -> stems_audited -> manifest_built -> ready_for_alignment_audit|blocked`。
+- **驗收與停止條件**：每首必須完整 `kick/snare/toms/hh/ride/crash` 六檔，輸出為 44.1kHz stereo、非空且與來源時長相符；checkpoint/config 雜湊、五首 group、D103 reference CSV 與原始 MP3 路徑任一不符即停止。D116 不做 correlation offset 回寫、不自動平移 MIDI、不讀 `test_real_audio`／STAR test／ENST drummer_3、不訓練、不建立 checkpoint，且所有輸出拒絕覆寫。MP3 容器時長只供來源描述；stem 時長必須與 MDX23C 同用的 `librosa.load(..., sr=44100, mono=False)` 解碼樣本長比較，並記錄兩者差異。只有 D116 manifest 稽核通過後，才可另行提出高解析度、人工驗證的物理時間對齊稽核。
+- **執行結果（完成；不訓練）**：固定 MDX23C GPU inference（batch `1`、無 TTA／LoRA）於 `105.78s` 完成 5 首共 `948.383s` 音訊，產生 `30/30` 個 stem、共 `1.865 GiB`。`audit_d116.json` 驗證五首均為六類、44.1kHz、stereo、非空，且每一 stem 與 MDX23C 實際解碼輸入逐樣本同長；MP3 metadata 與解碼時長差為 `.2528–.5881s`，已保留初始 metadata-only 失敗稽核。既有 D104 事件資料搭配新 stem path 的 5/5 `drumsep-mix` 四秒特徵讀取煙霧測試通過（`[2,256,688]`、皆有限）。`manifest.json` 因此標記 `ready_for_alignment_audit=true`；未建立 candidate/checkpoint、未訓練、未讀 gate/test。
+
 ## D115 HANDOFF 現況同步與五首真歌資料路徑稽核（2026-07-31）
 
 - **目的／架構與選型**：本階段只把既有 D93／D100／D103／D104、D106 與 D114 證據同步到 `HANDOFF.md`，不新增程式、模型、資料、API、資料庫、容器或部署。五首真歌時間軸仍採 D93 固定 reference offset（四首 `+.05s`、`something +.07s`）；D100 的 onset-envelope／FFT correlation 只是殘餘偏移稽核，沒有把量測結果回寫或再次平移 MIDI。

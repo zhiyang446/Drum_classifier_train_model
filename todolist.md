@@ -1,5 +1,40 @@
 # 📝 ADT 迭代任务清单 (todolist.md)
 
+## Dataset migration to D 槽（完成；2026-08-28）
+
+- [x] 確認只搬移 `e-gmd-v1.0.0` 與 `STAR_Drums_full`，不搬整個專案根目錄。
+- [x] 確認 E-GMD D 槽副本、來源/目標路徑與 D 槽空間。
+- [x] 將 STAR 複製至 D 槽 staging，並以 Robocopy 完成唯讀比對（exit `0`）。
+- [x] 驗證副本後建立 C 槽原路徑 NTFS junction；兩個 junction 與 D 槽目標均可讀取，暫留 C 槽 backup。
+- [x] 驗收 metadata、抽樣 WAV/MIDI 與 verifier；`verify_current_solution.py` exit `0` 後刪除兩個已核准的 C 槽實體 backup，並完成 junction、抽樣 hash 與 C/D 空間驗收。
+
+## DrumSep 衍生資料移植至 D 槽（完成；2026-08-28）
+
+- [x] 重新確認 loop 規則、任務文件、Python 程序狀態、三個來源目錄與 D 槽空間。
+- [x] 確認 `drumsep_d48`、`drumsep_d52`、`drumsep_d53` 的 D 槽正式目標與 staging 路徑均不存在，避免覆蓋。
+- [x] 複製三個目錄至 D 槽 staging，並完成來源／目標完整 Robocopy 唯讀比對；三個目錄 compare exit 均為 `0`。
+- [x] 建立 C 槽原路徑 junction，驗證 D54 依賴、metadata、抽樣 stem、audit、檔案數與容量一致。
+- [x] 執行 `verify_current_solution.py` exit `0`；通過後刪除三個精確指定的 C 槽實體 backup，完成 C/D 空間驗收。
+
+## Dataset storage handoff 說明與推送（進行中；2026-08-28）
+
+- [x] 先確認目前分支為 `codex`、遠端為 `origin/codex`，並保留工作區其他既有 dirty/untracked 變更不動。
+- [x] 建立 `DATASET_STORAGE_GUIDE.md`，包含目前 junction、D 槽要求、檢查、重新移植與回復注意事項。
+- [ ] 只提交本次說明與相關規格／任務清單更新，確認 diff 後推送至 `origin/codex`。
+
+## D117 目前任務
+
+- [x] 鎖定 D103 五首 reference events 與 D116 `30/30` six-stem audit；不讀 gate/test、不訓練、不修改 event time。
+- [x] 建立最小 high-resolution class-stem alignment audit：逐事件峰值偏差、逐類摘要與上限 30 個人工 review clips。
+- [x] 完成不可覆寫 D117 證據包與前處理自檢；只標記是否需要人工 review，不宣稱對齊成功或模型提升。
+
+## D116 目前任務
+
+- [x] 鎖定五首 D103 source、D48 MDX23C checkpoint/config 與 D116 不覆寫輸出界線；不訓練、不改 D103/D104、模型或 decoder。
+- [x] 建立最小 prepare/audit/manifest 工具：五首硬連結輸入、六 Stem 完整性與時長稽核、`input_mode=drumsep-mix` 新 manifest。
+- [x] 以固定 MDX23C inference batch size `1` 分離五首，僅寫入全新 `real-song/d116_drumsep/`。
+- [x] 通過 Stem 與 manifest 稽核後，記錄可否另行提出高解析度物理時間對齊稽核；不進訓練。
+
 ## D115 目前任務
 
 - [x] 讀取 D93／D100／D103／D104、D106 與 D114 現有程式及封存證據，區分固定 MIDI offset、FFT 殘餘稽核與最近音訊 onset 距離。
