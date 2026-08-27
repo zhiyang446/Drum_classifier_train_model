@@ -16,11 +16,18 @@
 - [x] 建立 C 槽原路徑 junction，驗證 D54 依賴、metadata、抽樣 stem、audit、檔案數與容量一致。
 - [x] 執行 `verify_current_solution.py` exit `0`；通過後刪除三個精確指定的 C 槽實體 backup，完成 C/D 空間驗收。
 
-## Dataset storage handoff 說明與推送（進行中；2026-08-28）
+## Dataset storage handoff 說明與推送（完成；2026-08-28）
 
 - [x] 先確認目前分支為 `codex`、遠端為 `origin/codex`，並保留工作區其他既有 dirty/untracked 變更不動。
 - [x] 建立 `DATASET_STORAGE_GUIDE.md`，包含目前 junction、D 槽要求、檢查、重新移植與回復注意事項。
 - [x] 只提交本次說明與相關規格／任務清單更新，確認 diff 後推送至 `origin/codex`。
+
+## 工作區 Git 盤點與安全提交（完成；2026-08-28）
+
+- [x] 盤點 9 個已修改檔案與 102 個未追蹤項目，區分程式工具、資料、依賴、checkpoint 與私有測試檔。
+- [x] 完成根目錄 Python 編譯、5 個核心入口 self-check 與 `verify_current_solution.py` 完整驗證。
+- [x] 只暫存可重現程式、啟動腳本、範例設定與相關文件；不暫存資料、模型、第三方依賴或 `test_real_audio`。
+- [x] 建立 commit 並推送至 `origin/codex`，保留未提交本機資料並回報清單。
 
 ## D117 目前任務
 

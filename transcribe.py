@@ -511,11 +511,11 @@ def export_layer_events_csv(output_path, decisions, layer_name, estimated_tempo,
 
     fieldnames = [
         'layer', 'frames', 'raw_time', 'quantized_time', 'midi_time', 'beat', 'step_16th',
-        'prob_kick', 'prob_snare', 'prob_hihat',
-        'thresh_kick', 'thresh_snare', 'thresh_hihat',
-        'vel_kick', 'vel_snare', 'vel_hihat',
-        'native_kick', 'native_snare', 'native_hihat',
-        'final_kick', 'final_snare', 'final_hihat',
+        'prob_kick', 'prob_snare', 'prob_hihat', 'prob_tom', 'prob_crash', 'prob_ride',
+        'thresh_kick', 'thresh_snare', 'thresh_hihat', 'thresh_tom', 'thresh_crash', 'thresh_ride',
+        'vel_kick', 'vel_snare', 'vel_hihat', 'vel_tom', 'vel_crash', 'vel_ride',
+        'native_kick', 'native_snare', 'native_hihat', 'native_tom', 'native_crash', 'native_ride',
+        'final_kick', 'final_snare', 'final_hihat', 'final_tom', 'final_crash', 'final_ride',
         'virtual_kick', 'virtual_snare', 'virtual_hihat',
         'active_grid', 'time_signature', 'score_tempo_unit', 'score_tempo_bpm', 'midi_quarter_bpm'
     ]
@@ -529,6 +529,8 @@ def export_layer_events_csv(output_path, decisions, layer_name, estimated_tempo,
         writer.writeheader()
         for d in decisions:
             probs = d.get('probs', np.array([0.0, 0.0, 0.0]))
+            # 中文註解：舊三類 checkpoint 沒有罕見鼓件機率；匯出時以 0 保持 CSV 欄位相容。
+            rare_probs = [float(probs[index]) if len(probs) > index else 0.0 for index in range(3, 6)]
             quantized_time = float(d.get('quantized_onset', d.get('raw_onset', 0.0)))
             writer.writerow({
                 'layer': layer_name,
@@ -541,18 +543,33 @@ def export_layer_events_csv(output_path, decisions, layer_name, estimated_tempo,
                 'prob_kick': float(probs[0]),
                 'prob_snare': float(probs[1]),
                 'prob_hihat': float(probs[2]),
+                'prob_tom': rare_probs[0],
+                'prob_crash': rare_probs[1],
+                'prob_ride': rare_probs[2],
                 'thresh_kick': float(d.get('kick_thresh', 0.0)),
                 'thresh_snare': float(d.get('snare_thresh', 0.0)),
                 'thresh_hihat': float(d.get('hh_thresh', 0.0)),
+                'thresh_tom': float(d.get('tom_thresh', 0.0)),
+                'thresh_crash': float(d.get('crash_thresh', 0.0)),
+                'thresh_ride': float(d.get('ride_thresh', 0.0)),
                 'vel_kick': int(d.get('vel_kick', 0)),
                 'vel_snare': int(d.get('vel_snare', 0)),
                 'vel_hihat': int(d.get('vel_hihat', 0)),
+                'vel_tom': int(d.get('vel_tom', 0)),
+                'vel_crash': int(d.get('vel_crash', 0)),
+                'vel_ride': int(d.get('vel_ride', 0)),
                 'native_kick': bool(d.get('kick_originally_triggered', False)),
                 'native_snare': bool(d.get('snare_originally_triggered', False)),
                 'native_hihat': bool(d.get('hh_originally_triggered', False)),
+                'native_tom': bool(d.get('tom_originally_triggered', False)),
+                'native_crash': bool(d.get('crash_originally_triggered', False)),
+                'native_ride': bool(d.get('ride_originally_triggered', False)),
                 'final_kick': bool(d.get('kick_triggered', False)),
                 'final_snare': bool(d.get('snare_triggered', False)),
                 'final_hihat': bool(d.get('hh_triggered', False)),
+                'final_tom': bool(d.get('tom_triggered', False)),
+                'final_crash': bool(d.get('crash_triggered', False)),
+                'final_ride': bool(d.get('ride_triggered', False)),
                 'virtual_kick': bool(d.get('is_virtual_kd', False)),
                 'virtual_snare': bool(d.get('is_virtual_sd', False)),
                 'virtual_hihat': bool(d.get('is_virtual_hh', False)),
@@ -1522,6 +1539,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
         best_tempo = raw_estimated_tempo
         best_grid = '16th'
         min_dev = float('inf')
+        # 中文註解：零 onset 時不會進入聯合拍號搜尋，保留安全預設使空 MIDI 能正常輸出。
+        auto_detected_ts = '4/4'
 
         if len(onset_times_tempo) >= 4:
             candidates = []
@@ -3047,7 +3066,8 @@ def transcribe(audio_path, model_path, output_midi_path, thresh_kick=None, thres
             total_notes_count += 1
             event_triggered = True
 
-        if model_rare_path is not None:
+        # 中文註解：單一六類 checkpoint 與雙模型融合都必須輸出罕見鼓件；model_rare 不是類別數判定。
+        if num_classes == 6:
             if d.get('tom_triggered', False):
                 note = pretty_midi.Note(
                     velocity=d.get('vel_tom', map_velocity(d['probs'][3], 'tom', config)),

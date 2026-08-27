@@ -40,6 +40,8 @@ def parse_args():
     parser.add_argument("--adaptive-snare", action="store_true")
     parser.add_argument("--floating-bpm", action="store_true")
     parser.add_argument("--sync-audio", action="store_true")
+    parser.add_argument("--architecture", help="Optional model architecture passed to transcribe.py")
+    parser.add_argument("--rollback-baseline", action="store_true")
     parser.add_argument("--self-check", action="store_true")
     return parser.parse_args()
 
@@ -116,6 +118,10 @@ def run_transcription(song, output_midi, log_path, args):
         command.append("--floating-bpm")
     if args.sync_audio:
         command.append("--sync-audio")
+    if args.architecture:
+        command.extend(["--architecture", args.architecture])
+    if args.rollback_baseline:
+        command.append("--rollback-baseline")
 
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     with open(log_path, "w", encoding="utf-8") as handle:

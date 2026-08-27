@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "drummer01_song01_take01",
+      "audio_path": "incoming_real_drum/drummer01_song01_take01.wav",
+      "raw_events_csv": "incoming_real_drum/drummer01_song01_take01_raw_ai_events.csv",
+      "group_id": "drummer01_song01",
+      "split": "train"
+    },
+    {
+      "id": "drummer02_song01_take01",
+      "audio_path": "incoming_real_drum/drummer02_song01_take01.wav",
+      "raw_events_csv": "incoming_real_drum/drummer02_song01_take01_raw_ai_events.csv",
+      "group_id": "drummer02_song01",
+      "split": "validation"
+    },
+    {
+      "id": "drummer03_song01_take01",
+      "audio_path": "incoming_real_drum/drummer03_song01_take01.wav",
+      "raw_events_csv": "incoming_real_drum/drummer03_song01_take01_raw_ai_events.csv",
+      "group_id": "drummer03_song01",
+      "split": "test"
+    }
+  ]
+}

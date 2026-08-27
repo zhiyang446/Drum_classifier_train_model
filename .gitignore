@@ -35,3 +35,20 @@ __pycache__/
 .codegraph/
 .codex/
 scratch/
+
+# 本機資料、衍生證據與第三方依賴：不進版本庫
+/800000_Drum_Percussion_MIDI_Archive[[]6_19_15]/
+/Breakdown MIDI Pack/
+/Drumsep/
+/Whack Studio Metal Drum Tracks/
+/__MACOSX/
+/assets/
+/third_party/
+/drumsep_d*/
+/enst_d107/
+/mixed_d*/
+/real-song/
+/synthetic_midi_archive_d*/
+/whack_studio_metal_d*/
+/test_real_audio/
+drum_classifier_backup_3class.pth

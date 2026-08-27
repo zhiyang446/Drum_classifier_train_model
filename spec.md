@@ -3499,3 +3499,9 @@ stateDiagram-v2
 - **驗收與停止條件**：只有 step 200 的相同 tiny-set Macro F1 `>=.90`、六類每類 F1 `>=.80`，且 real-song／ENST 分域 loss 均低於 step 0、所有值有限，才判定 `current_lora_can_learn_tiny_set=true`；這只允許另行規劃一個比例修正候選，不代表泛化、promotion 或 release。未達門檻即判定現有 560-parameter LoRA 容量／表示路徑受阻，禁止再找資料、正式混合訓練或自動解凍；若要解凍最後時序模組，必須另立單一變因規格並取得使用者確認。輸出只可新建 `validation_runs/d114_tiny_overfit_audit/`，包含 selection、learning curve 與 summary；`checkpoint_written=false`。
 
 - **D114 執行結果（完成；未通過）**：固定 28 windows 與唯一 `200` steps 已完成，沒有 replay、validation/test read 或 checkpoint。Combined／real-song／ENST loss 分別由 `.71607/.79174/.64040` 降至 `.22473/.19234/.25712`，證明音訊、target、梯度與 optimizer 並非完全失效；但相同 tiny train set 的 Macro F1 僅由 `.04934` 升至 `.30568`，最終 KD/SD/HH/TOM/CRASH/RIDE `.43421/.48866/.54508/.26190/.07179/.03243`，未達 `.90/.80` gate。故 `current_lora_can_learn_tiny_set=false`、`ready_for_ratio_candidate_proposal=false`：現有 frozen feature＋560-parameter LoRA 在宣告預算內不足以記住已見窗口，禁止增加資料、延長 steps 或進入 50:50 正式訓練。下一個可提案動作只能是保持資料／選樣／loss／decoder／200 steps 全部不變，單獨解凍最後時序模組做可學習性對照；本輪未授權也未執行。完整產品 verifier PASS，證明隔離診斷沒有修改現有轉譜行為。
+
+## Git 版本管理邊界（2026-08-28）
+
+- 版本庫只保存可重現的程式工具、Windows 啟動腳本、範例設定與治理／狀態文件；大型資料、衍生音訊、第三方依賴、checkpoint 及 `test_real_audio` 私有測試檔保留在本機或 D 槽，不直接提交。
+- 每次整理工作區時，先依檔案用途與受保護路徑逐項檢查，再以明確路徑暫存；禁止使用整個工作區的批次加入或清理，以免把資料集、模型或私有測試檔推送到遠端。
+- 重新建立專案時，先依 `DATASET_STORAGE_GUIDE.md` 連接 D 槽並確認 junction／目標可讀，再從版本庫取得程式與工具；資料內容不由 Git commit 提供。

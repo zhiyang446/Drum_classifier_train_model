@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import tempfile
 
 import numpy as np
 import soundfile as sf
@@ -18,8 +19,30 @@ from train_star_smoke import freeze_batchnorm_stats
 from train_phase2 import SymmetricDrumTCN, propagate_velocity_targets
 
 
-def build_schedule(metadata, per_class, balance_rare_sources=False, negative_source=None):
-    """中文註解：建立固定排程，並可指定 window-local 真實負樣本來源。"""
+# 中文註解：D37 的來源權重以二十分之一為單位，避免浮點數配額造成實驗不可重現。
+D37_SOURCE_QUOTA_UNITS = {
+    'KD': (('d36_whack_real', 15), ('d36_archive_synthetic', 5)),
+    'SD': (('d36_whack_real', 15), ('d36_archive_synthetic', 5)),
+    'HH': (('d36_whack_real', 15), ('d36_archive_synthetic', 5)),
+    'TOM': (('d36_whack_real', 15), ('d36_archive_synthetic', 5)),
+    'CRASH': (('d36_whack_real', 13), ('d36_archive_synthetic', 4), ('d36_breakdown_real', 3)),
+    'RIDE': (('d36_whack_real', 15), ('d36_archive_synthetic', 5)),
+}
+
+
+def _evenly_spaced(rows, count):
+    """中文註解：從已排序候選中固定均勻抽樣，確保相同 metadata 可重現。"""
+    return [rows[index * len(rows) // count] for index in range(count)]
+
+
+def build_schedule(
+    metadata, per_class, balance_rare_sources=False, negative_source=None,
+    window_negative_from_train=False, source_quota_profile=None, negative_anchor_inst=None,
+    tom_kd_sd_competitor=False, sd_kd_competitor=False, crash_kd_competitor=False,
+):
+    """中文註解：建立固定排程，並可指定 window-local 真實負樣本來源或 D37 配額。"""
+    if source_quota_profile == 'd37-real-first' and per_class % 20:
+        raise ValueError('--source-quota-profile d37-real-first requires --per-class divisible by 20.')
     selected_by_label = {}
     info_cache = {}
     half_window_seconds = TARGET_SAMPLES / float(SR) / 2.0
@@ -38,9 +61,37 @@ def build_schedule(metadata, per_class, balance_rare_sources=False, negative_sou
             for event in item.get('events', []):
                 anchor = float(event['time'])
                 if event.get('inst') == label and (duration is None or half_window_seconds <= anchor <= duration - half_window_seconds):
+                    # ponytail: D64 只縮小 TOM 正樣本集合；其他類別與預設排程保持不變。
+                    if tom_kd_sd_competitor and label == 'TOM' and not any(
+                        other.get('inst') in ('KD', 'SD') and abs(float(other['time']) - anchor) <= 0.05
+                        for other in item.get('events', [])
+                    ):
+                        continue
+                    # ponytail: D70 只縮小 SD 正樣本集合；其他類別與 D61 排程保持不變。
+                    if sd_kd_competitor and label == 'SD' and not any(
+                        other.get('inst') == 'KD' and abs(float(other['time']) - anchor) <= 0.05
+                        for other in item.get('events', [])
+                    ):
+                        continue
+                    # ponytail: D76 只縮小 CRASH 正樣本集合；其餘類別與 D61 排程保持不變。
+                    if crash_kd_competitor and label == 'CRASH' and not any(
+                        other.get('inst') == 'KD' and abs(float(other['time']) - anchor) <= 0.05
+                        for other in item.get('events', [])
+                    ):
+                        continue
                     candidates.append((key, anchor))
         candidates.sort()
-        if balance_rare_sources and label in ('TOM', 'CRASH', 'RIDE'):
+        if source_quota_profile == 'd37-real-first':
+            selected = []
+            for source, units in D37_SOURCE_QUOTA_UNITS[label]:
+                quota = per_class * units // 20
+                source_rows = [row for row in candidates if metadata[row[0]].get('source') == source]
+                if len(source_rows) < quota:
+                    raise ValueError(
+                        f'Only source={source} has {len(source_rows)} centered events for {label}, need {quota}.'
+                    )
+                selected.extend(_evenly_spaced(source_rows, quota))
+        elif balance_rare_sources and label in ('TOM', 'CRASH', 'RIDE'):
             if per_class % 2:
                 raise ValueError('--balance-rare-sources requires an even --per-class value.')
             egmd = [row for row in candidates if metadata[row[0]].get('source') == 'egmd_pitch_weighted']
@@ -48,13 +99,13 @@ def build_schedule(metadata, per_class, balance_rare_sources=False, negative_sou
             quota = per_class // 2
             if len(star) < quota or len(egmd) < quota:
                 raise ValueError(f'Only STAR={len(star)} E-GMD={len(egmd)} centered events for {label}, need {quota} each.')
-            star = [star[index * len(star) // quota] for index in range(quota)]
-            egmd = [egmd[index * len(egmd) // quota] for index in range(quota)]
+            star = _evenly_spaced(star, quota)
+            egmd = _evenly_spaced(egmd, quota)
             selected = [row for pair in zip(star, egmd) for row in pair]
         else:
             if len(candidates) < per_class:
                 raise ValueError(f'Only {len(candidates)} centered train events for {label}, need {per_class}.')
-            selected = [candidates[index * len(candidates) // per_class] for index in range(per_class)]
+            selected = _evenly_spaced(candidates, per_class)
         selected_by_label[label] = [
             {'label': label, 'key': key, 'anchor': anchor} for key, anchor in selected
         ]
@@ -64,6 +115,10 @@ def build_schedule(metadata, per_class, balance_rare_sources=False, negative_sou
     for key, item in metadata.items():
         if negative_source:
             if item.get('split') != 'negative_train' or item.get('source') != negative_source:
+                continue
+        elif source_quota_profile == 'd37-real-first':
+            # ponytail: D37 只需 Whack 真實負樣本；第二個配額系統未經核准前不泛化。
+            if item.get('split') != 'train' or item.get('source') != 'd36_whack_real':
                 continue
         elif item.get('split') != 'train':
             continue
@@ -80,7 +135,17 @@ def build_schedule(metadata, per_class, balance_rare_sources=False, negative_sou
             anchor = float(event['time'])
             if event.get('inst') not in ('KD', 'SD', 'HH') or (duration is not None and not half_window_seconds <= anchor <= duration - half_window_seconds):
                 continue
-            if negative_source:
+            # ponytail: D60 僅收斂既有 NEG 至指定錨點，不改正樣本或 loss；其他混淆才擴充此選項。
+            if negative_anchor_inst and event.get('inst') != negative_anchor_inst:
+                continue
+            if negative_anchor_inst and any(
+                other.get('inst') != negative_anchor_inst
+                and other.get('inst') in ('KD', 'SD', 'HH')
+                and abs(float(other['time']) - anchor) < 1e-6
+                for other in events
+            ):
+                continue
+            if negative_source or window_negative_from_train or source_quota_profile == 'd37-real-first':
                 start, end = anchor - half_window_seconds, anchor + half_window_seconds
                 if any(rare.get('inst') in ('TOM', 'CRASH', 'RIDE') and start <= float(rare['time']) < end for rare in events):
                     continue
@@ -92,7 +157,7 @@ def build_schedule(metadata, per_class, balance_rare_sources=False, negative_sou
         raise ValueError(f'Only {len(neg_candidates)} negative centered train events for source={negative_source}, need {per_class}.')
     selected_by_label['NEG'] = []
     for index in range(per_class):
-        key, anchor = neg_candidates[index * len(neg_candidates) // per_class]
+        key, anchor = _evenly_spaced(neg_candidates, per_class)[index]
         selected_by_label['NEG'].append({'label': 'NEG', 'key': key, 'anchor': anchor})
 
     ALL_TRAIN_CLASSES = list(LABELS) + ['NEG']
@@ -108,6 +173,7 @@ def freeze_for_head_training(model):
 def batch_from_schedule(
     schedule, metadata, start, batch_size, accompaniment_pool=None,
     gain_range=(0.10, 0.30), use_true_superflux=False, use_multi_log_mel=False,
+    input_mode='mix',
 ):
     """中文註解：依固定 schedule 建立一個不含測試資料的訓練 batch。"""
     features, onsets, velocities = [], [], []
@@ -125,6 +191,7 @@ def batch_from_schedule(
             accompaniment_gain=gain, accompaniment_offset=offset,
             use_true_superflux=use_true_superflux,
             use_multi_log_mel=use_multi_log_mel,
+            input_mode=item.get('input_mode', input_mode),
         )
         features.append(feature)
         onsets.append(onset)
@@ -239,12 +306,89 @@ def run_self_check():
     }
     local_negative = build_schedule(metadata, 1, negative_source='mdbdrums_full_mix')
     assert [row for row in local_negative if row['label'] == 'NEG'][0]['anchor'] == 10.0
+    window_local_metadata = {
+        'metal_mix': {
+            'split': 'train',
+            'events': [
+                {'inst': 'KD', 'time': 3.0}, {'inst': 'CRASH', 'time': 3.1},
+                {'inst': 'SD', 'time': 10.0}, {'inst': 'HH', 'time': 15.0}, {'inst': 'KD', 'time': 30.0},
+                {'inst': 'TOM', 'time': 20.0}, {'inst': 'RIDE', 'time': 25.0},
+            ],
+        },
+    }
+    window_local = build_schedule(window_local_metadata, 1, window_negative_from_train=True)
+    assert [row for row in window_local if row['label'] == 'NEG'][0]['anchor'] == 10.0
+    kd_only = build_schedule(window_local_metadata, 1, window_negative_from_train=True, negative_anchor_inst='KD')
+    assert [row for row in kd_only if row['label'] == 'NEG'][0]['anchor'] == 30.0
     try:
         build_schedule(metadata, 1, negative_source='missing_source')
     except ValueError as error:
         assert 'source=missing_source' in str(error)
     else:
         raise AssertionError('指定負樣本來源不足時必須拒絕排程')
+    d37_metadata = {}
+    for label in LABELS:
+        for source, _ in D37_SOURCE_QUOTA_UNITS[label]:
+            d37_metadata[f'd37_{source}_{label}'] = {
+                'split': 'train', 'source': source,
+                'events': [{'inst': label, 'time': float(time)} for time in range(20)],
+            }
+    d37_metadata['d37_whack_negative'] = {
+        'split': 'train', 'source': 'd36_whack_real',
+        'events': [{'inst': 'KD', 'time': float(100 + time)} for time in range(20)],
+    }
+    d37_schedule = build_schedule(d37_metadata, 20, source_quota_profile='d37-real-first')
+    for label, quotas in D37_SOURCE_QUOTA_UNITS.items():
+        rows = [row for row in d37_schedule if row['label'] == label]
+        for source, units in quotas:
+            assert sum(d37_metadata[row['key']].get('source') == source for row in rows) == units
+    assert all(d37_metadata[row['key']]['source'] == 'd36_whack_real' for row in d37_schedule if row['label'] == 'NEG')
+    for item in d37_metadata.values():
+        tom_times = [event['time'] for event in item['events'] if event['inst'] == 'TOM']
+        item['events'].extend({'inst': 'KD', 'time': time} for time in tom_times)
+    d64_schedule = build_schedule(
+        d37_metadata, 20, source_quota_profile='d37-real-first',
+        negative_anchor_inst='KD', tom_kd_sd_competitor=True,
+    )
+    d64_tom_rows = [row for row in d64_schedule if row['label'] == 'TOM']
+    assert len(d64_tom_rows) == 20
+    assert all(any(
+        event['inst'] in ('KD', 'SD') and abs(float(event['time']) - row['anchor']) <= 0.05
+        for event in d37_metadata[row['key']]['events']
+    ) for row in d64_tom_rows)
+    for item in d37_metadata.values():
+        sd_times = [event['time'] for event in item['events'] if event['inst'] == 'SD']
+        item['events'].extend({'inst': 'KD', 'time': time} for time in sd_times)
+    d70_schedule = build_schedule(
+        d37_metadata, 20, source_quota_profile='d37-real-first',
+        negative_anchor_inst='KD', sd_kd_competitor=True,
+    )
+    d70_sd_rows = [row for row in d70_schedule if row['label'] == 'SD']
+    assert len(d70_sd_rows) == 20
+    assert all(any(
+        event['inst'] == 'KD' and abs(float(event['time']) - row['anchor']) <= 0.05
+        for event in d37_metadata[row['key']]['events']
+    ) for row in d70_sd_rows)
+    for item in d37_metadata.values():
+        crash_times = [event['time'] for event in item['events'] if event['inst'] == 'CRASH']
+        item['events'].extend({'inst': 'KD', 'time': time} for time in crash_times)
+    d76_schedule = build_schedule(
+        d37_metadata, 20, source_quota_profile='d37-real-first',
+        negative_anchor_inst='KD', crash_kd_competitor=True,
+    )
+    d76_crash_rows = [row for row in d76_schedule if row['label'] == 'CRASH']
+    assert len(d76_crash_rows) == 20
+    assert all(any(
+        event['inst'] == 'KD' and abs(float(event['time']) - row['anchor']) <= 0.05
+        for event in d37_metadata[row['key']]['events']
+    ) for row in d76_crash_rows)
+    d37_metadata['d37_d36_breakdown_real_CRASH']['events'] = []
+    try:
+        build_schedule(d37_metadata, 20, source_quota_profile='d37-real-first')
+    except ValueError as error:
+        assert 'source=d36_breakdown_real' in str(error)
+    else:
+        raise AssertionError('D37 來源不足時必須拒絕排程')
     assert balanced_positive_weight(1, 1) == float(np.sqrt(CHUNK_FRAMES))
     targets = torch.zeros(1, 8, len(LABELS))
     targets[0, 4, 5] = 1.0
@@ -259,6 +403,16 @@ def run_self_check():
     assert np.all(superflux_masked[:, 0] == 1.0)
     assert np.any(superflux_masked[:, 1] == 0.0)
     assert np.all(apply_frequency_mask(np.ones((1, 2, 4, 4), dtype=np.float32), 0) == 1.0)
+    backbone_model = ResidualDCNNDrumHybridConformer(num_classes=len(LABELS))
+    expected_backbone = {name: value.detach().clone() for name, value in backbone_model.backbone.shared.state_dict().items()}
+    with tempfile.TemporaryDirectory() as directory:
+        checkpoint_path = os.path.join(directory, 'backbone.pth')
+        torch.save(expected_backbone, checkpoint_path)
+        for parameter in backbone_model.backbone.shared.parameters():
+            parameter.data.zero_()
+        copied = load_shared_backbone_pretrain(backbone_model, checkpoint_path, torch.device('cpu'))
+    assert copied == len(expected_backbone)
+    assert all(torch.equal(value, backbone_model.backbone.shared.state_dict()[name]) for name, value in expected_backbone.items())
     print('Self-check passed.')
 
 
@@ -280,6 +434,17 @@ def create_model(architecture, checkpoint_path, device):
     source_state = torch.load(checkpoint_path, map_location=device, weights_only=False)
     transfer = transfer_residual_state if architecture == 'dcnn-residual-tcn' else transfer_symmetric_state
     return model, transfer(model, source_state)
+
+
+def load_shared_backbone_pretrain(model, checkpoint_path, device):
+    """中文註解：嚴格載入 D22 的 SharedCNNBackbone 權重，不接觸任何 temporal encoder 或輸出 head。"""
+    if not os.path.isfile(checkpoint_path):
+        raise FileNotFoundError(f'Backbone pretrain checkpoint not found: {checkpoint_path}')
+    state = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    shared_backbone = getattr(model.backbone, 'shared', model.backbone)
+    # ponytail: 直接重用既有 backbone 的 state_dict，避免建立第二套模型或權重轉換器。
+    shared_backbone.load_state_dict(state, strict=True)
+    return len(state)
 
 
 def resolve_feature_mode(architecture, feature_mode):
@@ -322,6 +487,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train one bounded six-class STAR candidate.')
     parser.add_argument('--meta')
     parser.add_argument('--checkpoint', default='mixed_formal_kick375_snare18_hh12_candidate.pth')
+    parser.add_argument('--backbone-pretrain', help='Optional D22 SharedCNNBackbone candidate loaded after --checkpoint')
     parser.add_argument('--output-dir', default='validation_runs/six_class_candidate_v1')
     parser.add_argument('--per-class', type=int, default=24)
     parser.add_argument('--batch-size', type=int, default=4)
@@ -333,7 +499,13 @@ def main():
     parser.add_argument('--positive-weight', type=float, default=20.0)
     parser.add_argument('--schedule-balanced-weights', action='store_true')
     parser.add_argument('--balance-rare-sources', action='store_true', help='TOM/CRASH/RIDE 各取一半 STAR 與一半 E-GMD')
+    parser.add_argument('--source-quota-profile', choices=('d37-real-first',), help='固定 D37 真實資料優先來源配額')
     parser.add_argument('--negative-source', help='Opt-in negative_train metadata source for window-local rare negatives')
+    parser.add_argument('--window-negative-from-train', action='store_true', help='從 train 歌取窗口內無 rare event 的 NEG 樣本')
+    parser.add_argument('--negative-anchor-inst', choices=('KD', 'SD', 'HH'), help='只取指定 KD/SD/HH 錨點作為 NEG，保留窗口內無 rare 條件')
+    parser.add_argument('--tom-kd-sd-competitor', action='store_true', help='TOM 正樣本只取 .05 秒內有 KD 或 SD 的共現窗口')
+    parser.add_argument('--sd-kd-competitor', action='store_true', help='SD 正樣本只取 .05 秒內有 KD 的共現窗口')
+    parser.add_argument('--crash-kd-competitor', action='store_true', help='CRASH 正樣本只取 .05 秒內有 KD 的共現窗口')
     parser.add_argument('--freeze-bn', action='store_true')
     parser.add_argument('--log-every', type=int, default=1)
     parser.add_argument('--candidate-name', default='six_class_candidate.pth')
@@ -353,6 +525,7 @@ def main():
     parser.add_argument('--frequency-mask-superflux-only', action='store_true', help='只遮 True SuperFlux，完整保留 Log-Mel')
     parser.add_argument('--class-balanced-beta', type=float, default=0.0, help='Class-Balanced BCE beta parameter (e.g. 0.9999)')
     parser.add_argument('--use-multi-log-mel', action='store_true', help='Use multi-resolution Log-Mel feature extraction')
+    parser.add_argument('--input-mode', choices=('mix', 'drumsep-mix'), default='mix', help='mix 為原混音；drumsep-mix 為六 stem 時域相加')
     args = parser.parse_args()
     args.lock_three_class = not args.no_lock_three_class
     args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
@@ -365,6 +538,8 @@ def main():
         parser.error('--meta is required unless --self-check is used')
     if args.per_class <= 0 or args.batch_size <= 0 or args.epochs <= 0 or args.log_every <= 0:
         parser.error('--per-class, --batch-size, --epochs, and --log-every must be positive')
+    if args.source_quota_profile == 'd37-real-first' and args.per_class % 20:
+        parser.error('--source-quota-profile d37-real-first requires --per-class divisible by 20')
     if args.validation_per_class <= 0 or args.early_stopping_patience < 0 or args.frequency_mask_max_bins < 0:
         parser.error('--validation-per-class must be positive; patience and frequency mask cannot be negative')
     if args.early_stopping_patience and not args.validation_meta:
@@ -385,6 +560,12 @@ def main():
         metadata, args.per_class,
         balance_rare_sources=args.balance_rare_sources,
         negative_source=args.negative_source,
+        window_negative_from_train=args.window_negative_from_train,
+        source_quota_profile=args.source_quota_profile,
+        negative_anchor_inst=args.negative_anchor_inst,
+        tom_kd_sd_competitor=args.tom_kd_sd_competitor,
+        sd_kd_competitor=args.sd_kd_competitor,
+        crash_kd_competitor=args.crash_kd_competitor,
     )
     accompaniment_pool = [load_accompaniment(args.accompaniment)] if args.accompaniment else None
     if len(schedule) % args.batch_size:
@@ -408,6 +589,10 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model, transferred = create_model(args.architecture, args.checkpoint, device)
+    pretrained_backbone_tensors = (
+        load_shared_backbone_pretrain(model, args.backbone_pretrain, device)
+        if args.backbone_pretrain else 0
+    )
     if args.full_model:
         optimizer, optimizer_parameter_counts = build_full_model_optimizer(
             model, args.architecture, args.lr, args.backbone_lr, args.new_module_lr,
@@ -435,6 +620,7 @@ def main():
                 gain_range=(args.accompaniment_gain_min, args.accompaniment_gain_max),
                 use_true_superflux=args.feature_mode == 'true-superflux',
                 use_multi_log_mel=args.use_multi_log_mel,
+                input_mode=args.input_mode,
             )
             feature = apply_frequency_mask(
                 feature, args.frequency_mask_max_bins,
@@ -479,6 +665,7 @@ def main():
                 accompaniment_path=args.accompaniment, architecture=args.architecture,
                 feature_mode=args.feature_mode, device=device,
                 use_multi_log_mel=args.use_multi_log_mel,
+                input_mode=args.input_mode,
             )
             class_f1 = {row['inst']: float(row['f1']) for row in rows}
             macro_f1 = float(gate['macro_f1'])
@@ -509,6 +696,7 @@ def main():
             accompaniment_gain=0.17, per_class=args.validation_per_class,
             feature_mode=args.feature_mode, device=device,
             use_multi_log_mel=args.use_multi_log_mel,
+            input_mode=args.input_mode,
         )
         confusion_report = os.path.abspath(os.path.join(confusion_dir, 'confusion_summary.json'))
     report = {
@@ -520,7 +708,13 @@ def main():
         'new_module_learning_rate': args.new_module_lr if args.full_model and args.architecture in ('dcnn-residual-tcn', 'dcnn-conformer', 'dcnn-tcn-conformer') else None,
         'optimizer_parameter_counts': optimizer_parameter_counts,
         'balance_rare_sources': args.balance_rare_sources,
+        'source_quota_profile': args.source_quota_profile,
         'negative_source': args.negative_source,
+        'window_negative_from_train': args.window_negative_from_train,
+        'negative_anchor_inst': args.negative_anchor_inst,
+        'tom_kd_sd_competitor': args.tom_kd_sd_competitor,
+        'sd_kd_competitor': args.sd_kd_competitor,
+        'crash_kd_competitor': args.crash_kd_competitor,
         'full_model': args.full_model, 'gaussian_targets': args.gaussian_targets,
         'class_positive_weights': class_weights, 'class_event_counts': class_event_counts, 'freeze_batchnorm': args.freeze_bn,
         'first_loss': losses[0], 'last_loss': losses[-1],
@@ -531,6 +725,7 @@ def main():
         'frequency_mask_max_bins': args.frequency_mask_max_bins,
         'class_balanced_beta': args.class_balanced_beta,
         'use_multi_log_mel': args.use_multi_log_mel,
+        'input_mode': args.input_mode,
         'frequency_mask_scope': (
             'true_superflux_only' if args.frequency_mask_superflux_only
             else 'all_channels' if args.frequency_mask_max_bins else 'disabled'
@@ -542,7 +737,10 @@ def main():
         'early_stopped': early_stopped, 'best_epoch': best_epoch, 'best_macro_f1': best_macro_f1 if best_epoch else None,
         'validation_history': validation_history,
         'best_confusion_report': confusion_report,
-        'transferred_compatible_tensors': transferred, 'candidate': os.path.abspath(candidate_path),
+        'transferred_compatible_tensors': transferred,
+        'backbone_pretrain': os.path.abspath(args.backbone_pretrain) if args.backbone_pretrain else None,
+        'backbone_pretrain_tensors': pretrained_backbone_tensors,
+        'candidate': os.path.abspath(candidate_path),
     }
     with open(os.path.join(args.output_dir, 'train_report.json'), 'w', encoding='utf-8') as handle:
         json.dump(report, handle, indent=2)

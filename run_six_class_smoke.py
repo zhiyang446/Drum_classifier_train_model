@@ -110,12 +110,30 @@ def mix_accompaniment(waveform, accompaniment, gain, offset=0):
     return np.asarray(mixed, dtype=np.float32)
 
 
+def read_mono_window(audio_path, start_sec, seconds):
+    """中文註解：以實體時間讀取單一音檔窗口並轉為模型採樣率單聲道。"""
+    with sf.SoundFile(audio_path) as audio:
+        source_sr = audio.samplerate
+        source_samples = int(round(seconds * source_sr))
+        start_sample = min(max(0, int(round(start_sec * source_sr))), max(0, audio.frames - source_samples))
+        audio.seek(start_sample)
+        waveform = audio.read(source_samples, dtype='float32')
+    if waveform.ndim > 1:
+        waveform = np.mean(waveform, axis=1)
+    if source_sr != SR:
+        waveform = librosa.resample(waveform, orig_sr=source_sr, target_sr=SR)
+    return np.pad(waveform[:TARGET_SAMPLES], (0, max(0, TARGET_SAMPLES - len(waveform))))
+
+
 def build_window(
     item, anchor=None, accompaniment=None, accompaniment_gain=0.17,
     accompaniment_offset=0, use_true_superflux=False, use_multi_log_mel=False,
+    input_mode='mix',
 ):
     """中文註解：讀取一個實體四秒音訊窗口，並建立六類 onset/velocity target。"""
     events = item['events']
+    if input_mode not in ('mix', 'drumsep-mix'):
+        raise ValueError(f'Unsupported input mode: {input_mode}')
     if anchor is None:
         anchor = sorted(float(event['time']) for event in events)[len(events) // 2]
     with sf.SoundFile(item['audio_path']) as audio:
@@ -124,16 +142,23 @@ def build_window(
         source_window_samples = int(round(TARGET_SAMPLES * source_sr / SR))
         start_sample = max(0, int(anchor * source_sr) - source_window_samples // 2)
         start_sample = min(start_sample, max(0, audio.frames - source_window_samples))
-        audio.seek(start_sample)
-        waveform = audio.read(source_window_samples, dtype='float32')
-    if waveform.ndim > 1:
-        waveform = np.mean(waveform, axis=1)
-    if source_sr != SR:
-        waveform = librosa.resample(waveform, orig_sr=source_sr, target_sr=SR)
-    waveform = np.pad(waveform[:TARGET_SAMPLES], (0, max(0, TARGET_SAMPLES - len(waveform))))
+    if accompaniment is not None:
+        if input_mode != 'mix':
+            raise ValueError('Accompaniment mixing is not allowed with drumsep-mix input.')
+    start_sec = start_sample / float(source_sr)
+    if input_mode == 'mix':
+        waveform = read_mono_window(item['audio_path'], start_sec, TARGET_SAMPLES / float(SR))
+    else:
+        stems = item.get('drumsep_stems', {}).get('paths', {})
+        if set(stems) != {'kick', 'snare', 'toms', 'hh', 'ride', 'crash'}:
+            raise ValueError('drumsep-mix requires six versioned stem paths.')
+        # ponytail: 六 stem 只做時域相加，直接重用既有特徵與 DCNN+Conformer。
+        waveform = sum(
+            (read_mono_window(path, start_sec, TARGET_SAMPLES / float(SR)) for path in stems.values()),
+            np.zeros(TARGET_SAMPLES, dtype=np.float32),
+        )
     if accompaniment is not None:
         waveform = mix_accompaniment(waveform, accompaniment, accompaniment_gain, accompaniment_offset)
-    start_sec = start_sample / float(source_sr)
     onset = np.zeros((CHUNK_FRAMES, len(LABELS)), dtype=np.float32)
     velocity = np.zeros_like(onset)
     window_seconds = TARGET_SAMPLES / float(SR)

@@ -166,7 +166,7 @@ def run_self_check():
 def evaluate_confusion(
     model, metadata, output_dir, accompaniment=None, accompaniment_gain=0.17,
     per_class=8, feature_mode='legacy-diff', device=None,
-    use_multi_log_mel=False,
+    use_multi_log_mel=False, input_mode='mix',
 ):
     """中文註解：以已載入的最佳模型產生完整六類問題報告。"""
     device = device or next(model.parameters()).device
@@ -183,6 +183,7 @@ def evaluate_confusion(
             accompaniment_offset=window_index * TARGET_SAMPLES,
             use_true_superflux=feature_mode == 'true-superflux',
             use_multi_log_mel=use_multi_log_mel,
+            input_mode=input_mode,
         )
         with torch.no_grad():
             logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
@@ -207,6 +208,7 @@ def main():
     parser.add_argument('--accompaniment')
     parser.add_argument('--accompaniment-gain', type=float, default=0.17)
     parser.add_argument('--per-class', type=int, default=8)
+    parser.add_argument('--input-mode', choices=('mix', 'drumsep-mix'), default='mix')
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
     if args.self_check:
@@ -224,6 +226,7 @@ def main():
     summary = evaluate_confusion(
         model, metadata, args.output_dir, accompaniment=accompaniment,
         accompaniment_gain=args.accompaniment_gain, per_class=args.per_class, device=device,
+        input_mode=args.input_mode,
     )
     print(json.dumps(summary, indent=2))
 

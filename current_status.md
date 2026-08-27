@@ -1,6 +1,17 @@
 # Current Status - Drum Classifier / ADT
 
-Last updated: 2026-07-31
+Last updated: 2026-08-03
+
+## D117 五首真歌高解析度實體時間對齊證據包（完成；等待人工 review）
+
+- D117 已只讀 D103 events 與 D116 six stems，建立 1.45ms hop 的 class-stem peak-to-event 量測、逐類統計與 30 個人工 review clips。`4,876/4,876` events 都在同類 stem 最近局部 peak 的 25ms 內；KD/SD/HH/TOM/CRASH/RIDE 中位絕對差為 `3.662/5.278/4.782/3.960/3.667/3.737ms`。
+- 不自動套用 D100 correlation offset，不平移 MIDI、不改 D103/D104、split、模型、checkpoint、decoder 或 threshold；不讀 gate/test、不訓練。這是「沒有發現粗大實體時間錯位」的證據，不是人工確認的標註真值、鼓件語意或模型成功率；任何校正或訓練仍等待使用者完成 review decisions。
+
+## D116 五首真歌 DrumSep 前置（完成；不訓練）
+
+- 已以固定 MDX23C、GPU、batch `1`、無 TTA／LoRA 完成 D103 五首 MP3 的六 Stem 分離，`30/30` WAV、`1.865 GiB`、inference `105.78s`。`audit_d116.json` 驗證所有 stem 為 44.1kHz stereo、非空，且與 MDX23C `librosa` 實際解碼輸入逐樣本等長。
+- 已建立不改 D103/D104 的 `real-song/d116_drumsep/manifest.json`：每首含 `input_mode=drumsep-mix` 與 `kick/snare/toms/hh/ride/crash` paths。以 D104 事件資料加新 stem 的 5/5 前處理 smoke 通過（`[2,256,688]`、全部有限）。
+- 未覆蓋 D103/D104、修改 MIDI event time、依 correlation 自動平移、讀取封存 gate、訓練、寫 checkpoint、改 decoder 或替換產品模型。D116 只滿足另行提案高解析度、人工驗證物理時間對齊稽核的前提，不構成訓練授權或模型提升。
 
 ## D115 HANDOFF 現況同步（完成；只更新文件）
 

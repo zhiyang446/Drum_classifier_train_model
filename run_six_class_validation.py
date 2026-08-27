@@ -35,7 +35,7 @@ def overlaps_existing(audio_path, start, end, occupied):
 
 
 def select_windows(metadata, split='validation', per_class=8):
-    """中文註解：從指定 split 為每類選取固定數量且不重疊的 STAR 標註窗口。"""
+    """中文註解：從指定 split 為每類輪替歌曲群組選取固定且不重疊的標註窗口。"""
     if per_class <= 0:
         raise ValueError('per_class must be positive.')
     selected = []
@@ -50,20 +50,67 @@ def select_windows(metadata, split='validation', per_class=8):
                     candidates.append((key, float(event['time']), item))
         if not candidates:
             raise ValueError(f'No STAR {split} event for {label}.')
-        class_count = 0
+        # ponytail: 每輪每 group 只取一個；需要權重取樣時才另加策略。
+        by_group = {}
         for key, anchor, item in sorted(candidates, key=lambda row: (row[0], row[1])):
-            start, end = physical_window(item, anchor)
-            audio_path = item['audio_path']
-            if overlaps_existing(audio_path, start, end, occupied):
-                continue
-            selected.append({'label': label, 'key': key, 'anchor': anchor, 'item': item})
-            occupied.append((audio_path, start, end))
-            class_count += 1
-            if class_count >= per_class:
+            group_id = str(item.get('group_id') or key)
+            by_group.setdefault(group_id, []).append((key, anchor, item))
+        positions = {group_id: 0 for group_id in by_group}
+        class_count = 0
+        while class_count < per_class:
+            progressed = False
+            for group_id in sorted(by_group):
+                rows = by_group[group_id]
+                while positions[group_id] < len(rows):
+                    key, anchor, item = rows[positions[group_id]]
+                    positions[group_id] += 1
+                    start, end = physical_window(item, anchor)
+                    audio_path = item['audio_path']
+                    if overlaps_existing(audio_path, start, end, occupied):
+                        continue
+                    selected.append({'label': label, 'key': key, 'anchor': anchor, 'item': item})
+                    occupied.append((audio_path, start, end))
+                    class_count += 1
+                    progressed = True
+                    break
+                if class_count >= per_class:
+                    break
+            if not progressed:
                 break
         if class_count < per_class:
             raise ValueError(f'Only {class_count} non-overlapping STAR {split} windows for {label}; need {per_class}.')
     return selected
+
+
+def fixed_windows(metadata, stored_rows, split='validation', per_class=8):
+    """中文註解：以封存 key／anchor 重建同一批物理窗口，避免重選造成比較偏差。"""
+    if len(stored_rows) != per_class * len(LABELS):
+        raise ValueError('Fixed selection has an unexpected window count.')
+    selected, occupied, label_counts = [], [], {label: 0 for label in LABELS}
+    for row in stored_rows:
+        label = row.get('label')
+        key = row.get('key')
+        anchor = float(row.get('anchor', float('nan')))
+        if label not in LABELS or key not in metadata or not np.isfinite(anchor):
+            raise ValueError('Fixed selection contains an invalid label, key, or anchor.')
+        item = metadata[key]
+        if item.get('split') != split:
+            raise ValueError(f'Fixed selection leaves the {split} split: {key}')
+        start, end = physical_window(item, anchor)
+        if overlaps_existing(item['audio_path'], start, end, occupied):
+            raise ValueError(f'Fixed selection has overlapping physical windows: {key}')
+        occupied.append((item['audio_path'], start, end))
+        label_counts[label] += 1
+        selected.append({'label': label, 'key': key, 'anchor': anchor, 'item': item})
+    if any(count != per_class for count in label_counts.values()):
+        raise ValueError(f'Fixed selection class counts are invalid: {label_counts}')
+    return selected
+
+
+def load_fixed_windows(metadata, selected_windows_path, split='validation', per_class=8):
+    """中文註解：讀取封存選窗檔後交由共用驗證函式做完整防護。"""
+    with open(selected_windows_path, encoding='utf-8') as handle:
+        return fixed_windows(metadata, json.load(handle), split, per_class)
 
 
 def local_maxima(probabilities):
@@ -75,6 +122,39 @@ def local_maxima(probabilities):
             if values[frame] >= THRESHOLD and values[frame] >= values[frame - 1] and values[frame] > values[frame + 1]:
                 events[label].append(frame * HOP_LENGTH / float(SR))
     return events
+
+
+def fused_probabilities(base_logits, rare_logits=None):
+    """中文註解：保留基礎塔前三類，並以 rare 塔後三類建立固定六類機率。"""
+    base_probabilities = torch.sigmoid(base_logits)
+    if rare_logits is None:
+        return base_probabilities
+    rare_probabilities = torch.sigmoid(rare_logits)
+    if base_probabilities.shape[-1] < 3 or rare_probabilities.shape[-1] < 6:
+        raise ValueError('Dual-tower fusion requires Model A >= 3 classes and Model B >= 6 classes.')
+    # ponytail: 僅重用既有雙塔的固定 3+3 拼接；有跨架構需求時再擴充。
+    output = torch.zeros(*rare_probabilities.shape[:-1], 6, device=rare_probabilities.device, dtype=rare_probabilities.dtype)
+    output[..., :3] = base_probabilities[..., :3]
+    output[..., 3:6] = rare_probabilities[..., 3:6]
+    return output
+
+
+def checkpoint_class_count(state):
+    """中文註解：從 Symmetric checkpoint 的 onset head 列數取得原始類別數。"""
+    if 'onset_head.weight' not in state:
+        raise ValueError('Checkpoint is missing onset_head.weight.')
+    return int(state['onset_head.weight'].shape[0])
+
+
+def load_symmetric_model(checkpoint_path, device):
+    """中文註解：依 checkpoint 原始類別數建立並嚴格載入 Symmetric 模型。"""
+    state = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    # 重要變數：class_count 保留歷史三類 Model A 與六類 Model B 的原始 head 形狀。
+    class_count = checkpoint_class_count(state)
+    model = SymmetricDrumTCN(num_classes=class_count).to(device)
+    load_six_class_checkpoint(model, checkpoint_path, device)
+    model.eval()
+    return model
 
 
 def expected_events(item, start_sec):
@@ -135,8 +215,39 @@ def run_self_check():
         for label in LABELS
     }
     assert [row['label'] for row in select_windows(test_meta, 'validation', 1)] == list(LABELS)
+    grouped_meta = {
+        f'{label}_{group_id}': {
+            'split': 'validation', 'duration': 8.0, 'audio_path': f'{label}_{group_id}.wav',
+            'group_id': group_id, 'events': [{'inst': label, 'time': 1.0}],
+        }
+        for label in LABELS for group_id in ('group_a', 'group_b')
+    }
+    grouped_rows = select_windows(grouped_meta, 'validation', 2)
+    assert [row['item']['group_id'] for row in grouped_rows if row['label'] == 'KD'] == ['group_a', 'group_b']
+    fixed_meta = {
+        f'fixed_{label}': {
+            'split': 'validation', 'duration': 8.0, 'audio_path': f'fixed_{label}.wav',
+            'events': [{'inst': label, 'time': 1.0}],
+        }
+        for label in LABELS
+    }
+    fixed_rows = [
+        {'label': label, 'key': f'fixed_{label}', 'anchor': 1.0}
+        for label in LABELS
+    ]
+    assert [row['key'] for row in fixed_windows(fixed_meta, fixed_rows, 'validation', 1)] == [
+        f'fixed_{label}' for label in LABELS
+    ]
     assert overlaps_existing('same.wav', 1.0, 5.0, [('same.wav', 4.0, 8.0)])
     assert not overlaps_existing('same.wav', 0.0, 4.0, [('same.wav', 4.0, 8.0)])
+    base_logits = torch.tensor([[[0.0, 1.0, 2.0]]])
+    rare_logits = torch.tensor([[[3.0, 4.0, 5.0, 6.0, 7.0, 8.0]]])
+    fused = fused_probabilities(base_logits, rare_logits)
+    assert fused.shape == (1, 1, 6)
+    assert torch.equal(fused[..., :3], torch.sigmoid(base_logits))
+    assert torch.equal(fused[..., 3:6], torch.sigmoid(rare_logits[..., 3:6]))
+    assert checkpoint_class_count({'onset_head.weight': torch.zeros(3, 64, 1)}) == 3
+    assert checkpoint_class_count({'onset_head.weight': torch.zeros(6, 64, 1)}) == 6
     print('Self-check passed.')
 
 
@@ -144,7 +255,8 @@ def evaluate_model(
     model, metadata, output_dir, split='validation', per_class=8,
     accompaniment=None, accompaniment_path=None, accompaniment_gain=0.17,
     architecture='symmetric', feature_mode='legacy-diff', device=None,
-    use_multi_log_mel=False,
+    use_multi_log_mel=False, rare_model=None, rare_model_path=None,
+    selected_windows_path=None, input_mode='mix',
 ):
     """中文註解：以已載入模型執行共用六類驗證，供 CLI 與逐 epoch 訓練共用。"""
     device = device or next(model.parameters()).device
@@ -152,17 +264,22 @@ def evaluate_model(
     aggregate = {label: ([], []) for label in LABELS}
     selected_rows = []
     window_seconds = CHUNK_FRAMES * HOP_LENGTH / float(SR)
-    for window_index, selected in enumerate(select_windows(metadata, split, per_class)):
+    # ponytail: 固定選窗只供可追溯重評；一般訓練與驗證仍走既有選窗。
+    windows = load_fixed_windows(metadata, selected_windows_path, split, per_class) if selected_windows_path else select_windows(metadata, split, per_class)
+    for window_index, selected in enumerate(windows):
         accompaniment_offset = window_index * TARGET_SAMPLES
         features, _, _, start_sec = build_window(
             selected['item'], selected['anchor'], accompaniment=accompaniment,
             accompaniment_gain=accompaniment_gain, accompaniment_offset=accompaniment_offset,
             use_true_superflux=feature_mode == 'true-superflux',
             use_multi_log_mel=use_multi_log_mel,
+            input_mode=input_mode,
         )
+        feature_tensor = torch.from_numpy(features).float().unsqueeze(0).to(device)
         with torch.no_grad():
-            logits, _ = model(torch.from_numpy(features).float().unsqueeze(0).to(device))
-        predicted = local_maxima(torch.sigmoid(logits).squeeze(0).cpu().numpy())
+            logits, _ = model(feature_tensor)
+            rare_logits = rare_model(feature_tensor)[0] if rare_model else None
+        predicted = local_maxima(fused_probabilities(logits, rare_logits).squeeze(0).cpu().numpy())
         expected = expected_events(selected['item'], start_sec)
         aggregate_offset = window_index * (window_seconds + 1.0)
         for label in LABELS:
@@ -174,6 +291,9 @@ def evaluate_model(
             'split': split, 'aggregate_offset': aggregate_offset,
             'accompaniment': accompaniment_path, 'accompaniment_gain': accompaniment_gain,
             'architecture': architecture, 'feature_mode': feature_mode,
+            'input_mode': input_mode,
+            'model_rare': rare_model_path,
+            'fixed_windows_source': selected_windows_path,
             'expected_counts': {label: len(expected[label]) for label in LABELS},
         })
     return write_outputs(selected_rows, aggregate, output_dir)
@@ -191,6 +311,7 @@ def main():
     parser = argparse.ArgumentParser(description='Validate an isolated six-class candidate on STAR test data.')
     parser.add_argument('--meta')
     parser.add_argument('--model')
+    parser.add_argument('--model-rare', help='Optional historic six-class rare tower; only supported with symmetric architecture.')
     parser.add_argument('--output-dir')
     parser.add_argument('--split', default='validation', choices=('validation', 'test'))
     parser.add_argument('--per-class', type=int, default=8)
@@ -198,6 +319,8 @@ def main():
     parser.add_argument('--accompaniment-gain', type=float, default=0.17)
     parser.add_argument('--architecture', choices=('symmetric', 'dcnn-tcn', 'dcnn-residual-tcn', 'dcnn-conformer', 'dcnn-tcn-conformer'), default='symmetric')
     parser.add_argument('--feature-mode', choices=('legacy-diff', 'true-superflux'))
+    parser.add_argument('--selected-windows', help='Use an existing selection JSON for fixed-window re-evaluation.')
+    parser.add_argument('--input-mode', choices=('mix', 'drumsep-mix'), default='mix')
     parser.add_argument('--self-check', action='store_true')
     args = parser.parse_args()
     if args.self_check:
@@ -206,6 +329,8 @@ def main():
     if not args.meta or not args.model or not args.output_dir:
         parser.error('--meta, --model, and --output-dir are required unless --self-check is used')
     args.feature_mode = resolve_feature_mode(args.architecture, args.feature_mode)
+    if args.model_rare and args.architecture != 'symmetric':
+        parser.error('--model-rare only supports the historic symmetric dual-tower comparison.')
     with open(args.meta, encoding='utf-8') as handle:
         metadata = json.load(handle)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -222,14 +347,19 @@ def main():
         model = ResidualDCNNDrumHybridConformer(num_classes=len(LABELS)).to(device)
         load_hybrid_conformer_checkpoint(model, args.model, device)
     else:
-        model = SymmetricDrumTCN(num_classes=len(LABELS)).to(device)
-        load_six_class_checkpoint(model, args.model, device)
+        model = load_symmetric_model(args.model, device)
+    rare_model = None
+    if args.model_rare:
+        rare_model = load_symmetric_model(args.model_rare, device)
     accompaniment = load_accompaniment(args.accompaniment) if args.accompaniment else None
     rows, gate = evaluate_model(
         model, metadata, args.output_dir, split=args.split, per_class=args.per_class,
         accompaniment=accompaniment, accompaniment_path=args.accompaniment,
         accompaniment_gain=args.accompaniment_gain, architecture=args.architecture,
         feature_mode=args.feature_mode, device=device,
+        rare_model=rare_model, rare_model_path=args.model_rare,
+        selected_windows_path=args.selected_windows,
+        input_mode=args.input_mode,
     )
     print(json.dumps({'gate': gate, 'rows': rows}, indent=2))
 
