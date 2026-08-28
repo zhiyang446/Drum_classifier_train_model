@@ -189,7 +189,7 @@ stateDiagram-v2
 - C 槽原路徑已建立 junction，三個目標分別為 `D:\DrumDatasets\DrumSep\drumsep_d48`、`D:\DrumDatasets\DrumSep\drumsep_d52`、`D:\DrumDatasets\DrumSep\drumsep_d53`；C/D 檔案數與邏輯容量一致，WAV 抽樣 SHA-256 一致。
 - D48/D52/D53 audit、D50/D54 metadata 依賴 smoke 與既有 `verify_current_solution.py` 均通過，verifier exit `0`。
 - 驗證通過後已刪除三個 C 槽 `__backup_20260828` 實體副本；未修改程式碼、checkpoint 或既有 validation 輸出。完成後 C 槽可用約 `415.63 GiB`，D 槽可用約 `99.75 GiB`。
-- 日後操作與故障排查以根目錄 `DATASET_STORAGE_GUIDE.md` 為準；本文件只保留設計與執行證據。
+- 日後操作與故障排查以 `docs/DATASET_STORAGE_GUIDE.md` 為準；本文件只保留設計與執行證據。
 
 ## D117 五首真歌高解析度實體時間對齊證據包（執行中；不訓練）
 
@@ -209,7 +209,7 @@ stateDiagram-v2
 
 ## D115 HANDOFF 現況同步與五首真歌資料路徑稽核（2026-07-31）
 
-- **目的／架構與選型**：本階段只把既有 D93／D100／D103／D104、D106 與 D114 證據同步到 `HANDOFF.md`，不新增程式、模型、資料、API、資料庫、容器或部署。五首真歌時間軸仍採 D93 固定 reference offset（四首 `+.05s`、`something +.07s`）；D100 的 onset-envelope／FFT correlation 只是殘餘偏移稽核，沒有把量測結果回寫或再次平移 MIDI。
+- **目的／架構與選型**：本階段只把既有 D93／D100／D103／D104、D106 與 D114 證據同步到 `docs/HANDOFF.md`，不新增程式、模型、資料、API、資料庫、容器或部署。五首真歌時間軸仍採 D93 固定 reference offset（四首 `+.05s`、`something +.07s`）；D100 的 onset-envelope／FFT correlation 只是殘餘偏移稽核，沒有把量測結果回寫或再次平移 MIDI。
 - **資料模型／關鍵流程／模組關係**：`D93 fixed offset events -> D103 label/duplicate corrections -> D100 residual audit -> D104 single-audio five-fold metadata`。D104 每首 `input_mode=mix`，直接讀單一原始 MP3，沒有 DrumSep 或六 stem 欄位。D106 ENST 將 `bd -> KD`；`sd/sd-/cs/rs -> SD`；`chh/ohh -> HH`；`lt/mt/lmt/lft/mtr/ltr -> TOM`；`c1/cr1/cr2/cr5/ch1/ch5/spl2 -> CRASH`；`rc2/rc3/rc4/c4 -> RIDE`，並排除 `cb/sweep/sticks`。
 - **量測與限制**：D103 後五首 FFT 殘餘 offset 為四首 `92.8798ms`、`something 46.4399ms`，逐歌平均 `83.5918ms`；以相同 onset detector 只讀計算的 4,876 events 最近 onset 絕對距離為平均 `98.977ms`、中位數 `72.721ms`，其中 D100 `100ms` 容差內 3,996 events 的平均為 `63.480ms`。最近-onset 距離不是人工逐音符真值，D100 的 `alignment_pass` 也只代表未超過 `.15s` review threshold，不代表精準對齊。
 - **狀態／停止條件／部署概觀**：狀態為 `evidence_read -> handoff_synced -> docs_committed`。D114 已證明現有 frozen feature＋560-parameter LoRA 在固定 200 steps 內無法記住 tiny train set，因此禁止以增加同類資料、延長 steps 或同配方重訓處理；若繼續研究，必須另立單一變因規格並取得使用者授權。此文件同步不構成模型提升、promotion、release、push 或部署。
@@ -870,9 +870,9 @@ The blind-test goal is not to pass a training gate. It is to classify failures i
 
 First blind-test batch size is 3-10 audio files total, not 3-10 per rhythm type. The recommended first batch is about five representative files: one basic straight 8th, one basic straight 16th, one basic shuffle, one syncopated 4/4, and one ghost-snare or busy-hi-hat example. Expand only after this small batch is reviewed.
 
-The first user blind-test expected targets are recorded in `blind_user_tests_expected.csv`. They are used only for this curated first batch, not as a requirement that every future blind-test file needs manual KD/SD/HH counts.
+The first user blind-test expected targets are recorded in `config/expected/blind_user_tests_expected.csv`. They are used only for this curated first batch, not as a requirement that every future blind-test file needs manual KD/SD/HH counts.
 
-For the first batch, the acceptance check compares notation-layer KD/SD/HH, displayed score tempo, and time signature against `blind_user_tests_expected.csv`. Forced-tempo experiments are allowed as diagnostics only; the accepted blind result must pass without per-file manual forcing unless the user explicitly chooses a hint-based workflow.
+For the first batch, the acceptance check compares notation-layer KD/SD/HH, displayed score tempo, and time signature against `config/expected/blind_user_tests_expected.csv`. Forced-tempo experiments are allowed as diagnostics only; the accepted blind result must pass without per-file manual forcing unless the user explicitly chooses a hint-based workflow.
 
 First-batch diagnostic probes must not use expected KD/SD/HH counts to rewrite MIDI or CSV output. Tempo, time-signature, threshold, grid, and fill-mode hints may be tested transparently to classify the failure layer. Current diagnostic status:
 
@@ -998,7 +998,7 @@ If future real-world audio fails, the next agent must follow this protocol befor
    - Add the task status to `todolist.md`.
    - Keep rejected checkpoints out of the root directory, or delete them after recording evidence.
 
-Round3 expected-target note: when the user explicitly supplies KD/SD/HH counts for a new blind-test file, `round3_expected.csv` must use those counts as the source of truth. Counts inferred from the score image are allowed only for instruments the user did not specify.
+Round3 expected-target note: when the user explicitly supplies KD/SD/HH counts for a new blind-test file, `config/expected/round3_expected.csv` must use those counts as the source of truth. Counts inferred from the score image are allowed only for instruments the user did not specify.
 
 Round3 repair note: repeated 4/4 grooves may use phase-level cleanup after quantization. The cleanup must be pattern-based, not file-name-based: suppress sparse low-confidence Kick/Snare phases, cap slow dense Kick grooves to the strongest repeated phases, and recover a weak repeated Kick phase only when an existing candidate phase provides acoustic evidence.
 GitHub retained-change rule: the user has requested that every retained modification be pushed to GitHub. During interactive development outside report-only L1 automation, any kept code or documentation change must be tested with the matching gate, committed, and pushed. Read-only validation or fully reverted experiments should not create empty commits or empty pushes.
@@ -2567,7 +2567,7 @@ stateDiagram-v2
 
 ### D19 真實鼓 manifest 範本規格
 
-- 交付單一 `real_drum_manifest.example.json`，只示範 D18 所需的五個欄位與相對路徑；範本本身不包含音訊、不會被訓練器讀取，也不建立任何資料夾。
+- 交付單一 `config/examples/real_drum_manifest.example.json`，只示範 D18 所需的五個欄位與相對路徑；範本本身不包含音訊、不會被訓練器讀取，也不建立任何資料夾。
 - 驗收：JSON 語法必須有效，且欄位名稱與 D18 validator 完全一致。
 
 ## Phase D20：PANNs 預訓練 encoder 研究候選（2026-07-19）
@@ -3504,4 +3504,26 @@ stateDiagram-v2
 
 - 版本庫只保存可重現的程式工具、Windows 啟動腳本、範例設定與治理／狀態文件；大型資料、衍生音訊、第三方依賴、checkpoint 及 `test_real_audio` 私有測試檔保留在本機或 D 槽，不直接提交。
 - 每次整理工作區時，先依檔案用途與受保護路徑逐項檢查，再以明確路徑暫存；禁止使用整個工作區的批次加入或清理，以免把資料集、模型或私有測試檔推送到遠端。
-- 重新建立專案時，先依 `DATASET_STORAGE_GUIDE.md` 連接 D 槽並確認 junction／目標可讀，再從版本庫取得程式與工具；資料內容不由 Git commit 提供。
+- 重新建立專案時，先依 `docs/DATASET_STORAGE_GUIDE.md` 連接 D 槽並確認 junction／目標可讀，再從版本庫取得程式與工具；資料內容不由 Git commit 提供。
+
+## 工作區安全整理規格（2026-08-28）
+
+- **整理策略**：保留根目錄 Python 工具與既有資料路徑，不把相互 import 的腳本直接搬入子目錄；以 `docs/WORKSPACE_LAYOUT.md` 建立分類索引與操作邊界。
+- **不可移動範圍**：`e-gmd-v1.0.0`、`STAR_Drums_full`、`drumsep_d48`、`drumsep_d52`、`drumsep_d53` 的根目錄 junction、所有 checkpoint、`validation_runs`、`test_real_audio` 與仍被腳本引用的資料目錄。
+- **根目錄依賴**：多個工具使用 `from run_six_class_smoke import ...` 等根層 import，並以 `Path(__file__).resolve().parent` 組合資料路徑；未完成模組化前，移動腳本會造成 import 或資料讀取失效。
+- **驗收流程**：整理只新增索引／文件，不改模型、資料、decoder 或訓練行為；完成後執行 Python 編譯、文件 diff 檢查與既有 verifier（若有程式行為變更）。
+
+## 工作區實體整理規格（2026-08-28）
+
+- **本輪範圍**：在專案內建立 `tools/launchers/`，集中三個 Windows 啟動檔：`run_d108_enst_candidate.cmd`、`run_d37_retry.cmd`、`run_d38_full_model.cmd`。
+- **路徑保證**：啟動檔移動後，以 `%~dp0..\..` 計算專案根目錄，所有 Python、checkpoint、metadata、輸出與 log 路徑都明確指向原專案根目錄。
+- **保留原位**：Python 腳本、資料集、D 槽 junction、checkpoint、`validation_runs`、`test_real_audio` 及治理文件不在本輪搬移；它們仍依賴根目錄 import 或固定相對路徑。
+- **驗收限制**：只做啟動檔路徑解析與文件檢查，不啟動訓練、不覆寫 checkpoint、不刪除資料；若未來要搬移 Python 腳本，必須另立模組化任務並完成回歸驗證。
+
+## 工作區分類整理第二階段規格（2026-08-28）
+
+- **設定與測試目標**：建立 `config/expected/`，放置 `blind_user_tests_expected.csv`、`egmd_round4_expected.csv`、`round2_expected.csv`、`round3_expected.csv`；建立 `config/manifests/`，放置 `test_real_audio_end_to_end_manifest.json`；建立 `config/examples/`，放置 `real_drum_manifest.example.json`。
+- **文件分類**：將 `HANDOFF.md` 與 `DATASET_STORAGE_GUIDE.md` 移至既有 `docs/`；`AGENTS.md`、`README.md`、`spec.md`、`todolist.md`、`current_status.md`、`STATE.md`、`LOOP.md` 與 loop 約束文件保留根目錄，因為它們是專案入口或 loop 工具固定讀取的文件。
+- **相容性要求**：更新所有 Python 預設 expected CSV 路徑與文件中的 manifest／handoff 路徑；不改變資料內容、模型行為、驗證門檻或訓練配方。
+- **禁止範圍**：不移動 Python 腳本、資料集、D 槽 junction、checkpoint、`validation_runs`、`test_real_audio`、`.venv`、`.codex` 或 `.codegraph`。
+- **驗收方式**：執行 Python 編譯、靜態 self-check／help、文件與路徑檢查，以及既有 verifier；不啟動訓練、不覆寫 checkpoint、不刪除檔案。

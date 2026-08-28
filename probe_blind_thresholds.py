@@ -12,7 +12,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Probe global thresholds for blind raw counts.')
     parser.add_argument('--model', required=True)
     parser.add_argument('--input', default='blind_user_tests')
-    parser.add_argument('--expected-csv', default='blind_user_tests_expected.csv')
+    parser.add_argument('--expected-csv', default='config/expected/blind_user_tests_expected.csv')
     parser.add_argument('--output-dir', default='validation_runs/raw_ai_model_fix/threshold_probe')
     parser.add_argument('--combo', action='append', required=True, help='kick,snare,hihat')
     return parser.parse_args()

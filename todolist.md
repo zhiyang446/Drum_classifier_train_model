@@ -19,7 +19,7 @@
 ## Dataset storage handoff 說明與推送（完成；2026-08-28）
 
 - [x] 先確認目前分支為 `codex`、遠端為 `origin/codex`，並保留工作區其他既有 dirty/untracked 變更不動。
-- [x] 建立 `DATASET_STORAGE_GUIDE.md`，包含目前 junction、D 槽要求、檢查、重新移植與回復注意事項。
+- [x] 建立 `docs/DATASET_STORAGE_GUIDE.md`，包含目前 junction、D 槽要求、檢查、重新移植與回復注意事項。
 - [x] 只提交本次說明與相關規格／任務清單更新，確認 diff 後推送至 `origin/codex`。
 
 ## 工作區 Git 盤點與安全提交（完成；2026-08-28）
@@ -28,6 +28,28 @@
 - [x] 完成根目錄 Python 編譯、5 個核心入口 self-check 與 `verify_current_solution.py` 完整驗證。
 - [x] 只暫存可重現程式、啟動腳本、範例設定與相關文件；不暫存資料、模型、第三方依賴或 `test_real_audio`。
 - [x] 建立 commit 並推送至 `origin/codex`，保留未提交本機資料並回報清單。
+
+## 工作區安全整理（完成；2026-08-28）
+
+- [x] 盤點根目錄 121 個 Python、資料目錄、D 槽 junction、模型與驗證依賴。
+- [x] 確認根層 import 與 `Path(__file__).resolve().parent` 路徑依賴，避免直接搬移腳本造成現有命令失效。
+- [x] 建立工作區結構索引，記錄可移動與不可移動範圍。
+- [x] 完成索引文件自檢並更新目前狀態。
+
+## 工作區實體整理（完成；2026-08-28）
+
+- [x] 確認三個 Windows 啟動檔沒有被其他檔案直接呼叫，並確認移動後可由啟動檔位置回算專案根目錄。
+- [x] 建立 `tools/launchers/`，移動三個啟動檔並修正其根目錄路徑。
+- [x] 完成啟動檔路徑解析、文件 diff 與工作區狀態檢查；不啟動訓練、不刪除資料。
+- [x] 更新 `current_status.md` 與 `docs/WORKSPACE_LAYOUT.md`，記錄實際整理結果。
+
+## 工作區分類整理第二階段（完成；2026-08-28）
+
+- [x] 盤點根目錄非程式檔引用，確認 4 個 expected CSV、2 個 JSON manifest 與 2 份文件可分類整理。
+- [x] 更新 `spec.md`、Python 預設路徑與文件引用，先保持既有命令語意不變。
+- [x] 建立 `config/expected/`、`config/manifests/`、`config/examples/`，搬移已核准檔案；將兩份一般文件移至 `docs/`。
+- [x] 完成 Python 編譯、self-check／help、路徑與文件 diff 驗證；不訓練、不刪除資料、不移動模型與資料集。
+- [x] 更新 `current_status.md` 與 `docs/WORKSPACE_LAYOUT.md`，記錄第二階段結果。
 
 ## D117 目前任務
 
@@ -47,7 +69,7 @@
 - [x] 讀取 D93／D100／D103／D104、D106 與 D114 現有程式及封存證據，區分固定 MIDI offset、FFT 殘餘稽核與最近音訊 onset 距離。
 - [x] 確認 D104 五首均為單一音訊 `input_mode=mix`，沒有 DrumSep／六 stem 欄位。
 - [x] 確認 ENST 六類 raw-label 映射與 `cb/sweep/sticks` 排除規則，記錄 `c4 -> RIDE`、`ch1/ch5 -> CRASH` 的語意合併風險。
-- [x] 更新 `HANDOFF.md`、`spec.md`、`current_status.md` 與本清單；不修改程式、資料、模型、threshold 或產品推論。
+- [x] 更新 `docs/HANDOFF.md`、`spec.md`、`current_status.md` 與本清單；不修改程式、資料、模型、threshold 或產品推論。
 - [x] 完成 Markdown／Git diff 驗證後，只提交上述四份治理文件；不 push。
 
 ## D114 目前任務
@@ -773,7 +795,7 @@
     *   [x] Read `todolist.md`, `spec.md`, `current_status.md`, and `loop-constraints.md` before changes.
     *   [x] Record Round4 E-GMD validation rules in `spec.md`.
     *   [x] Build the smallest reusable selector/runner for 5 E-GMD `split=test` short clips.
-    *   [x] Generate `egmd_round4_expected.csv` from metadata events, not hand-entered counts.
+    *   [x] Generate `config/expected/egmd_round4_expected.csv` from metadata events, not hand-entered counts.
     *   [x] Run accepted checkpoint on selected E-GMD clips and compare raw/notation counts.
     *   [x] If failures occur, classify raw-vs-brain before any code or model change.
     *   [x] Keep `verify_current_solution.py` green after the rejected tempo-alias experiment was reverted.
@@ -911,13 +933,13 @@
 
 *   [x] **Round3 blind validation and repair** (2026-07-06)
     *   [x] Run `blind_user_tests_round3` with the accepted checkpoint.
-    *   [x] Compare notation output against `round3_expected.csv`.
-    *   [x] Compare raw output against `round3_expected.csv`.
+    *   [x] Compare notation output against `config/expected/round3_expected.csv`.
+    *   [x] Compare raw output against `config/expected/round3_expected.csv`.
     *   [x] Repair tempo aliases, repeated 4/4 phase cleanup, and HH raw grid recovery without replacing the checkpoint.
     *   [x] Verify Round3 raw/notation 5/5 and `verify_current_solution.py` pass.
 
 *   [x] **Round3 expected target recording** (2026-07-06)
-    *   [x] Check `round3_expected.csv` before adding the new blind-test target.
+    *   [x] Check `config/expected/round3_expected.csv` before adding the new blind-test target.
     *   [x] Correct `kick_syncopation_100` to the user-supplied KD/SD counts and image-inferred HH count.
 
 *   [x] **Joint Tempo-TS & MGPC Calibration on User Blind Tests** (2026-07-01)
@@ -1109,7 +1131,7 @@
 *   [x] Record first user blind-test scope: 3-10 audio files total, recommended first batch is straight 8th, straight 16th, shuffle, syncopated 4/4, and ghost-snare or busy-hi-hat.
 *   [x] Run blind runner on `blind_user_tests` first batch and classify errors by raw AI vs notation layer; outputs written to `validation_runs/blind_test_user_first_batch/summary.csv`.
 *   [x] Review suspected notation/time-signature misses in first blind batch: `basic_shuffle.wav` detected as `3/4 @ 67.50`, and `basic_straight_8.wav` detected as `3/4 @ 105.00`.
-*   [x] Record user-provided expected targets for first blind batch in `blind_user_tests_expected.csv` and compare against `validation_runs/blind_test_user_first_batch/summary.csv`.
+*   [x] Record user-provided expected targets for first blind batch in `config/expected/blind_user_tests_expected.csv` and compare against `validation_runs/blind_test_user_first_batch/summary.csv`.
 *   [x] Write first blind batch expected comparison to `validation_runs/blind_test_user_first_batch/expected_comparison.csv`; all 5 files currently fail at least one expected target.
 *   [x] Next: diagnose tempo/time-signature layer first (`basic_straight_16` double-time 120 vs 60, `basic_straight_8` 3/4 vs 4/4, `basic_shuffle` 3/4 vs 4/4).
 *   [x] Add a reusable first-batch expected comparison command before changing tempo/time-signature logic.

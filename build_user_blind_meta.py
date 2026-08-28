@@ -166,7 +166,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Build user blind hard-example metadata.')
     parser.add_argument('--input-dir', default='blind_user_tests')
-    parser.add_argument('--expected', default='blind_user_tests_expected.csv')
+    parser.add_argument('--expected', default='config/expected/blind_user_tests_expected.csv')
     parser.add_argument('--raw-root', default=None)
     parser.add_argument('--window-seconds', type=float, default=0.0)
     parser.add_argument('--output', default='processed_data/user_blind_hard_meta.json')

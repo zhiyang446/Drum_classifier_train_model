@@ -1,6 +1,26 @@
 # Current Status - Drum Classifier / ADT
 
-Last updated: 2026-08-03
+Last updated: 2026-08-28
+
+## 工作區實體整理（完成；2026-08-28）
+
+- 已在目前專案內建立 `tools/launchers/`，並移入 `run_d108_enst_candidate.cmd`、`run_d37_retry.cmd`、`run_d38_full_model.cmd`；三個啟動檔會從自身位置回算專案根目錄。
+- 121 個 Python 工具、資料集、D 槽 junction、checkpoint、`validation_runs`、`test_real_audio` 與治理文件維持原位，避免破壞根層 import 及既有相對路徑。
+- 已完成靜態路徑檢查：必要 Python、metadata、checkpoint 與輸出路徑存在；`git diff --check`、`loop-audit.cmd . --suggest`（100/100）及 L1 `loop-cost` 檢查通過。
+- 本輪沒有啟動訓練、覆寫 checkpoint、刪除資料或移動資料集；詳細分類見 `docs/WORKSPACE_LAYOUT.md`。
+
+## 工作區分類整理第二階段（完成；2026-08-28）
+
+- 根目錄 4 個 expected CSV 已移至 `config/expected/`；兩個 manifest 已移至 `config/manifests/` 與 `config/examples/`；`HANDOFF.md` 與 `DATASET_STORAGE_GUIDE.md` 已移至 `docs/`。
+- `compare_blind_expected.py`、`build_user_blind_meta.py`、`build_user_annotation_templates.py`、`probe_blind_thresholds.py` 與 `verify_current_solution.py` 的預設 expected 路徑已同步更新，原本從專案根目錄執行的命令語意不變。
+- 已通過 5 個 Python 檔案編譯與 5 個 CLI `--help` 檢查，所有新路徑檔案均存在，`git diff --check` 通過；沒有執行會寫入 `validation_runs` 的完整 verifier。
+- 本階段沒有啟動訓練、覆寫 checkpoint、刪除資料或移動資料集；Python 腳本、模型、D 槽 junction 與驗證資料維持原位。
+
+## 工作區安全整理（完成；2026-08-28）
+
+- 根目錄目前保留 121 個 Python 工具、既有核心入口、文件與本機資料路徑；沒有直接移動腳本，避免破壞根層 import 與 `Path(__file__).resolve().parent` 路徑。
+- E-GMD、STAR 及 D48/D52/D53 的 C 槽根路徑 junction 維持不變，資料、checkpoint、`validation_runs` 與 `test_real_audio` 未刪除或搬動。
+- 整理採用非破壞方式：新增 `docs/WORKSPACE_LAYOUT.md` 作為分類索引；後續若要把歷史工具移入 `tools/`，必須另立模組化任務並完成 import、資料路徑與回歸驗證。
 
 ## D117 五首真歌高解析度實體時間對齊證據包（完成；等待人工 review）
 
@@ -490,7 +510,7 @@ Last updated: 2026-08-03
 
 ## D19：真實鼓 manifest 範本（完成；不訓練）
 
-- 交付：`real_drum_manifest.example.json` 提供 train/validation/test 三筆獨立 `group_id` 的最小範本，欄位與 D18 validator 一致。
+- 交付：`config/examples/real_drum_manifest.example.json` 提供 train/validation/test 三筆獨立 `group_id` 的最小範本，欄位與 D18 validator 一致。
 - 驗證：JSON 語法、必要欄位、三個 split 與群組唯一性檢查皆 PASS；範本不含實際音訊，也未建立 metadata 或啟動訓練。
 
 ## D18：真實鼓資料準備與六類 pseudo-label 稽核（完成；不訓練）
@@ -798,7 +818,7 @@ Current classification:
 
 Round3 repair is complete for the 5-file validation set.
 
-- Expected file: `round3_expected.csv`
+- Expected file: `config/expected/round3_expected.csv`
 - Final summary: `validation_runs\round3_repair_final_20260706\summary.csv`
 - Final raw comparison: `validation_runs\round3_repair_final_20260706\raw_compare.csv`
 - Final notation comparison: `validation_runs\round3_repair_final_20260706\notation_compare.csv`
@@ -836,7 +856,7 @@ Planned next-batch item recorded from the user-provided score image.
 
 Round2 repair is complete for the 5-file validation set.
 
-- Expected file: `round2_expected.csv`
+- Expected file: `config/expected/round2_expected.csv`
 - Final summary: `validation_runs\round2_repair_5files_final3_auto\summary.csv`
 - Final raw comparison: `validation_runs\round2_repair_5files_final3_auto\raw_compare.csv`
 - Final notation comparison: `validation_runs\round2_repair_5files_final3_auto\notation_compare.csv`
@@ -884,7 +904,7 @@ Older sections below describe previous failed attempts and are kept as history; 
 2. **使用者盲測 Notation 層全部通過**
    - 指令：
      - `.\.venv\Scripts\python.exe run_blind_test.py --input blind_user_tests --model mixed_formal_kick375_snare18_hh12_candidate.pth --output-dir validation_runs\single_checkpoint_brain_repair_blind6`
-     - `.\.venv\Scripts\python.exe compare_blind_expected.py --summary validation_runs\single_checkpoint_brain_repair_blind6\summary.csv --expected blind_user_tests_expected.csv --output validation_runs\single_checkpoint_brain_repair_blind6\expected_comparison.csv --layer notation`
+     - `.\.venv\Scripts\python.exe compare_blind_expected.py --summary validation_runs\single_checkpoint_brain_repair_blind6\summary.csv --expected config/expected/blind_user_tests_expected.csv --output validation_runs\single_checkpoint_brain_repair_blind6\expected_comparison.csv --layer notation`
    - 結果：5/5 pass
      - `basic_shuffle`: pass
      - `basic_straight_16`: pass
@@ -905,7 +925,7 @@ Older sections below describe previous failed attempts and are kept as history; 
 ## 尚未完成
 
 1. **Raw AI 模型層仍未通過**
-   - 指令：`.\.venv\Scripts\python.exe compare_blind_expected.py --summary validation_runs\single_checkpoint_brain_repair_blind6\summary.csv --expected blind_user_tests_expected.csv --output validation_runs\single_checkpoint_brain_repair_blind6\raw_ai_expected_comparison.csv --layer raw`
+   - 指令：`.\.venv\Scripts\python.exe compare_blind_expected.py --summary validation_runs\single_checkpoint_brain_repair_blind6\summary.csv --expected config/expected/blind_user_tests_expected.csv --output validation_runs\single_checkpoint_brain_repair_blind6\raw_ai_expected_comparison.csv --layer raw`
    - 結果：
      - `basic_shuffle`: pass
      - `basic_straight_16`: fail，raw HH `143` vs expected `128`
@@ -1103,7 +1123,7 @@ Older sections below describe previous failed attempts and are kept as history; 
 1. **可信端到端驗證器已建立**
    - 新增 `run_end_to_end_validation.py`，直接呼叫正式 `transcribe.py` 並比較最終 MIDI，而不是以另一套推論流程近似產品輸出。
    - 重用現有 50ms 一對一 `match_events` 與六類 GM pitch mapping；額外拆分 Closed/Pedal/Open Hi-Hat。
-   - 新增 `test_real_audio_end_to_end_manifest.json`，固定五首音訊、獨立參考 MIDI、`0.0s` reference offset、Tempo 與拍號，不允許由模型預測搜尋最佳偏移。
+   - 新增 `config/manifests/test_real_audio_end_to_end_manifest.json`，固定五首音訊、獨立參考 MIDI、`0.0s` reference offset、Tempo 與拍號，不允許由模型預測搜尋最佳偏移。
    - 驗證器拒絕非空輸出目錄，任何轉譜錯誤或 gate 未達標均以非零狀態結束。
 
 2. **V26 真實歌曲端到端基線誠實失敗**

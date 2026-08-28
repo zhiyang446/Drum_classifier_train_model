@@ -90,7 +90,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Compare blind summary with expected targets.')
     parser.add_argument('--summary', default='validation_runs/blind_test_user_first_batch/summary.csv')
-    parser.add_argument('--expected', default='blind_user_tests_expected.csv')
+    parser.add_argument('--expected', default='config/expected/blind_user_tests_expected.csv')
     parser.add_argument('--output', default='validation_runs/blind_test_user_first_batch/expected_comparison.csv')
     parser.add_argument('--layer', choices=('notation', 'raw', 'raw_acoustic'), default='notation')
     parser.add_argument('--counts-only', action='store_true')

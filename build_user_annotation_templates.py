@@ -148,7 +148,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Build user onset annotation templates.')
     parser.add_argument('--input-dir', default='blind_user_tests')
-    parser.add_argument('--expected', default='blind_user_tests_expected.csv')
+    parser.add_argument('--expected', default='config/expected/blind_user_tests_expected.csv')
     parser.add_argument('--raw-root', default='validation_runs/blind_test_user_first_batch')
     parser.add_argument('--output-dir', default='annotations/user_blind_precise')
     parser.add_argument('--self-check', action='store_true')

@@ -61,7 +61,7 @@ def main():
     parser = argparse.ArgumentParser(description='Verify the accepted current drum transcription solution.')
     parser.add_argument('--model', default='drum_classifier.pth')
     parser.add_argument('--blind-input', default='blind_user_tests')
-    parser.add_argument('--notation-expected', default='blind_user_tests_expected.csv')
+    parser.add_argument('--notation-expected', default='config/expected/blind_user_tests_expected.csv')
     parser.add_argument('--raw-expected', default='validation_runs/raw_acoustic_expected_physical.csv')
     parser.add_argument('--output-dir', default='validation_runs/current_solution_verification')
     parser.add_argument('--self-check', action='store_true')
